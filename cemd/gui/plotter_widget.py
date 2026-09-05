@@ -34,6 +34,15 @@ if TYPE_CHECKING:
 
 
 class AtomicPlotter(QtInteractor):
+    #: Sides of the extruded tube used to draw a bond. Eight is smooth
+    #: enough at any zoom; each side costs cells on every rendered frame.
+    BOND_TUBE_SIDES = 8
+
+    #: Above this many bonds, tubes are replaced by hardware-drawn lines.
+    #: Tubing 2400 bonds already produces ~48k cells, and the geometry is
+    #: rebuilt whenever the bond settings change.
+    MAX_TUBED_BONDS = 8000
+
     def __init__(self, parent: AtomViewerGUI = None, config: dict[str, Any] = None):
         super().__init__(parent)
         self.bg_cycle = ["black", "#1A1A1A", "white", "#B0C4DE"]
@@ -186,47 +195,100 @@ class AtomicPlotter(QtInteractor):
 
         bond_thickness = exceptions.get("global_bond_radius", 0.1)
 
-        str_types = [str(t).strip() for t in types]
+        str_types = np.asarray([str(t).strip() for t in types])
         max_search = max(exceptions.values())
         tree = cKDTree(xyz)
-        pairs = list(tree.query_pairs(max_search))
 
-        rgb_cache = {
-            t: self.hex_to_rgb(self.color_map.get(t, "gray")) for t in set(str_types)
-        }
+        # output_type="ndarray" avoids materialising a set of tuples, and
+        # lets everything below stay in numpy.
+        pairs = tree.query_pairs(max_search, output_type="ndarray")
+        if len(pairs) == 0:
+            return
 
-        pts, lines, rgb_colors = [], [], []
+        first, second = pairs[:, 0], pairs[:, 1]
 
-        for i, j in pairs:
-            t1, t2 = str_types[i], str_types[j]
-            pair_key = "-".join(sorted([t1, t2]))
+        # Cutoffs as a type-by-type matrix, so the per-pair test becomes a
+        # single fancy-indexed comparison instead of a Python loop building
+        # a "A-B" key and calling np.linalg.norm once per pair. The keys are
+        # composed exactly as before, which keeps type names containing a
+        # dash unambiguous.
+        uniq_types, codes = np.unique(str_types, return_inverse=True)
+        n_types = len(uniq_types)
+        cutoffs = np.zeros((n_types, n_types))
+        for a_index, a_type in enumerate(uniq_types):
+            for b_index, b_type in enumerate(uniq_types):
+                key = "-".join(sorted([a_type, b_type]))
+                if key in exceptions:
+                    cutoffs[a_index, b_index] = exceptions[key]
 
-            if pair_key in exceptions:
-                limit = exceptions[pair_key]
-                dist = np.linalg.norm(xyz[i] - xyz[j])
-                if dist <= limit:
-                    p1, p2, mid = xyz[i], xyz[j], (xyz[i] + xyz[j]) / 2.0
-                    idx = len(pts)
-                    pts.extend([p1, mid, mid, p2])
-                    lines.extend([2, idx, idx + 1, 2, idx + 2, idx + 3])
+        limits = cutoffs[codes[first], codes[second]]
+        distances = np.linalg.norm(xyz[first] - xyz[second], axis=1)
 
-                    # Here, use your rule: gray by default if unknown
-                    c_i = rgb_cache[t1]
-                    c_j = rgb_cache[t2]
-                    rgb_colors.extend([c_i, c_i, c_j, c_j])
-        if pts:
-            b_mesh = pv.PolyData(np.array(pts))
-            b_mesh.lines = np.array(lines)
-            b_mesh.point_data["colors"] = (np.array(rgb_colors) * 255).astype(np.uint8)
+        # A zero cutoff means "these two types are not bonded", which is
+        # distinct from a pair that is simply too far apart.
+        keep = (limits > 0) & (distances <= limits)
+        first, second = first[keep], second[keep]
+        if len(first) == 0:
+            return
 
-            # use the 'name' parameter so that PyVista knows that it is the unique 'bonds' mesh
+        # Two half-bonds per pair, so each half can carry its own atom's
+        # colour: point 0 -> midpoint, midpoint -> point 1.
+        start, end = xyz[first], xyz[second]
+        middle = (start + end) / 2.0
+
+        points = np.empty((4 * len(first), 3), dtype=float)
+        points[0::4], points[1::4] = start, middle
+        points[2::4], points[3::4] = middle, end
+
+        offsets = np.arange(len(first)) * 4
+        pair_header = np.full(len(first), 2)
+        lines = np.column_stack(
+            [
+                pair_header,
+                offsets,
+                offsets + 1,
+                pair_header,
+                offsets + 2,
+                offsets + 3,
+            ]
+        ).ravel()
+
+        rgb_table = np.array(
+            [self.hex_to_rgb(self.color_map.get(t, "gray")) for t in uniq_types]
+        )
+        colors = np.empty((4 * len(first), 3))
+        colors[0::4] = colors[1::4] = rgb_table[codes[first]]
+        colors[2::4] = colors[3::4] = rgb_table[codes[second]]
+
+        b_mesh = pv.PolyData(points)
+        b_mesh.lines = lines
+        b_mesh.point_data["colors"] = (colors * 255).astype(np.uint8)
+
+        # Tubes are real geometry: at n_sides=8 a few thousand bonds turn
+        # into tens of thousands of cells that VTK re-renders every frame.
+        # Past a threshold the tube is dropped for plain lines, which look
+        # near-identical at the zoom level a large system is viewed at and
+        # cost roughly a third of the cells.
+        if len(first) <= self.MAX_TUBED_BONDS:
+            mesh = b_mesh.tube(radius=bond_thickness, n_sides=self.BOND_TUBE_SIDES)
             self.add_mesh(
-                b_mesh.tube(radius=bond_thickness, n_sides=8),
+                mesh,
                 scalars="colors",
                 rgb=True,
                 name="bonds",
                 reset_camera=False,
                 pickable=False,
+            )
+        else:
+            self.add_mesh(
+                b_mesh,
+                scalars="colors",
+                rgb=True,
+                name="bonds",
+                reset_camera=False,
+                pickable=False,
+                line_width=max(1, int(bond_thickness * 30)),
+                render_lines_as_tubes=True,
             )
 
     def draw_box(self, system: AtomicSystem) -> None:
