@@ -25,7 +25,6 @@ from cemd.build import (
     GlassBuilder,
     SolutionBuilder,
     Splitter,
-    SurfaceBuilder,
 )
 from cemd.gui.ui.build import (
     AddDropletDialog,
@@ -167,6 +166,7 @@ def open_add_liquid(parent: AtomViewerGUI) -> None:
                 counts=p["solutes_dict"],
                 structures=p["structures_dict"],
             )
+            parent.push_undo()
             active_tab.system.add_liquid_layer(
                 blueprint=builder,
                 thickness=p["thickness"],
@@ -199,6 +199,7 @@ def open_add_droplet(parent: AtomViewerGUI) -> None:
                 counts=p["solutes_dict"],
                 structures=p["structures_dict"],
             )
+            parent.push_undo()
             active_tab.system.add_droplet(
                 blueprint=builder,
                 radius=p["radius"],
@@ -229,6 +230,7 @@ def open_add_structure(parent: AtomViewerGUI) -> None:
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             parent.statusBar().showMessage("Adding structure to surface...")
 
+            parent.push_undo()
             active_tab.system.add_structure(
                 structure_to_add=p["structure_to_add"],
                 distance=p["distance"],
@@ -254,18 +256,24 @@ def open_split(parent: AtomViewerGUI) -> None:
         try:
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             parent.statusBar().showMessage("Creating channel...")
+            parent.push_undo()
 
-            # active_tab.system = split(
-            #     solid_system=active_tab.system,
-            #     axis=p["axis"],
-            #     coordinate=p["coordinate"],
-            #     gap_size=p["gap_size"],
-            #     tolerance=p["tolerance"],
-            #     add_solution=p["add_solution"],
-            #     density=p["density"],
-            #     solutes_dict=p["solutes_dict"],
-            #     structures_dict=p["structures_dict"],
-            # )
+            splitter = Splitter(
+                active_tab.system,
+                coordinate=p["coordinate"],
+                axis=p["axis"],
+                gap_size=p["gap_size"],
+            )
+
+            if p["add_solution"]:
+                blueprint = SolutionBuilder(
+                    density=p["density"],
+                    counts=p["solutes_dict"],
+                    structures=p["structures_dict"],
+                )
+                splitter.add_solution(blueprint, padding=p["tolerance"])
+
+            active_tab.system = splitter.split()
 
             parent.sync_ui(full_rebuild=True, reset_camera=True)
             parent.statusBar().showMessage("Channel created!", 5000)
@@ -285,6 +293,7 @@ def open_replicate(parent: AtomViewerGUI) -> None:
         try:
             factors = dialog.get_values()
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            parent.push_undo()
             active_tab.system.replicate(factors)
             parent.sync_ui(full_rebuild=True, reset_camera=True)
             parent.statusBar().showMessage(f"Replicated {factors}", 3000)
@@ -304,6 +313,7 @@ def on_protonate(parent: AtomViewerGUI) -> None:
         return
 
     try:
+        parent.push_undo()
         system: AtomicSystem = active_tab.system
 
         system.protonate_atoms(indices)

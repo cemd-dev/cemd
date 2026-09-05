@@ -401,7 +401,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         )
         add_action(
             "action_cash",
-            "CEMD",
+            "Cement hydrates",
             "cash",
             lambda: open_make_cash(self),
             sensitive=False,
@@ -484,6 +484,14 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         self.tools_toolbar.addSeparator()
 
         add_action(
+            "action_undo",
+            "Undo",
+            "reference",
+            self.undo_clicked,
+            tip="Undo the last structural change",
+            shortcut="Ctrl+Z",
+        )
+        add_action(
             "action_type_manager",
             "Types",
             "atom",
@@ -515,12 +523,129 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             tip="Analyse the silicate network (Ca/Si, Qn, MCL)",
         )
 
+        self.setup_menubar()
         self.set_tools_enabled(False)
+
+    def setup_menubar(self) -> None:
+        """Group the toolbar actions into a menu bar.
+
+        The very same QAction objects are reused, so a menu entry and its
+        toolbar button stay in lockstep -- same icon, same tooltip, same
+        enabled state, and a single shortcut that works from either. The
+        toolbar shows 25 unlabelled icons and hides the overflow behind a
+        chevron on a narrow window; the menus are where the features can
+        be found by name.
+        """
+        menus = {
+            "&File": [
+                self.action_open,
+                self.action_save,
+                self.action_save_as,
+                None,
+                self.action_cod,
+                self.action_pubchem,
+                self.action_smiles,
+            ],
+            "&Edit": [
+                self.action_undo,
+                None,
+                self.action_type_manager,
+                self.action_connectivity_manager,
+            ],
+            "&Build": [
+                self.action_solution,
+                self.action_glass,
+                self.action_cash,
+                None,
+                self.action_surface,
+                self.action_add_structure,
+                self.action_add_liquid,
+                self.action_add_droplet,
+                self.action_split,
+                self.action_protonate,
+            ],
+            "&Transform": [
+                self.action_replicate,
+                self.action_orthogonalize,
+                self.action_translate,
+                self.action_center,
+            ],
+            "&Analyze": [
+                self.action_rdf_analysis,
+                self.action_silicate_analysis,
+            ],
+            "&View": [
+                self.action_reset_camera,
+                self.action_bg_color,
+            ],
+        }
+
+        bar = self.menuBar()
+        for title, entries in menus.items():
+            menu = bar.addMenu(title)
+            for entry in entries:
+                if entry is None:
+                    menu.addSeparator()
+                else:
+                    menu.addAction(entry)
+
+    # ------------------------------------------------------------------
+    # Undo
+    # ------------------------------------------------------------------
+
+    #: How many structures back the undo history reaches. Snapshots are
+    #: whole systems, so the bound is a memory bound, not a preference.
+    UNDO_DEPTH = 5
+
+    def push_undo(self) -> None:
+        """Snapshot the active structure before a destructive edit.
+
+        Call this *before* mutating a system, from every handler that
+        changes one in place: replicating, protonating, orthogonalizing,
+        adding a liquid, splitting. Operations that open a new tab leave
+        the original untouched and need no snapshot.
+        """
+        tab = self.tabs.currentWidget()
+        if tab is None or getattr(tab, "system", None) is None:
+            return
+
+        stack = getattr(tab, "undo_stack", None)
+        if stack is None:
+            stack = tab.undo_stack = []
+
+        stack.append(tab.system.copy())
+        # Keep only the last UNDO_DEPTH snapshots.
+        del stack[: -self.UNDO_DEPTH]
+        self.refresh_undo_state()
+
+    @QtCore.Slot()
+    def undo_clicked(self) -> None:
+        """Restore the structure as it was before the last edit."""
+        tab = self.tabs.currentWidget()
+        stack = getattr(tab, "undo_stack", None) if tab else None
+
+        if not stack:
+            self.statusBar().showMessage("Nothing to undo.", 3000)
+            return
+
+        tab.system = stack.pop()
+        self.sync_ui(full_rebuild=True)
+        self.statusBar().showMessage("Undone.", 3000)
+        self.refresh_undo_state()
+
+    def refresh_undo_state(self) -> None:
+        """Grey out Undo when the active tab has no history."""
+        tab = self.tabs.currentWidget()
+        stack = getattr(tab, "undo_stack", None) if tab else None
+        self.action_undo.setEnabled(bool(stack))
 
     def set_tools_enabled(self, state: bool = False) -> None:
         """Enable or disable all manipulation tools based on the system state."""
         for action in self._tab_sensitive_actions:
             action.setEnabled(state)
+
+        # Undo follows its own history rather than the "a tab exists" rule.
+        self.refresh_undo_state()
 
         self.update_protonate_state()
 
@@ -706,6 +831,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def on_orthogonalize_clicked(self) -> None:
+        self.push_undo()
         try:
             self.system.orthogonalize()
         except ValueError:
@@ -717,6 +843,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def on_center_clicked(self) -> None:
+        self.push_undo()
         self.system.center_on_com()
         self.sync_ui(refresh_bonds=True)
 
