@@ -2,6 +2,8 @@
 cemd
 ====
 
+|tests| |docs| |python| |licence|
+
 **cemd** builds atomistic models of **cements, clays, carbonates and oxide
 glasses**, and writes them out ready for
 `LAMMPS <https://www.lammps.org/>`__.
@@ -132,10 +134,12 @@ environment at your working copy rather than copying the code:
 The `installation guide <https://cemd-dev.github.io/cemd/installation.html>`__
 covers conda environments and the prerequisites in more detail.
 
-`Packmol <https://github.com/m3g/packmol>`__ must be installed and on your
-``$PATH``: every builder that packs molecules into a volume shells out to
-it. The Python dependencies (MDAnalysis, pymatgen, RDKit, NumPy, SciPy,
-pandas, matplotlib, Dask) are installed automatically.
+Everything comes with it, including
+`Packmol <https://github.com/m3g/packmol>`__ -- every builder that packs
+molecules into a volume shells out to that binary, and pip puts it in the
+environment alongside the Python dependencies (MDAnalysis, pymatgen,
+RDKit, NumPy, SciPy, pandas, matplotlib, Dask). Should no wheel match your
+platform, install Packmol yourself and put it on your ``$PATH``.
 
 
 Documentation
@@ -177,3 +181,20 @@ License
 =======
 
 GPL-3.0-only. See ``LICENCE``.
+
+
+.. |tests| image:: https://github.com/cemd-dev/cemd/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/cemd-dev/cemd/actions/workflows/tests.yml
+   :alt: Tests
+
+.. |docs| image:: https://github.com/cemd-dev/cemd/actions/workflows/docs.yml/badge.svg
+   :target: https://cemd-dev.github.io/cemd/
+   :alt: Documentation
+
+.. |python| image:: https://img.shields.io/badge/python-3.11%2B-blue.svg
+   :target: https://www.python.org/downloads/
+   :alt: Python 3.11+
+
+.. |licence| image:: https://img.shields.io/badge/licence-GPL--3.0-blue.svg
+   :target: https://github.com/cemd-dev/cemd/blob/main/LICENCE
+   :alt: Licence: GPL-3.0-only

@@ -9,7 +9,8 @@
 - [ ] Update `date-released` in `CITATION.cff` to the tag's date, and put
       the concept DOI in once it exists.
 - [ ] Replace the `git+https://` install line with `pip install cemd` in the
-      README and the installation guide.
+      README and the installation guide, and add the PyPI version badge --
+      it reads "package not found" until the project exists.
 
 ## analysis
 
