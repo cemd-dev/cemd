@@ -74,26 +74,32 @@ If you plan to contribute to **cemd** development, clone the repository and inst
    git clone https://github.com/cemd-dev/cemd.git
    cd cemd
 
-Create a dedicated conda environment:
+Then create the development environment. This installs **cemd** editable,
+with the test, GUI and documentation extras, so there is nothing to run
+afterwards:
 
 .. code-block:: bash
 
    conda env create -f environment.yml
    conda activate cemd
 
-Then install the package in editable mode:
+Editable means the environment points at your working copy: an edit to the
+source is visible on the next import, with no reinstall.
+
+Without conda, the same thing in a virtual environment:
 
 .. code-block:: bash
 
-   pip install -e .
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -e ".[dev,gui,docs]"
 
-For GUI development, use the dedicated environment file:
+.. note::
 
-.. code-block:: bash
-
-   conda env create -f environment_gui.yml
-   conda activate cemd_ui
-   pip install -e ".[gui]"
+   Do not also add the repository to ``PYTHONPATH``. It would make cemd
+   importable from every environment on the machine, including the throwaway
+   ones used to check what a user actually receives -- and those checks then
+   silently test the working copy instead of the installed package.
 
 Verifying the Installation
 --------------------------

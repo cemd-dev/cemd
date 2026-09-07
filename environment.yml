@@ -1,3 +1,10 @@
+# One environment for all development. `conda env create -f environment.yml`
+# builds it and installs cemd editable with every extra, so there is nothing
+# to run afterwards.
+#
+# Everything except the Python version comes from pyproject.toml: this file
+# exists to create and name the environment, not to duplicate the dependency
+# list.
 name: cemd
 channels:
   - conda-forge
@@ -5,4 +12,4 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-      - -e ".[dev]"
+      - -e ".[dev,gui,docs]"
