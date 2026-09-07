@@ -29,6 +29,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
+    # Packmol is an external executable, not a Python library, but its
+    # authors ship it on PyPI with wheels for Linux, macOS and Windows.
+    # Depending on it means every builder works straight after
+    # `pip install cemd`, instead of failing until the user installs
+    # Packmol by hand and puts it on their PATH.
+    "packmol",
     "numpy>=2.0,<3",
     "scipy>=1.10",
     "pandas>=2.0",
