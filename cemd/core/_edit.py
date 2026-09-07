@@ -268,7 +268,7 @@ class EditMixin:
         """
         # Clear the cache since the box geometry changes
 
-        # Conversion/Normalisation vers les 3 formats internes
+        # Conversion/Normalization vers les 3 formats internes
         self._box = normalize_box(new_box, target=BoxFormat.LATTICE)
         self._box_lmp = normalize_box(new_box, target=BoxFormat.LAMMPS)
         self._box_vectors = normalize_box(new_box, target=BoxFormat.VECTORS)

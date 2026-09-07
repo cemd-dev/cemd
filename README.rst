@@ -9,7 +9,7 @@ glasses**, and writes them out ready for
 It covers the whole path from a crystal structure to a simulation input:
 assembling the solid, cutting surfaces and pores, filling them with a
 solution, assigning atom types from force-field rules, resolving the
-parameters, and analysing the result.
+parameters, and analyzing the result.
 
 Whether the system is a clay interlayer, a calcite surface in brine, an
 oxide glass or a cement hydrate, the pieces are the same: a solid, a
@@ -32,7 +32,7 @@ What it does
 - ``Splitter`` — cut a system open along an axis and fill the gap with a
   solution
 
-**Type and parameterise.** ``set_topology()`` applies force-field typing
+**Type and parameterize.** ``set_topology()`` applies force-field typing
 rules (ClayFF, CSHFF and your own), ``set_ff_from_database()`` resolves
 the parameters. The bundled database holds ClayFF, CSHFF2014, IFF
 (CHARMM and CVFF flavours), GROMOS 54A7/ATB, Raiteri 2015, Guillot &
@@ -141,15 +141,18 @@ pandas, matplotlib, Dask) are installed automatically.
 Documentation
 =============
 
-Build it locally with:
+**https://cemd-dev.github.io/cemd/**
+
+The user guide covers building, analysis and the force-field database, and
+four worked tutorials go from a calcite surface to a C-S-H nanopore filled
+with an alkaline pore solution. Every output shown in them was captured
+from a real run.
+
+To build the documentation locally:
 
 .. code-block:: bash
 
    sphinx-build -b html docs docs/_build/html
-
-The user guide covers building, analysis and the force-field database, and
-four worked tutorials go from a calcite surface to a C-S-H nanopore filled
-with an alkaline pore solution.
 
 
 Tests

@@ -179,7 +179,7 @@ With the ff keys already in place, the database lookup needs no arguments:
    26 43 42 8
    [('C1-C3', HarmonicBondParams(k=500.678776290631, r0=1.38, ref='', model='gromos'))]
 
-Every bond, angle, dihedral and improper type in the box is parameterised,
+Every bond, angle, dihedral and improper type in the box is parameterized,
 and the partial charges are untouched -- GROMOS defines its charges per
 atom in the topology rather than per atom type, so the lookup leaves them
 alone.

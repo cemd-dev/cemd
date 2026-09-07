@@ -7,7 +7,7 @@ for `LAMMPS <https://www.lammps.org/>`__.
 CEMD covers the whole path from a crystal structure to a simulation input:
 assembling the solid, cutting surfaces and pores, filling them with a
 solution, assigning atom types from force-field rules, resolving the
-parameters, and analysing the result.
+parameters, and analyzing the result.
 
 .. grid:: 2
    :gutter: 3

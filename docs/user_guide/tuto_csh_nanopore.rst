@@ -56,7 +56,7 @@ Step 2: Check the chemistry
 ============================
 
 :meth:`~cemd.build.CSHBuilder.analyze` reports the stoichiometry and the
-polymerisation of the silicate chains:
+polymerization of the silicate chains:
 
 .. code-block:: python
 
@@ -315,7 +315,7 @@ water molecules, while the original interlayer water is still in place.
 The hydroxide and sodium arrive with the generic types ``H``, ``O`` and
 ``Na``: run :meth:`~cemd.core.atomic_system.AtomicSystem.set_topology` and
 :meth:`~cemd.core.atomic_system.AtomicSystem.set_ff_from_database` again on
-the result to type and parameterise them.
+the result to type and parameterize them.
 
 .. code-block:: python
 
@@ -353,7 +353,7 @@ landing on top of an existing atom.
 
    The capping atoms are placed collinearly with the broken contact and
    carry no charge -- this is a starting geometry to relax, not a
-   parameterised structure. Re-run
+   parameterized structure. Re-run
    :meth:`~cemd.core.atomic_system.AtomicSystem.set_topology` and
    :meth:`~cemd.core.atomic_system.AtomicSystem.set_ff_from_database`
    afterwards.

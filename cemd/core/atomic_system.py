@@ -56,7 +56,7 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
     parameters, atomic masses and charges, and force field parameters.
 
     It is designed to represent the content of a LAMMPS data file and
-    provides utilities for editing, analysing and exporting atomistic
+    provides utilities for editing, analyzing and exporting atomistic
     systems.
 
     Parameters

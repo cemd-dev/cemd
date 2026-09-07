@@ -347,7 +347,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             "Background color",
             "bg-color",
             self.on_cycle_bg_clicked,
-            tip="Cycle the 3D view background colour",
+            tip="Cycle the 3D view background color",
         )
         add_action(
             "action_reset_camera",

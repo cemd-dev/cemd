@@ -199,7 +199,7 @@ class AtomicPlotter(QtInteractor):
         max_search = max(exceptions.values())
         tree = cKDTree(xyz)
 
-        # output_type="ndarray" avoids materialising a set of tuples, and
+        # output_type="ndarray" avoids materializing a set of tuples, and
         # lets everything below stay in numpy.
         pairs = tree.query_pairs(max_search, output_type="ndarray")
         if len(pairs) == 0:
@@ -232,7 +232,7 @@ class AtomicPlotter(QtInteractor):
             return
 
         # Two half-bonds per pair, so each half can carry its own atom's
-        # colour: point 0 -> midpoint, midpoint -> point 1.
+        # color: point 0 -> midpoint, midpoint -> point 1.
         start, end = xyz[first], xyz[second]
         middle = (start + end) / 2.0
 
