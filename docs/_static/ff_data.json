@@ -106,8 +106,8 @@
       "description": "Flexible SPC water model optimized for use with clay minerals and calcite",
       "tags": []
     },
-    "SCP-E": {
-      "name": "SCP-E",
+    "SPC/E": {
+      "name": "SPC/E",
       "ref": "https://doi.org/10.1021/j100308a038",
       "year": 0,
       "authors": [],
@@ -5118,20 +5118,20 @@
     },
     {
       "type": "hspce",
-      "full_type": "SCP-E.hspce",
+      "full_type": "SPC/E.hspce",
       "element": "H",
       "charge": 0.4238,
-      "model": "SCP-E",
+      "model": "SPC/E",
       "environment": "water hydrogen",
       "ref": "https://doi.org/10.1021/j100308a038",
       "mass": null
     },
     {
       "type": "ospce",
-      "full_type": "SCP-E.ospce",
+      "full_type": "SPC/E.ospce",
       "element": "O",
       "charge": -0.8476,
-      "model": "SCP-E",
+      "model": "SPC/E",
       "environment": "water oxygen",
       "ref": "https://doi.org/10.1021/j100308a038",
       "mass": null
@@ -27689,7 +27689,7 @@
       "type 2": "hspce",
       "epsilon (kcal/mol)": 0,
       "sigma (A)": 0,
-      "model": "SCP-E",
+      "model": "SPC/E",
       "ref": "https://doi.org/10.1021/j100308a038"
     },
     {
@@ -27697,7 +27697,7 @@
       "type 2": "ospce",
       "epsilon (kcal/mol)": 0.15535,
       "sigma (A)": 3.166,
-      "model": "SCP-E",
+      "model": "SPC/E",
       "ref": "https://doi.org/10.1021/j100308a038"
     },
     {
@@ -34206,7 +34206,7 @@
       "type 2": "ospce",
       "k (kcal/(mol.A2)": 554.1349,
       "r (A)": 1.0,
-      "model": "SCP-E",
+      "model": "SPC/E",
       "ref": "https://doi.org/10.1021/j100308a038"
     },
     {
@@ -44499,7 +44499,7 @@
       "type 3": "hspce",
       "k (kcal/(mol.rad2))": 45.7696,
       "theta (deg)": 109.47,
-      "model": "SCP-E",
+      "model": "SPC/E",
       "ref": "https://doi.org/10.1021/j100308a038"
     },
     {

@@ -13,13 +13,9 @@ abstract: >-
 authors:
   - family-names: Claverie
     given-names: Jérôme
-    email: Jerome.claverie@univ-nantes.fr
-    # TODO: add your ORCID -- it is what makes the citation unambiguous
-    # across authors with similar names, and Zenodo links the deposit to
-    # your researcher profile with it.
-    # orcid: "https://orcid.org/0000-0000-0000-0000"
-    # TODO: add your affiliation, e.g.
-    # affiliation: "Nantes Université, ..."
+    email: jerome.claverie@univ-nantes.fr
+    orcid: "https://orcid.org/0000-0002-8650-567X"
+    affiliation: "Nantes Université, École Centrale Nantes, CNRS, GeM, UMR 6183, F-44600 Saint-Nazaire, France"
 
 version: 0.1.0
 date-released: "2026-09-05"
