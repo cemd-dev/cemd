@@ -126,3 +126,80 @@ def test_rdf_coordination_number_matches_the_uniform_expectation():
     measured = frame.loc[frame.index <= r, "n_r"].iloc[-1]
 
     assert measured == pytest.approx(expected, rel=0.05)
+
+
+# ---------------------------------------------------------------------------
+# MSD and diffusion
+# ---------------------------------------------------------------------------
+
+
+def random_walk_universe(n_atoms=400, n_frames=600, step=0.30, seed=3):
+    """Brownian walkers whose diffusion coefficient is known exactly.
+
+    Each atom takes an independent Gaussian step of variance `step`^2 per
+    axis per frame, so MSD_x(n) = n * step^2 and the Einstein slope is
+    step^2 / dt. Nothing here is fitted to a previous run: the answer comes
+    from the way the trajectory was built.
+    """
+    rng = np.random.default_rng(seed)
+    box = 200.0  # far larger than any displacement, so no wrapping
+    steps = rng.normal(0.0, step, (n_frames, n_atoms, 3))
+    steps[0] = 0.0
+    positions = np.cumsum(steps, axis=0) + box / 2
+
+    universe = mda.Universe.empty(
+        n_atoms,
+        n_residues=n_atoms,
+        atom_resindex=np.arange(n_atoms),
+        residue_segindex=np.zeros(n_atoms, dtype=int),
+        trajectory=True,
+    )
+    universe.add_TopologyAttr("type", ["Ow"] * n_atoms)
+    universe.add_TopologyAttr("mass", [15.999] * n_atoms)
+    universe.load_new(positions, format=MemoryReader)
+    for ts in universe.trajectory:
+        ts.dimensions = [box, box, box, 90.0, 90.0, 90.0]
+    return universe, step
+
+
+def test_msd_of_a_random_walk_grows_linearly():
+    from cemd.analysis import msd
+
+    universe, step = random_walk_universe()
+    frame = msd(universe, "Ow", dt=1000.0)  # 1 ps between frames
+
+    time = frame.index.to_numpy()
+    isotropic = frame[["xx", "yy", "zz"]].mean(axis=1).to_numpy()
+
+    # MSD_x(n frames) = n * step^2, and one frame is one picosecond here.
+    expected = time * step**2
+    half = len(time) // 2
+    assert isotropic[1:half] == pytest.approx(expected[1:half], rel=0.10)
+
+
+def test_diffusion_coefficient_matches_the_walk_it_was_given():
+    from cemd.analysis import diffusion_coefficient, msd
+
+    universe, step = random_walk_universe()
+    frame = msd(universe, "Ow", dt=1000.0)
+    result = diffusion_coefficient(frame, start=frame.index[len(frame) // 10])
+
+    # D = step^2 / (2 dt), in A^2/ps, converted to m^2/s.
+    expected = step**2 / 2.0 * 1e-8
+    assert result.loc["DC (m2/s)", "3d"] == pytest.approx(expected, rel=0.10)
+
+
+def test_diffusion_of_an_isotropic_walk_has_no_preferred_axis():
+    from cemd.analysis import diffusion_coefficient, msd
+
+    universe, _ = random_walk_universe()
+    frame = msd(universe, "Ow", dt=1000.0)
+    result = diffusion_coefficient(frame, start=frame.index[len(frame) // 10])
+
+    diagonal = result.loc["DC (m2/s)", ["xx", "yy", "zz"]].to_numpy(dtype=float)
+    assert diagonal.std() / diagonal.mean() < 0.10
+
+    # Off-diagonal terms describe correlated motion between axes; there is
+    # none here by construction.
+    cross = result.loc["DC (m2/s)", ["xy", "xz", "yz"]].to_numpy(dtype=float)
+    assert np.abs(cross).max() < 0.1 * diagonal.mean()

@@ -70,7 +70,21 @@ def msd(
     atom_type : str
         The atom type to compute the diffusion coefficient.
     dt : float
-        Timestep between each frame of the trajectory (fs).
+        Time between two saved frames, in femtoseconds -- the MD timestep
+        multiplied by the dump interval, **not** the MD timestep itself.
+
+        .. warning::
+
+           Do not take this from ``universe.trajectory.dt``. A DCD written
+           by LAMMPS stores a time field that MDAnalysis reinterprets, and
+           the result need not be the real interval: on the reference
+           trajectory it reads 4.888821 ps where the frames are 100 fs
+           apart, a factor of 49. The mean-squared displacement stays
+           perfectly linear either way, so the diffusion coefficient comes
+           out wrong by that factor with nothing to suggest anything is
+           amiss. Take the value from the input deck that produced the
+           trajectory.
+
     nblocks : int, optional
         Number of blocks.
     corrlength : int, optional
@@ -582,7 +596,7 @@ def plot_msd(df_msd: pd.DataFrame) -> None:
 
     # Set labels and title
     ax.set_xlabel("Time (ps)")
-    ax.set_ylabel("MSD ($\AA^2$)")
+    ax.set_ylabel(r"MSD ($\AA^2$)")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.grid()
@@ -590,7 +604,7 @@ def plot_msd(df_msd: pd.DataFrame) -> None:
     # Legend labels
     num_cols = int(np.ceil(len(df_msd.columns) / 20))
     ax.legend(
-        title="z ($\AA$)", bbox_to_anchor=(1.04, 0.5), loc="center left", ncols=num_cols
+        title=r"z ($\AA$)", bbox_to_anchor=(1.04, 0.5), loc="center left", ncols=num_cols
     )
 
     # Adjust the plot layout to accommodate the legend
@@ -623,7 +637,7 @@ def plot_diffusion_profile(input_df: pd.DataFrame) -> None:
     imax = dc.argmax()
 
     # Set labels and title
-    plt.xlabel("Distance ($\AA$)")
+    plt.xlabel(r"Distance ($\AA$)")
     plt.ylabel("Diffusion coefficient ($m^2/s$)")
 
     plt.ylim(dc.min(), dc.max() + dc.iloc[imax])
