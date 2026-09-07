@@ -40,17 +40,23 @@ Choose the method that suits you best:
 Install the package
 ^^^^^^^^^^^^^^^^^^^
 
-Once your environment is active, install **cemd**:
+Once your environment is active, install **cemd** from the repository:
 
 .. code-block:: bash
 
-   pip install cemd
+   pip install "git+https://github.com/cemd-dev/cemd.git"
 
 For GUI support:
 
 .. code-block:: bash
 
-   pip install "cemd[gui]"
+   pip install "cemd[gui] @ git+https://github.com/cemd-dev/cemd.git"
+
+.. note::
+
+   **cemd** is not on PyPI yet, so it is installed from GitHub. Once it is
+   published, ``pip install cemd`` and ``pip install "cemd[gui]"`` will
+   work instead.
 
 That installs a ``cemd-gui`` command, which opens the interface:
 

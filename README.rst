@@ -73,23 +73,37 @@ structures interactively.
 Installation
 ============
 
-.. code-block:: bash
-
-   pip install .               # library
-   pip install ".[gui]"        # with the graphical interface
-
-Python 3.11 or later. The graphical interface then starts with:
+Python 3.11 or later. Install into an environment of its own, so cemd and
+its dependencies stay out of the way of your other work:
 
 .. code-block:: bash
 
+   python -m venv cemd_env
+   source cemd_env/bin/activate          # cemd_env\Scripts\activate on Windows
+
+   pip install "git+https://github.com/cemd-dev/cemd.git"
+
+For the graphical interface, which then opens with ``cemd-gui``:
+
+.. code-block:: bash
+
+   pip install "cemd[gui] @ git+https://github.com/cemd-dev/cemd.git"
    cemd-gui
 
-To work on cemd itself, install it editable, with the test and
-documentation extras:
+cemd is not on PyPI yet, hence the repository URL; ``pip install cemd``
+will work once it is published.
+
+To work on cemd itself, clone it and install editable, which points the
+environment at your working copy rather than copying the code:
 
 .. code-block:: bash
 
+   git clone https://github.com/cemd-dev/cemd.git
+   cd cemd
    pip install -e ".[dev,gui,docs]"
+
+The `installation guide <https://cemd-dev.github.io/cemd/installation.html>`__
+covers conda environments and the prerequisites in more detail.
 
 `Packmol <https://github.com/m3g/packmol>`__ must be installed and on your
 ``$PATH``: every builder that packs molecules into a volume shells out to
