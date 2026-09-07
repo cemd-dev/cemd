@@ -39,6 +39,18 @@ at all.
 
 ## Robustness
 
+- [ ] `SurfaceBuilder` builds from `system._pmg_struct`, the pymatgen
+      structure cached when the file was read, and that cache is
+      invalidated by some operations but not others. Delete every carbon
+      from a calcite and ask for a (10-14) surface: the carbon comes back,
+      silently. Type the same system first and the cache *is* cleared, so
+      it falls through to `to_pmg()` -- which builds `species` from
+      `atoms["type"]` and dies on `Can't parse Element or Species from
+      'Oc'`. The fix is both halves: rebuild from `elements` rather than
+      the force-field types, and drop the cache on every mutation. Until
+      then, generate the surface before editing or typing the system,
+      which is what the tutorials do.
+
 - [ ] 15 bare `except:` clauses swallow every error. One of them hid the
       `H2O/Si = 0` bug for as long as it existed: an invalid selection
       returned `None` instead of raising.
