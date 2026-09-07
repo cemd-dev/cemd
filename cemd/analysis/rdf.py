@@ -33,7 +33,7 @@ from ..core.atomic_system import AtomicSystem
 @singledispatch
 def compute_rdf(
     source, type1: str, type2: str, cutoff: float = 10.0, dr: float = 0.1, **kwargs
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, float]:
     """Calculate the Radial Distribution Function (RDF) g(r), and its derivatives G(r) and n(r).
 
     This function uses singledispatch to handle either a static AtomicSystem or
@@ -57,7 +57,13 @@ def compute_rdf(
     Returns
     -------
     pd.DataFrame
-        A DataFrame indexed by distance 'r', containing columns 'g_r', 'G_r', and 'n_r'.
+        Indexed by distance ``r``, with columns ``g_r``, ``G_r`` and ``n_r``.
+    float
+        The number density of the second selection, in atoms per cubic
+        Angstrom, that ``g_r`` was normalised by. Returned because the
+        normalisation is what makes an RDF comparable between systems, and
+        checking it is the quickest way to tell a real first peak from one
+        produced by the wrong particle count.
 
     Raises
     ------
@@ -70,7 +76,7 @@ def compute_rdf(
 @compute_rdf.register(AtomicSystem)
 def _(
     source: AtomicSystem, type1: str, type2: str, cutoff: float = 10.0, dr: float = 0.1
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, float]:
     # The AtomicSystem knows how to convert to a single frame MDA Universe
     u = source.to_mda()
     return compute_rdf(u, type1=type1, type2=type2, cutoff=cutoff, dr=dr)
@@ -84,7 +90,7 @@ def _(
     cutoff: float = 10.0,
     dr: float = 0.1,
     skip: int = 1,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, float]:
     bins = np.arange(0, cutoff + dr, dr)
 
     sel1 = source.select_atoms("all" if type1 == "all" else f"type {type1}")

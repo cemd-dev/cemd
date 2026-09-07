@@ -157,7 +157,8 @@ def density_map(
     axis : str
         Axis parallel to which to calculate the density.
     eps : float
-        Distance from the interface to select atoms.
+        Half-thickness of the slab: atoms between ``interface_coordinate -
+        eps`` and ``interface_coordinate + eps`` are counted.
     start : int
         Starting trajectory frame.
     end : int
@@ -174,8 +175,18 @@ def density_map(
     box = univ.dimensions
 
     type_str = " ".join(atom_types) if isinstance(atom_types, list) else atom_types
+
+    # A slab of half-thickness `eps` centred on the interface, which is what
+    # "within a distance of an interface" means and what this function is
+    # for -- the adsorbed layer, not everything on one side of the plane.
+    # The selection used to be `prop axis < interface + eps`, i.e. the whole
+    # half-cell below: on a solid-liquid system with the solid underneath,
+    # that swept the entire solid into a map meant to show the liquid.
+    lower = interface_coordinate - eps
+    upper = interface_coordinate + eps
     sel = univ.select_atoms(
-        f"type {type_str} and prop {axis} < {interface_coordinate + eps}", updating=True
+        f"type {type_str} and prop {axis} > {lower} and prop {axis} < {upper}",
+        updating=True,
     )
 
     ids = _get_axis_ids(axis)
@@ -192,7 +203,7 @@ def density_map(
     # a factor of 40 on a 20 A box at bin_size 0.5, and one that changes
     # with the box and the binning rather than being a constant offset.
     # It went unnoticed because a density map is read for its contrast.
-    slab_depth = min(interface_coordinate + eps, float(box[axid]))
+    slab_depth = min(upper, float(box[axid])) - max(lower, 0.0)
     column_vol = bin_size * bin_size * slab_depth
 
     nframes = len(univ.trajectory[start:end])

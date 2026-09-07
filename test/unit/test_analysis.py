@@ -203,3 +203,42 @@ def test_diffusion_of_an_isotropic_walk_has_no_preferred_axis():
     # none here by construction.
     cross = result.loc["DC (m2/s)", ["xy", "xz", "yz"]].to_numpy(dtype=float)
     assert np.abs(cross).max() < 0.1 * diagonal.mean()
+
+
+def test_density_map_takes_a_slab_centred_on_the_interface():
+    # Regression test: the selection was `prop z < interface + eps`, the
+    # whole half-cell below the plane rather than a slab around it. On a
+    # solid under a liquid that swept the entire solid into a map meant to
+    # show the liquid.
+    #
+    # Here the atoms sit in two separated sheets. A map centred on the
+    # upper one must not see the lower one, which is 10 A away.
+    n_per_sheet = 2000
+    rng = np.random.default_rng(11)
+    positions = np.empty((1, 2 * n_per_sheet, 3))
+    for sheet, centre in enumerate((5.0, 15.0)):
+        block = slice(sheet * n_per_sheet, (sheet + 1) * n_per_sheet)
+        positions[0, block, :2] = rng.uniform(0, BOX, (n_per_sheet, 2))
+        positions[0, block, 2] = rng.uniform(centre - 1.0, centre + 1.0, n_per_sheet)
+
+    universe = mda.Universe.empty(
+        2 * n_per_sheet,
+        n_residues=2 * n_per_sheet,
+        atom_resindex=np.arange(2 * n_per_sheet),
+        residue_segindex=np.zeros(2 * n_per_sheet, dtype=int),
+        trajectory=True,
+    )
+    universe.add_TopologyAttr("type", ["Ow"] * (2 * n_per_sheet))
+    universe.load_new(positions, format=MemoryReader)
+    for ts in universe.trajectory:
+        ts.dimensions = [BOX, BOX, BOX, 90.0, 90.0, 90.0]
+
+    density = density_map(
+        universe, "Ow", interface_coordinate=15.0, eps=2.0, axis="z",
+        bin_size=1.0, end=1,
+    )
+
+    # A 4 A slab around z = 15 holds one sheet: 2000 atoms over
+    # 20 x 20 x 4 A^3.
+    expected = n_per_sheet / (BOX * BOX * 4.0) * 1000
+    assert density.values.mean() == pytest.approx(expected, rel=0.05)
