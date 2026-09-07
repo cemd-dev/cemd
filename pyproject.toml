@@ -44,8 +44,13 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = [
-    "PySide6>=6.6",
-    "PySide6-Qlementine",
+    # PySide6-Qlementine is a compiled binding tied to one exact PySide6
+    # ABI -- its own metadata pins PySide6==6.10.2. Leaving PySide6 loose
+    # let pip pair a fresh 6.11 with a Qlementine built against 6.10, and
+    # importing the GUI then died on "libpyside6.abi3.so.6.10: cannot open
+    # shared object file". The two versions have to move together.
+    "PySide6==6.10.2",
+    "PySide6-Qlementine==1.4.3.0rc7",
     "pyvista",
     "pyvistaqt",
 ]
