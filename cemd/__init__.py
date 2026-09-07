@@ -15,7 +15,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .core.atomic_system import AtomicSystem
+
+try:
+    __version__ = version("cemd")
+except PackageNotFoundError:  # running from a source tree, never installed
+    __version__ = "unknown"
 
 __author__ = "Jérôme Claverie"
 
@@ -23,4 +30,4 @@ __copyright__ = "Copyright (c) 2022-2026 Jérôme Claverie"
 
 __license__ = "GPL-3.0"
 
-__all__ = ["AtomicSystem"]
+__all__ = ["AtomicSystem", "__version__"]

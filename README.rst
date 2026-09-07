@@ -2,7 +2,7 @@
 cemd
 ====
 
-|tests| |docs| |python| |licence|
+|pypi| |tests| |docs| |python| |licence|
 
 **cemd** builds atomistic models of **cements, clays, carbonates and oxide
 glasses**, and writes them out ready for
@@ -110,17 +110,14 @@ its dependencies stay out of the way of your other work:
    python -m venv cemd_env
    source cemd_env/bin/activate          # cemd_env\Scripts\activate on Windows
 
-   pip install "git+https://github.com/cemd-dev/cemd.git"
+   pip install cemd
 
 For the graphical interface, which then opens with ``cemd-gui``:
 
 .. code-block:: bash
 
-   pip install "cemd[gui] @ git+https://github.com/cemd-dev/cemd.git"
+   pip install "cemd[gui]"
    cemd-gui
-
-cemd is not on PyPI yet, hence the repository URL; ``pip install cemd``
-will work once it is published.
 
 To work on cemd itself, clone it and install editable, which points the
 environment at your working copy rather than copying the code:
@@ -182,6 +179,10 @@ License
 
 GPL-3.0-only. See ``LICENCE``.
 
+
+.. |pypi| image:: https://img.shields.io/pypi/v/cemd.svg
+   :target: https://pypi.org/project/cemd/
+   :alt: PyPI
 
 .. |tests| image:: https://github.com/cemd-dev/cemd/actions/workflows/tests.yml/badge.svg
    :target: https://github.com/cemd-dev/cemd/actions/workflows/tests.yml

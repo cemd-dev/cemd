@@ -24,9 +24,16 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
+    # No "License :: OSI Approved :: ..." here: with the PEP 639
+    # `license` expression above, the licence classifiers are deprecated
+    # and saying it twice invites the two from disagreeing.
 ]
 dependencies = [
     # Packmol is an external executable, not a Python library, but its
@@ -82,6 +89,7 @@ cemd-gui = "cemd.gui.main_window:main"
 
 [project.urls]
 Homepage = "https://github.com/cemd-dev/cemd"
+Documentation = "https://cemd-dev.github.io/cemd/"
 Repository = "https://github.com/cemd-dev/cemd"
 Issues = "https://github.com/cemd-dev/cemd/issues"
 

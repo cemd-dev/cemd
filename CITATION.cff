@@ -18,7 +18,7 @@ authors:
     affiliation: "Nantes Université, École Centrale Nantes, CNRS, GeM, UMR 6183, F-44600 Saint-Nazaire, France"
 
 version: 0.1.0
-date-released: "2026-09-05"
+date-released: "2026-09-08"
 license: GPL-3.0-only
 repository-code: "https://github.com/cemd-dev/cemd"
 url: "https://github.com/cemd-dev/cemd"
@@ -34,12 +34,3 @@ keywords:
   - oxide glass
   - force field
   - atomistic modelling
-
-# TODO: after the first Zenodo deposit, paste the *concept* DOI here --
-# the one that always resolves to the latest version, not the DOI of a
-# single release. It cannot be filled in before the first deposit exists.
-# doi: "10.5281/zenodo.XXXXXXX"
-
-# If cemd is later described in a paper, add a `preferred-citation:` block
-# here with that article's metadata. Tools then cite the paper while this
-# top-level block still identifies the software itself.
