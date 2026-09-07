@@ -30,6 +30,7 @@ from ...core._io.sources.pubchem import (
     pubchem_sdq_search,
     pubchem_search_by_name,
 )
+from .. import _userdata
 from .base_dialog import BaseBuilderDialog
 
 if TYPE_CHECKING:
@@ -41,10 +42,7 @@ class PubChemBrowserDialog(BaseBuilderDialog):
         super().__init__(parent, "PubChem Database Explorer", 850)
         self.setMinimumHeight(600)
 
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.cache_file = os.path.join(
-            os.path.dirname(current_dir), "pubchem_cache.json"
-        )
+        self.cache_file = _userdata.cache_file("pubchem_cache.json")
 
         self.selected_system = None
         self.setup_ui()

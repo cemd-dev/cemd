@@ -33,6 +33,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6Qlementine import QlementineStyle
 
 from cemd.core.atomic_system import AtomicSystem
+from cemd.gui import _userdata
 from cemd.gui.logic.build import (
     on_protonate,
     open_add_droplet,
@@ -201,7 +202,14 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         base_dir = os.path.dirname(os.path.realpath(__file__))
 
         default_path = os.path.join(base_dir, "default_config.json")
-        user_path = os.path.join(base_dir, "config.json")
+        # Preferences live under the user's own config directory. Fall back
+        # to the copy earlier versions left inside the package, so that an
+        # upgrade does not discard settings already saved.
+        user_path = _userdata.config_file()
+        if not user_path.exists():
+            legacy = _userdata.legacy_config_file()
+            if legacy.exists():
+                user_path = legacy
 
         merged_cfg = {}
 
@@ -214,7 +222,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
                 print(f"Erreur lecture default_config: {e}")
 
         # Overwrite with user preferences (Priority)
-        if os.path.exists(user_path):
+        if user_path.exists():
             try:
                 with open(user_path, encoding="utf-8") as f:
                     user_cfg = json.load(f) or {}
@@ -941,7 +949,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         """Only saves differences from the default."""
         base_dir = os.path.dirname(os.path.realpath(__file__))
         default_path = os.path.join(base_dir, "default_config.json")
-        user_path = os.path.join(base_dir, "config.json")
+        user_path = _userdata.config_file()
 
         # Load fault to compare
         default_data = {}
@@ -971,11 +979,8 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
                 if tab and hasattr(tab, "plotter"):
                     tab.plotter.close()
 
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            for cache_file in ["cod_cache.json", "pubchem_cache.json"]:
-                path = os.path.join(script_dir, cache_file)
-                if os.path.exists(path):
-                    os.remove(path)
+            for name in ["cod_cache.json", "pubchem_cache.json"]:
+                _userdata.cache_file(name).unlink(missing_ok=True)
 
         except Exception as e:
             print(f"Error closing globally: {e}")

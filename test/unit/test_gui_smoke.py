@@ -110,3 +110,51 @@ def test_tools_are_disabled_until_a_structure_is_open(window):
 def test_undo_on_an_empty_window_is_a_noop(window):
     # No tab, no history: this must not raise.
     window.undo_clicked()
+
+
+def test_user_files_are_written_outside_the_package(tmp_path, monkeypatch):
+    """The interface must not write into its own installation.
+
+    It used to: preferences and the COD/PubChem caches were saved next to
+    `main_window.py`. In a source tree that works and hides the problem.
+    Installed, that path is `site-packages/cemd/gui` -- shared between the
+    users of a machine, replaced on every upgrade, and read-only as often
+    as not.
+    """
+    from pathlib import Path
+
+    from cemd.gui import _userdata
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    package = Path(_userdata.__file__).resolve().parent
+    for path in (_userdata.config_file(), _userdata.cache_file("cod_cache.json")):
+        assert package not in path.resolve().parents
+        assert path.parent.is_dir(), "the directory must be created for the write"
+        assert path.parent.name == _userdata.APP_DIR
+
+
+def test_every_writer_goes_through_userdata():
+    """`__file__` may locate shipped data, never a file the GUI writes.
+
+    A tripwire rather than a proof: it catches a new `json.dump` or
+    `open(..., "w")` added to a module that has no idea where the user's
+    directories are.
+    """
+    from pathlib import Path
+
+    import cemd.gui
+
+    package = Path(cemd.gui.__file__).parent
+    for source in package.rglob("*.py"):
+        if source.name == "_userdata.py":
+            continue  # it resolves the legacy path on purpose, read-only
+        text = source.read_text()
+        writes = 'open(' in text and '"w"' in text or "json.dump(" in text
+        if writes and "_userdata" not in text:
+            raise AssertionError(
+                f"{source.relative_to(package)} writes a file but does not use "
+                "_userdata; a path built from __file__ lands in site-packages"
+            )

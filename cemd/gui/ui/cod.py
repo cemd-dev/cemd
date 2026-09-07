@@ -27,8 +27,6 @@ from PySide6 import QtCore, QtWidgets
 if TYPE_CHECKING:
     from ..main_window import AtomViewerGUI
 
-from .base_dialog import BaseBuilderDialog
-
 from ...core._io.sources.cod import (
     cod_search_by_elements,
     cod_search_by_id,
@@ -36,6 +34,8 @@ from ...core._io.sources.cod import (
     formula_to_elements,
     get_structure_by_cod_id,
 )
+from .. import _userdata
+from .base_dialog import BaseBuilderDialog
 
 
 class CODBrowserDialog(BaseBuilderDialog):
@@ -44,9 +44,7 @@ class CODBrowserDialog(BaseBuilderDialog):
         super().__init__(parent, "COD Database Explorer", 850)
         self.setMinimumHeight(600)
 
-        current_script_dir = os.path.dirname(os.path.abspath(__file__))
-        gui_dir = os.path.dirname(current_script_dir)
-        self.cache_file = os.path.join(gui_dir, "cod_cache.json")
+        self.cache_file = _userdata.cache_file("cod_cache.json")
 
         self.selected_system = None
         self.last_cod_id = None

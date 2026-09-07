@@ -14,3 +14,9 @@ test/*
 docs/_build/
 .coverage
 htmlcov/
+
+# Written by the interface at runtime, under the user's own config and
+# cache directories. The copies below are only what earlier versions left
+# behind in the source tree.
+cemd/gui/config.json
+cemd/gui/*_cache.json
