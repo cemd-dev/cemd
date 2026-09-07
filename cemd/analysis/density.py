@@ -179,10 +179,21 @@ def density_map(
     )
 
     ids = _get_axis_ids(axis)
+    axid = ids["axid"]
     axida, axidb = ids["axida"], ids["axidb"]
     bins_a = np.arange(0, box[axida], bin_size)
     bins_b = np.arange(0, box[axidb], bin_size)
-    slice_vol = bin_size * box[axida] * box[axidb]
+
+    # A bin of the map is a column through the selected slab: bin_size by
+    # bin_size in the plane, and as deep as the selection reaches along the
+    # perpendicular axis. The 1D slab volume used before
+    # (bin_size * box[a] * box[b]) is the volume of a whole slice, so the
+    # reported densities were low by box[a] * box[b] / (bin_size * depth) --
+    # a factor of 40 on a 20 A box at bin_size 0.5, and one that changes
+    # with the box and the binning rather than being a constant offset.
+    # It went unnoticed because a density map is read for its contrast.
+    slab_depth = min(interface_coordinate + eps, float(box[axid]))
+    column_vol = bin_size * bin_size * slab_depth
 
     nframes = len(univ.trajectory[start:end])
 
@@ -206,7 +217,7 @@ def density_map(
     ra = (edges_a[1:] + edges_a[:-1]) / 2
     rb = (edges_b[1:] + edges_b[:-1]) / 2
 
-    density = hist / slice_vol / nframes * 1000
+    density = hist / column_vol / nframes * 1000
 
     return pd.DataFrame(density, index=ra, columns=rb)
 
