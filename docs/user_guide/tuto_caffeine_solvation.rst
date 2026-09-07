@@ -201,8 +201,8 @@ Step 7: Export
 
    **Starting from PubChem instead.**
    :meth:`~cemd.core.atomic_system.AtomicSystem.from_pubchem` fetches a 3D
-   structure by name, which is the quickest route when you only need
-   geometry. It returns atoms and bonds only, so you then have to call
+   structure -- ``from_pubchem(2519)`` for caffeine, or no argument to
+   browse -- which is the quickest route when you only need geometry. It returns atoms and bonds only, so you then have to call
    :meth:`~cemd.core.atomic_system.AtomicSystem.guess_connections` for the
    angles and dihedrals and assign the force-field keys yourself. The
    moltemplate route used above skips both steps.

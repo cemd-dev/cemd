@@ -23,28 +23,38 @@ Prerequisites
 Step 1: Retrieve Calcite Structure from COD
 ============================================
 
-Download the calcite structure (COD ID: 9016705) directly from the COD database:
+Download the calcite structure (COD ID 9016705) from the COD database:
 
 .. code-block:: python
 
-   # Retrieve calcite structure from COD
+   system = AtomicSystem.from_cod(9016705)
+
+Naming the identifier is what makes this tutorial -- and any script built
+from it -- reproducible: the same three lines give the same slab on
+another machine, months later.
+
+Called without an identifier, the same method opens an interactive
+explorer instead, which is how you find one in the first place:
+
+.. code-block:: python
+
    system = AtomicSystem.from_cod()
-   
+
 .. code-block:: text
-   
+
    ? Search by: (Use arrow keys)
       Mineral Name
       Chemical Formula
    » COD ID
 
-.. note::
-
-   You can also find a calcite structure searching by mineral name.
-
 .. code-block:: text
 
    ? Search by: COD ID
    ? Enter your query: 9016705
+
+It also searches by mineral name or chemical formula, prints the
+identifier of whatever you select, and ``c`` opens that entry's COD page
+in a browser.
 
 .. code-block:: python
 

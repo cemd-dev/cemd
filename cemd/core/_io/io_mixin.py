@@ -98,39 +98,68 @@ class IOMixin:
     # ========================================================================
 
     @classmethod
-    def from_cod(cls) -> Self:
+    def from_cod(cls, cod_id: int | str | None = None) -> Self:
         """
-        Explore and load a structure from the Crystallography Open Database.
+        Load a structure from the Crystallography Open Database.
+
+        Parameters
+        ----------
+        cod_id : int or str, optional
+            COD entry to download. Given one, the structure is fetched
+            straight away; omitted, an interactive explorer opens instead.
+            Pass the identifier in a script: the explorer cannot be
+            replayed, and a script that names its structure says where its
+            model came from.
 
         Returns
         -------
         AtomicSystem or None
-            The selected structure, or None if cancelled.
+            The structure, or None if the explorer was cancelled.
 
         Examples
         --------
-        >>> system = AtomicSystem.from_cod()
+        >>> calcite = AtomicSystem.from_cod(9016705)   # reproducible
+        >>> system = AtomicSystem.from_cod()           # browse instead
         """
-        from .sources.cod import explore_cod
+        from .sources.cod import explore_cod, get_structure_by_cod_id
 
+        if cod_id is not None:
+            return get_structure_by_cod_id(int(cod_id))
         return explore_cod()
 
     @classmethod
-    def from_pubchem(cls) -> Self:
+    def from_pubchem(cls, cid: int | str | None = None) -> Self:
         """
-        Explore and load a molecule from PubChem.
+        Load a molecule from PubChem.
+
+        Parameters
+        ----------
+        cid : int or str, optional
+            PubChem compound identifier to download. Given one, the
+            molecule is fetched straight away; omitted, an interactive
+            explorer opens instead.
 
         Returns
         -------
         AtomicSystem or None
-            The selected molecule, or None if cancelled.
+            The molecule, or None if it could not be fetched or the
+            explorer was cancelled.
 
         Examples
         --------
-        >>> molecule = AtomicSystem.from_pubchem()
-        """
-        from .sources.pubchem import explore_pubchem
+        >>> caffeine = AtomicSystem.from_pubchem(2519)  # reproducible
+        >>> molecule = AtomicSystem.from_pubchem()      # browse instead
 
+        Notes
+        -----
+        Only coordinates and bonds are returned. Call
+        :meth:`~cemd.core.atomic_system.AtomicSystem.guess_connections` for
+        the angles and dihedrals.
+        """
+        from .sources.pubchem import explore_pubchem, get_structure
+
+        if cid is not None:
+            return get_structure(int(cid))
         return explore_pubchem()
 
     # ========================================================================
