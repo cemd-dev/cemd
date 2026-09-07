@@ -19,9 +19,13 @@ import json
 import os
 import sys
 
-os.environ["QT_QPA_PLATFORM"] = "xcb"
-os.environ["QT_X11_NO_MITSHM"] = "1"
-os.environ["QT_LINUX_ACCESSIBILITY_ALWAYS_ON"] = "0"
+# setdefault, not assignment: xcb is the right default for VTK, which
+# renders poorly under Wayland, but forcing it made the module unusable
+# anywhere without an X server -- a headless CI runner, or a user who has
+# deliberately chosen another platform plugin.
+os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+os.environ.setdefault("QT_X11_NO_MITSHM", "1")
+os.environ.setdefault("QT_LINUX_ACCESSIBILITY_ALWAYS_ON", "0")
 
 from typing import Any
 
