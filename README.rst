@@ -75,11 +75,21 @@ Installation
 
 .. code-block:: bash
 
-   pip install -e .            # library
-   pip install -e ".[gui]"     # with the graphical interface
-   pip install -e ".[docs]"    # to build the documentation
+   pip install .               # library
+   pip install ".[gui]"        # with the graphical interface
 
-Python 3.11 or later.
+Python 3.11 or later. The graphical interface then starts with:
+
+.. code-block:: bash
+
+   cemd-gui
+
+To work on cemd itself, install it editable, with the test and
+documentation extras:
+
+.. code-block:: bash
+
+   pip install -e ".[dev,gui,docs]"
 
 `Packmol <https://github.com/m3g/packmol>`__ must be installed and on your
 ``$PATH``: every builder that packs molecules into a volume shells out to
