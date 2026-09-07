@@ -10,40 +10,65 @@ Getting Started
    The **cemd** package revolves around the
    :class:`~cemd.core.atomic_system.AtomicSystem` class, which serves as the primary container for all atomic data: coordinates, topology, box parameters, masses, and force field parameters.
 
-Loading a System
-----------------
+Creating a System
+-----------------
 
-The easiest way to load a system is directly from a LAMMPS ``.data`` file:
+Every example below works on the same system, so start by building one --
+a 30 Å box of water at 1.0 g/cm³. Nothing has to be downloaded:
+:class:`~cemd.build.SolutionBuilder` works out how many molecules the
+target density calls for and packs them with Packmol.
 
 .. code-block:: python
 
-   from cemd import AtomicSystem
+   from cemd.build import SolutionBuilder
 
-   system = AtomicSystem.from_file("waterbox.data")
+   system = SolutionBuilder.from_water(density=1.0).build(box=[30.0, 30.0, 30.0])
    system.summary()
 
 .. code-block:: none
 
-   <AtomicSystem with 2709 atoms, 1806 bonds>
+   <AtomicSystem with 2709 atoms, 1806 bonds, 903 angles>
 
    Box
-   a (Å)  b (Å)  c (Å)  α (°)  β (°)  γ (°)
-      30     30     30     90     90     90
+    a (Å)  b (Å)  c (Å)  α (°)  β (°)  γ (°)
+    30.00  30.00  30.00  90.00  90.00  90.00
 
    Atoms
    type  number      mass  charge
-      H    1806  1.007947     0.0
-      O     903 15.999430     0.0
+     Hw    1806  1.007947   0.446
+     Ow     903 15.999430  -0.892
 
    Bonds
-   type  number
-   H-O    1806
+    type  number
+   Hw-Ow    1806
+
+   Angles
+       type  number
+   Hw-Ow-Hw     903
 
    Total charge: 0.000 e
    Volume: 27.00 nm³
    Density: 1.00 g/cm³
 
-Other supported formats include ``.cif``, ``.pdb``, ``.sdf``, ``.lt``:
+The water already carries its force-field atom types (``Ow``, ``Hw``) and
+the SPC/E charges that go with them.
+
+Loading a System
+----------------
+
+An existing structure is read with
+:meth:`~cemd.core.atomic_system.AtomicSystem.from_file`, which picks the
+reader from the extension:
+
+.. code-block:: python
+
+   from cemd import AtomicSystem
+
+   system.write("waterbox.data")            # from the box built above
+   system = AtomicSystem.from_file("waterbox.data")
+
+Supported for reading: ``.data`` and ``.lmp`` (LAMMPS), ``.cif``, ``.pdb``,
+``.sdf`` and ``.lt`` (moltemplate). Writing supports ``.data`` and ``.pdb``.
 
 Creating a System from SMILES
 -----------------------------
