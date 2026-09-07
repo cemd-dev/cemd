@@ -66,6 +66,15 @@ at all.
       validating it against the mass would fix `CL`, `BR`, `FE`, `AR`,
       `SE`, `SI`, `HE`, `NE` and `NA+` without breaking the united atoms.
 
+## Provenance
+
+- [ ] A system does not remember where it came from. `from_cod(9016705)`
+      lets a script name its source, but the object it returns cannot
+      report one, so a model read back from a `.data` file has lost the
+      link to the entry it was built from. A `source` field carried
+      through `copy` and `_replace_internals` would close it, and would
+      also give `CITATION.cff` something to point at for the structures.
+
 ## GUI
 
 - [ ] `test_gui_smoke.py` checks that the window opens and the actions are
