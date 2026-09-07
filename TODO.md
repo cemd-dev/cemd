@@ -2,15 +2,20 @@
 
 ## Before the first release
 
-- [ ] Declare the trusted publishers on PyPI and TestPyPI, rehearse on
-      TestPyPI, then publish.
+Rehearsed on TestPyPI on 2026-09-07: the workflow published 0.1.0 through
+trusted publishing, and the package installed and ran from that upload --
+builders, Packmol, the LAMMPS round trip and the interface, nine checks.
+
+- [ ] Declare the trusted publisher on **PyPI** (environment `pypi`, the
+      name the workflow uses for a release; TestPyPI used `testpypi`).
 - [ ] Enable the Zenodo integration **before** tagging: Zenodo only sees
       releases published after it is switched on.
-- [ ] Update `date-released` in `CITATION.cff` to the tag's date, and put
-      the concept DOI in once it exists.
-- [ ] Replace the `git+https://` install line with `pip install cemd` in the
-      README and the installation guide, and add the PyPI version badge --
-      it reads "package not found" until the project exists.
+- [ ] Create the release `v0.1.0`. The workflow refuses to publish if the
+      tag and `pyproject.toml` disagree, so bump both together or neither.
+- [ ] Put the Zenodo concept DOI -- the one that always resolves to the
+      latest version -- in `CITATION.cff`, and add the DOI badge.
+- [ ] Check `date-released` in `CITATION.cff` still matches the day the
+      release actually goes out. It currently says 2026-09-08.
 
 ## analysis
 
