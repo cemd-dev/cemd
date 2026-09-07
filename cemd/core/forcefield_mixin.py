@@ -229,10 +229,14 @@ class ForceFieldMixin:
         df_list = dfs["atoms"]
 
         assignments = {}
-        system_elements = self.elements
-        system_types = self.atom_types
 
-        for el, t in zip(system_elements, system_types):
+        # `.items()`, not `zip(dict, list)`: iterating the mapping yields its
+        # keys, which are the atom *types*, so the lookup below searched the
+        # database for element "Ow" or "Hw" and matched nothing. The explorer
+        # only ever worked on a structure whose type names happened to be
+        # element symbols. Types with no identifiable element are skipped
+        # rather than silently misaligned.
+        for t, el in self.elements.items():
             subset = df_list[df_list["element"] == el]
             if subset.empty:
                 print(f"No parameters for element {el}. Skipping.")

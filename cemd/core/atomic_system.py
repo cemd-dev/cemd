@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import copy
+import warnings
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Self
 
@@ -443,26 +444,63 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
             {t: float(self._charges.get(t, 0)) for t in self.atom_types}
         )
 
+    #: How far an atom type's mass may sit from a real element's before the
+    #: type is judged not to be that element. Every genuine element in the
+    #: bundled force fields matches to better than 0.05 amu, while a GROMOS
+    #: united atom -- a carbon carrying its apolar hydrogens, CH3 at 15.035
+    #: -- sits about 1 amu away from anything real. The gap is wide.
+    ELEMENT_MASS_TOLERANCE = 0.2
+
     @property
     def elements(self) -> dict[str | int, str]:
         """Return a mapping of atom types to their elemental symbols (read-only).
 
-        Calculates elemental symbols on-the-fly by matching the atomic mass
-        of each atom type to the closest element mass available in constant tables.
+        The element is inferred from the atom type's mass. A type whose mass
+        matches no element within
+        :data:`ELEMENT_MASS_TOLERANCE` is left out of the mapping rather
+        than assigned the nearest entry: an element is not something this
+        can always know.
+
+        That happens in two situations. A **united-atom** force field folds
+        apolar hydrogens into their carbon, so GROMOS ``CH3`` weighs 15.035
+        and the nearest element is oxygen -- the information needed to say
+        "carbon" is simply not in the mass. And an element absent from the
+        internal table (which covers hydrogen through barium) would
+        otherwise be reported as the nearest one that is present.
 
         Returns
         -------
         dict[str | int, str]
-            Dictionary matching atom type ID to its inferred element symbol.
+            Atom type to element symbol, for the types whose mass identifies
+            one. Callers should treat a missing key as "unknown" -- see
+            :meth:`~cemd.core.topology_mixin.TopologyMixin.set_types_from_elements`,
+            which warns and keeps the original type.
         """
         element_dict: dict[str | int, str] = {}
+        unmatched: list[tuple[str | int, float]] = []
 
         for t, mass_val in self.masses.items():
             if mass_val is None or np.isnan(mass_val):
                 continue
 
-            best_match = MASS_KEYS[(np.abs(MASS_KEYS - mass_val)).argmin()]
-            element_dict[t] = str(INV_MASSES[best_match])
+            distances = np.abs(MASS_KEYS - mass_val)
+            index = distances.argmin()
+
+            if distances[index] > self.ELEMENT_MASS_TOLERANCE:
+                unmatched.append((t, float(mass_val)))
+                continue
+
+            element_dict[t] = str(INV_MASSES[MASS_KEYS[index]])
+
+        if unmatched:
+            detail = ", ".join(f"{t} ({mass:g} amu)" for t, mass in unmatched)
+            warnings.warn(
+                f"No element matches the mass of: {detail}. These types are "
+                "absent from `elements`. A united-atom force field (GROMOS "
+                "CH1-CH4) and any element heavier than barium both land here.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         return MappingProxyType(element_dict)
 

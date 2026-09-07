@@ -308,3 +308,41 @@ def test_total_charge_still_follows_set_charges():
     assert system.total_charge == pytest.approx(0.0, abs=1e-9)
     assert system.charges["Ow"] == pytest.approx(-0.8)
     assert n_water > 0
+
+
+def test_elements_skips_a_mass_matching_nothing():
+    # Regression test: the element was taken as the nearest mass in the
+    # table, however far away. The table stops at barium, so platinum
+    # (195.08) came back as barium (137.33) -- a 58 amu error, reported
+    # with no warning at all.
+    atoms = pd.DataFrame(
+        {
+            "type": ["O", "Pt"],
+            "charge": [0.0, 0.0],
+            "x": [0.0, 3.0],
+            "y": [0.0, 0.0],
+            "z": [0.0, 0.0],
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"O": 15.9994, "Pt": 195.084},
+            "charges": {},
+        }
+    )
+
+    with pytest.warns(UserWarning, match="No element matches the mass"):
+        elements = dict(system.elements)
+
+    assert elements == {"O": "O"}
+    assert "Pt" not in elements
+
+
+def test_elements_still_resolves_ordinary_types():
+    # The guard must not cost anything on a normal system: every element in
+    # the bundled force fields matches its mass to better than 0.05 amu.
+    system = make_water_system()
+    assert dict(system.elements) == {"Ow": "O", "Hw": "H"}
