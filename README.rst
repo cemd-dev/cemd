@@ -11,23 +11,9 @@ assembling the solid, cutting surfaces and pores, filling them with a
 solution, assigning atom types from force-field rules, resolving the
 parameters, and analysing the result.
 
-.. code-block:: python
-
-   from cemd.build import CSHBuilder, SolutionBuilder, Splitter
-
-   # A C-S-H matrix at Ca/Si = 1.5
-   csh = CSHBuilder(cs_ratio=1.5, ws_ratio=1.0).build(model="tob11a_merlino.cif")
-   csh.set_types_from_elements()
-   csh.set_topology("cshff")
-
-   # Open a 25 A nanopore along an interlayer and fill it with NaOH
-   pore = SolutionBuilder(density=1.0, counts={"Na": 8, "HO": 8})
-   system = Splitter(csh, coordinate=17.0, axis="z", gap_size=25.0) \
-       .add_solution(pore, padding=2.0) \
-       .split()
-
-   system.set_ff_from_database()
-   system.write("csh_nanopore.data")
+Whether the system is a clay interlayer, a calcite surface in brine, an
+oxide glass or a cement hydrate, the pieces are the same: a solid, a
+solution, a set of atom types and a LAMMPS data file at the end.
 
 
 What it does
@@ -68,6 +54,47 @@ and converts to and from `MDAnalysis <https://www.mdanalysis.org/>`__ and
 
 **Inspect.** An optional PySide6/PyVista interface for viewing and editing
 structures interactively.
+
+
+Two examples
+============
+
+A mineral surface in contact with an electrolyte -- the archetypal
+interface problem:
+
+.. code-block:: python
+
+   from cemd import AtomicSystem
+   from cemd.build import SolutionBuilder, SurfaceBuilder
+
+   calcite = AtomicSystem.from_file("calcite.cif")
+   slabs, *_ = SurfaceBuilder(calcite).build((1, 0, 4), min_slab_size=12.0)
+
+   brine = SolutionBuilder(density=1.0, molarities={"Na": 0.5, "Cl": 0.5})
+   system = slabs[0].add_liquid_layer(brine, thickness=20.0)
+
+   system.set_topology("clayff")
+   system.write("calcite_brine.data")
+
+And a cement hydrate, where cemd does what nothing else does -- build the
+C-S-H at a target Ca/Si, then measure where it can be cut before opening
+a pore, since under CSHFF the silicate framework carries no explicit bond
+to guide you:
+
+.. code-block:: python
+
+   from cemd.build import CSHBuilder, SolutionBuilder, Splitter
+
+   csh = CSHBuilder(cs_ratio=1.5, ws_ratio=1.0).build(model="tob11a_merlino.cif")
+   csh.set_types_from_elements()
+   csh.set_topology("cshff")
+
+   pore = SolutionBuilder(density=1.0, counts={"Na": 8, "HO": 8})
+   system = Splitter(csh, coordinate=17.0, axis="z", gap_size=25.0) \
+       .add_solution(pore, padding=2.0) \
+       .split()
+
+   system.write("csh_nanopore.data")
 
 
 Installation

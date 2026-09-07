@@ -1,4 +1,4 @@
-# cemd/builders/glass.py
+# cemd/build/glass.py
 
 from __future__ import annotations
 

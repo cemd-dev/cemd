@@ -989,7 +989,7 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         Examples
         --------
         >>> from cemd import AtomicSystem
-        >>> from cemd.builders import SolutionBuilder
+        >>> from cemd.build import SolutionBuilder
         >>>
         >>> surface = AtomicSystem.from_file("surface.lmp")
         >>> blueprint = SolutionBuilder(
@@ -998,7 +998,7 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         ... )
         >>>
         >>> # Add a 30 Å water layer on the surface
-        >>> system = surface.add_layer(blueprint, thickness=30.0, distance=2.0)
+        >>> system = surface.add_liquid_layer(blueprint, thickness=30.0, distance=2.0)
         """
         from ..build import _add_liquid_layer
 
@@ -1047,7 +1047,7 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         Examples
         --------
         >>> from cemd import AtomicSystem
-        >>> from cemd.builders import SolutionBuilder
+        >>> from cemd.build import SolutionBuilder
         >>>
         >>> surface = AtomicSystem.from_file("surface.lmp")
         >>> blueprint = SolutionBuilder(

@@ -5,8 +5,11 @@ __pycache__/
 test/*
 !test/unit/
 !test/README.md
-build/
-dist/
+# Anchored with a leading slash: a bare `build/` also matches
+# cemd/build/, the package module, so any new file added there
+# would have been ignored without a word.
+/build/
+/dist/
 *.egg-info/
 docs/_build/
 .coverage

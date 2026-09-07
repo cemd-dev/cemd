@@ -1,4 +1,4 @@
-# cemd/builders/interface.py
+# cemd/build/interface.py
 #
 # This file is part of the CEMD distribution
 # Copyright (c) 2022-2026 Jérôme Claverie.

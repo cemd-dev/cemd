@@ -129,7 +129,7 @@ class SolutionBuilder:
 
     >>> # Use in different contexts
     >>> solution = blueprint.build(box=[30, 30, 30])  # Standalone
-    >>> system = surface.add_layer(blueprint, thickness=30.0)  # Layer
+    >>> system = surface.add_liquid_layer(blueprint, thickness=30.0)  # Layer
     >>> system = surface.add_droplet(blueprint, radius=15.0)  # Droplet
 
     >>> # Pure water
