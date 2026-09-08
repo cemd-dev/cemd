@@ -18,7 +18,7 @@ authors:
     affiliation: "Nantes Université, École Centrale Nantes, CNRS, GeM, UMR 6183, F-44600 Saint-Nazaire, France"
 
 version: 0.1.0
-date-released: "2026-09-08"
+date-released: "2026-09-09"
 license: GPL-3.0-only
 repository-code: "https://github.com/cemd-dev/cemd"
 url: "https://github.com/cemd-dev/cemd"
