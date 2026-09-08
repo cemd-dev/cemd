@@ -4,12 +4,21 @@ Installation
 Prerequisites
 -------------
 
-The following software must be installed before setting up **cemd**:
+What you need in place before installing **cemd**:
 
-* **Python 3.11** — required Python version.
-* **Conda** — package and environment manager (`Miniconda or Anaconda <https://www.anaconda.com/docs/main>`__).
-* **Packmol** — required for automated system construction (`download <https://m3g.github.io/packmol/>`__). Must be accessible in your ``$PATH``.
-* **VMD** — required for system visualization (`download <https://www.ks.uiuc.edu/Research/vmd/>`__). Must be accessible in your ``$PATH``.
+* **Python 3.11 or later** — required.
+* **Conda** — recommended for creating the environment
+  (`Miniconda or Anaconda <https://www.anaconda.com/docs/main>`__), though a
+  plain ``venv`` works too.
+* **VMD** — *optional*, and only for
+  :meth:`~cemd.core.atomic_system.AtomicSystem.view`, which opens the system in
+  VMD (`download <https://www.ks.uiuc.edu/Research/vmd/>`__). It must be on your
+  ``$PATH``. The graphical interface renders with PyVista and needs no VMD.
+
+`Packmol <https://github.com/m3g/packmol>`__ does not need installing: it is a
+dependency of **cemd**, and pip puts its binary in your environment alongside
+the Python packages. Install it yourself, and put it on your ``$PATH``, only if
+no wheel matches your platform.
 
 
 User Installation
@@ -20,22 +29,25 @@ It is strongly recommended to install **cemd** in a dedicated virtual environmen
 Create a virtual environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Choose the method that suits you best:
+**cemd** pulls in pymatgen, MDAnalysis and RDKit, each of which pins versions of
+its own. Installing it beside unrelated work asks pip to satisfy every project's
+constraints at once, which is where incompatibilities appear. A dedicated
+environment avoids the question entirely.
 
-**Option 1: Using venv (Python built-in)**
-
-.. code-block:: bash
-
-   python -m venv cemd_env
-   source cemd_env/bin/activate      # Linux/macOS
-   # cemd_env\Scripts\activate       # Windows
-
-**Option 2: Using conda**
+**Option 1: Using conda (recommended)**
 
 .. code-block:: bash
 
-   conda create -n cemd_env python=3.11
-   conda activate cemd_env
+   conda create -n cemd python=3.11
+   conda activate cemd
+
+**Option 2: Using venv (Python built-in)**
+
+.. code-block:: bash
+
+   python -m venv cemd
+   source cemd/bin/activate          # Linux/macOS
+   # cemd\Scripts\activate           # Windows
 
 Install the package
 ^^^^^^^^^^^^^^^^^^^

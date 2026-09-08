@@ -102,13 +102,24 @@ to guide you:
 Installation
 ============
 
-Python 3.11 or later. Install into an environment of its own, so cemd and
-its dependencies stay out of the way of your other work:
+Python 3.11 or later. Install into an environment of its own: cemd pulls in
+pymatgen, MDAnalysis and RDKit, which pin versions of their own, and keeping
+them apart from your other work avoids resolving one project's constraints
+against another's.
 
 .. code-block:: bash
 
-   python -m venv cemd_env
-   source cemd_env/bin/activate          # cemd_env\Scripts\activate on Windows
+   conda create -n cemd python=3.11
+   conda activate cemd
+
+   pip install cemd
+
+A plain virtual environment works just as well if you do not use conda:
+
+.. code-block:: bash
+
+   python -m venv cemd
+   source cemd/bin/activate              # cemd\Scripts\activate on Windows
 
    pip install cemd
 
