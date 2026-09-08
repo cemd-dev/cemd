@@ -15,6 +15,14 @@ docs/_build/
 .coverage
 htmlcov/
 
+# pytest and ruff each drop a `.gitignore` holding `*` inside their own
+# cache, so these are already ignored without this. Repeated here because
+# that protection belongs to the tool, not to us: it goes away with a
+# version that stops writing that file, or with a different tool.
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
 # Written by the interface at runtime, under the user's own config and
 # cache directories. The copies below are only what earlier versions left
 # behind in the source tree.
