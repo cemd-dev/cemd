@@ -207,9 +207,12 @@ License
 GPL-3.0-only. See ``LICENCE``.
 
 
-.. |doi| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.22675363.svg
+.. Served by shields.io rather than by zenodo.org/badge/: the badge then
+   renders whether or not Zenodo itself is reachable, which it was not on the
+   day this release went out. The link still points at the DOI.
+.. |doi| image:: https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22675363-blue.svg
    :target: https://doi.org/10.5281/zenodo.22675363
-   :alt: DOI
+   :alt: DOI: 10.5281/zenodo.22675363
 
 .. |pypi| image:: https://img.shields.io/pypi/v/cemd.svg
    :target: https://pypi.org/project/cemd/
