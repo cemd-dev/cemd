@@ -256,7 +256,7 @@ texinfo_documents = [
         "cemd Documentation",
         author,
         "cemd",
-        "Computational Elementary Matter Design.",
+        "Atomistic model builder for LAMMPS.",
         "Miscellaneous",
     ),
 ]

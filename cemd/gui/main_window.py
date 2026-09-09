@@ -32,6 +32,7 @@ from typing import Any
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6Qlementine import QlementineStyle
 
+from cemd import __version__
 from cemd.core.atomic_system import AtomicSystem
 from cemd.gui import _userdata
 from cemd.gui.logic.build import (
@@ -91,7 +92,9 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         self._config_cache = {}
         self.load_initial_config_from_disk()
 
-        self.setWindowTitle("C.E.M.D | Computational Elementary Matter Design")
+        self.setWindowTitle(
+            f"cemd {__version__} \u2014 atomistic model builder for LAMMPS"
+        )
         self.resize(1400, 900)
 
         self.setup_ui()

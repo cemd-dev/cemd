@@ -36,7 +36,7 @@
   <title
      id="title1">CEMD logo</title>
   <desc
-     id="desc1">Logo for CEMD - Computational Elementary Matter Design, featuring an atomic structure motif</desc>
+     id="desc1">Logo for cemd - atomistic model builder for LAMMPS, featuring an atomic structure motif</desc>
   <defs
      id="defs1" />
   <g
@@ -150,7 +150,9 @@
      x="111.30114"
      y="117"
      style="color:#0b0b0b;font-weight:300;font-size:16px;font-family:'IBM Plex Sans', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#e6e6e6;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
-     id="text8">COMPUTATIONAL ELEMENTARY MATTER DESIGN</text>
+     id="text8"
+     textLength="377.602"
+     lengthAdjust="spacing">ATOMISTIC MODEL BUILDER FOR LAMMPS</text>
   <metadata
      id="metadata8">
     <rdf:RDF>
