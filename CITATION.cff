@@ -19,6 +19,9 @@ authors:
 
 version: 0.1.0
 date-released: "2026-09-09"
+# Concept DOI: always resolves to the latest version, so a citation made
+# today still points at the software rather than at one frozen release.
+doi: "10.5281/zenodo.22675363"
 license: GPL-3.0-only
 repository-code: "https://github.com/cemd-dev/cemd"
 url: "https://github.com/cemd-dev/cemd"

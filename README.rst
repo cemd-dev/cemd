@@ -2,7 +2,7 @@
 cemd
 ====
 
-|pypi| |tests| |docs| |python| |licence|
+|doi| |pypi| |tests| |docs| |python| |licence|
 
 **cemd** builds atomistic models of **cements, clays, carbonates and oxide
 glasses**, and writes them out ready for
@@ -150,6 +150,22 @@ RDKit, NumPy, SciPy, pandas, matplotlib, Dask). Should no wheel match your
 platform, install Packmol yourself and put it on your ``$PATH``.
 
 
+Citing cemd
+===========
+
+If cemd contributes to work you publish, please cite it. The archive is on
+Zenodo:
+
+   Claverie, J. cemd. Zenodo. https://doi.org/10.5281/zenodo.22675363
+
+That DOI is the *concept* DOI: it always resolves to the most recent release,
+so the citation stays valid as cemd evolves. To cite the exact version you ran,
+take the version DOI from the Zenodo page for that release.
+
+``CITATION.cff`` in the repository carries the same metadata, which is what
+GitHub's "Cite this repository" button reads.
+
+
 Documentation
 =============
 
@@ -190,6 +206,10 @@ License
 
 GPL-3.0-only. See ``LICENCE``.
 
+
+.. |doi| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.22675363.svg
+   :target: https://doi.org/10.5281/zenodo.22675363
+   :alt: DOI
 
 .. |pypi| image:: https://img.shields.io/pypi/v/cemd.svg
    :target: https://pypi.org/project/cemd/
