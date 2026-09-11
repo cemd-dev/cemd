@@ -1,22 +1,5 @@
 # TODO
 
-## Before the first release
-
-Rehearsed on TestPyPI on 2026-09-07: the workflow published 0.1.0 through
-trusted publishing, and the package installed and ran from that upload --
-builders, Packmol, the LAMMPS round trip and the interface, nine checks.
-
-- [ ] Declare the trusted publisher on **PyPI** (environment `pypi`, the
-      name the workflow uses for a release; TestPyPI used `testpypi`).
-- [ ] Enable the Zenodo integration **before** tagging: Zenodo only sees
-      releases published after it is switched on.
-- [ ] Create the release `v0.1.0`. The workflow refuses to publish if the
-      tag and `pyproject.toml` disagree, so bump both together or neither.
-- [ ] Put the Zenodo concept DOI -- the one that always resolves to the
-      latest version -- in `CITATION.cff`, and add the DOI badge.
-- [ ] Check `date-released` in `CITATION.cff` still matches the day the
-      release actually goes out. It currently says 2026-09-08.
-
 ## analysis
 
 The weakest part of the package. `compute_rdf`, `density_profile`,
@@ -65,6 +48,12 @@ at all.
       `iff_charmm.NA+` as nitrogen. Trying the two-letter form first and
       validating it against the mass would fix `CL`, `BR`, `FE`, `AR`,
       `SE`, `SI`, `HE`, `NE` and `NA+` without breaking the united atoms.
+- [ ] Wrong parsing of certain datafiles with LAMMPS type labels with Topotools. 
+      As for now the tmp file in view() is written in oldstyle to avoid the error.
+- [ ] /forcefield_mixin.py:124: UserWarning: Parameters bondangle not found for: ['Hw-Ow-Hw']
+  self._set_topology_params_from_db(
+      while using set_ff_from_database with clayff.o* and clayff h* parameters (there is no bondangle for this forcefield)
+- [ ] The function neutralize_charge is no more part of the code, need to be implemented again in forcefield_mixin.py. And warnings regarding non-zero charges must be implemented when using set_charges (or set_ff_from_database)
 
 ## Provenance
 
@@ -90,7 +79,3 @@ at all.
       lint gate can be added to CI.
 - [ ] `docs/_build/` is no longer tracked, but `docs/api/generated/` still
       is. Those files are produced by autosummary at build time.
-
-## Done
-
-- Test suite for `AtomicSystem` and the builders — 263 tests, run in CI.

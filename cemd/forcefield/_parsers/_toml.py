@@ -42,30 +42,33 @@ class TOMLParser(BaseForceFieldParser):
     def __init__(self):
         super().__init__()
 
-    def parse(self, content: str) -> ParseResult:
+    def parse(self, content: str, model_name: str | None = None) -> ParseResult:
         """Parse une chaîne TOML."""
         data = tomllib.loads(content)
-        return self._parse_data(data)
+        return self._parse_data(data, model_name)
 
-    def parse_file(self, filepath: str) -> ParseResult:
+    def parse_file(self, filepath: str, model_name: str | None = None) -> ParseResult:
         """Parse un fichier TOML."""
         with open(filepath, "rb") as f:
             data = tomllib.load(f)
-        return self._parse_data(data)
+        return self._parse_data(data, model_name)
 
-    def _parse_data(self, data: dict[str, Any]) -> ParseResult:
+    def _parse_data(
+        self, data: dict[str, Any], model_name: str | None = None
+    ) -> ParseResult:
         """Parse les données TOML."""
-        # Determine the model name
-        if "model" in data:
-            model_name = data["model"].get("name", "unknown")
-        else:
-            model_name = "unknown"
+        # The database key: the caller's file-derived name (e.g. "clayff")
+        # takes precedence, so ff_keys stay lowercase and filesystem-stable
+        # regardless of how [model.name] is capitalized in the TOML.
+        display_name = data.get("model", {}).get("name", "unknown")
+        model_key = model_name if model_name is not None else display_name
 
-        result = ParseResult(model_name=model_name)
+        result = ParseResult(model_name=model_key)
 
         # Metadata
         if "model" in data:
             result.metadata = {
+                "name": display_name,
                 "description": data["model"].get("description", ""),
                 "ref": data["model"].get("ref", ""),
                 "tags": data["model"].get("tags", []),
@@ -81,7 +84,7 @@ class TOMLParser(BaseForceFieldParser):
                 environment=params.get("environment", ""),
                 ref=params.get("ref", ""),
                 mass=params.get("mass"),
-                model=model_name,
+                model=model_key,
             )
 
         # LJ
@@ -90,7 +93,7 @@ class TOMLParser(BaseForceFieldParser):
                 epsilon=params["epsilon"],
                 sigma=params["sigma"],
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Buckingham
@@ -100,7 +103,7 @@ class TOMLParser(BaseForceFieldParser):
                 rho=params["rho"],
                 c=params.get("C", 0.0),
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Harmonic bonds
@@ -109,7 +112,7 @@ class TOMLParser(BaseForceFieldParser):
                 k=params["k"],
                 r0=params["r0"],
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Class2 bonds
@@ -120,7 +123,7 @@ class TOMLParser(BaseForceFieldParser):
                 k3=params.get("k3", 0.0),
                 k4=params.get("k4", 0.0),
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Harmonic angles
@@ -129,7 +132,7 @@ class TOMLParser(BaseForceFieldParser):
                 k=params["k"],
                 theta0=params["theta0"],
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Class2 angles
@@ -140,7 +143,7 @@ class TOMLParser(BaseForceFieldParser):
                 k3=params.get("k3", 0.0),
                 k4=params.get("k4", 0.0),
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Harmonic impropers
@@ -149,7 +152,7 @@ class TOMLParser(BaseForceFieldParser):
                 k=params["k"],
                 chi0=params.get("chi0", 0.0),
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Distance impropers
@@ -158,7 +161,7 @@ class TOMLParser(BaseForceFieldParser):
                 k2=params["k2"],
                 k4=params.get("k4", 0.0),
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Bondbond
@@ -168,7 +171,7 @@ class TOMLParser(BaseForceFieldParser):
                 r1=params["r1"],
                 r2=params["r2"],
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Bondangle
@@ -179,7 +182,7 @@ class TOMLParser(BaseForceFieldParser):
                 r1=params["r1"],
                 r2=params["r2"],
                 ref=params.get("ref", ""),
-                model=model_name,
+                model=model_key,
             )
 
         # Dihedrals (specific format)

@@ -18,13 +18,12 @@ from MDAnalysis.coordinates.memory import MemoryReader  # noqa: E402
 
 from cemd.analysis import compute_rdf, density_map, density_profile  # noqa: E402
 
-
 BOX = 20.0
 N_ATOMS = 8000
 EXPECTED_DENSITY = N_ATOMS / BOX**3 * 1000  # atoms/nm^3
 
 
-def uniform_universe(n_frames: int = 1, seed: int = 0) -> "mda.Universe":
+def uniform_universe(n_frames: int = 1, seed: int = 0) -> mda.Universe:
     """A box of uniformly distributed atoms, in memory."""
     rng = np.random.default_rng(seed)
     universe = mda.Universe.empty(
@@ -36,9 +35,7 @@ def uniform_universe(n_frames: int = 1, seed: int = 0) -> "mda.Universe":
     )
     universe.add_TopologyAttr("type", ["Ow"] * N_ATOMS)
     universe.add_TopologyAttr("mass", [15.999] * N_ATOMS)
-    universe.load_new(
-        rng.uniform(0, BOX, (n_frames, N_ATOMS, 3)), format=MemoryReader
-    )
+    universe.load_new(rng.uniform(0, BOX, (n_frames, N_ATOMS, 3)), format=MemoryReader)
     # Per frame: setting universe.dimensions only touches the current one,
     # and several analysis functions index the box without checking.
     for ts in universe.trajectory:
@@ -83,8 +80,13 @@ def test_density_profile_and_map_agree():
     universe = uniform_universe()
     profile = density_profile(universe, ["Ow"], axis="z", bin_size=0.5, end=1)
     density = density_map(
-        universe, "Ow", interface_coordinate=0.0, eps=BOX, axis="z",
-        bin_size=0.5, end=1,
+        universe,
+        "Ow",
+        interface_coordinate=0.0,
+        eps=BOX,
+        axis="z",
+        bin_size=0.5,
+        end=1,
     )
 
     assert density.values.mean() == pytest.approx(profile["Ow"].mean(), rel=0.02)
@@ -234,8 +236,13 @@ def test_density_map_takes_a_slab_centred_on_the_interface():
         ts.dimensions = [BOX, BOX, BOX, 90.0, 90.0, 90.0]
 
     density = density_map(
-        universe, "Ow", interface_coordinate=15.0, eps=2.0, axis="z",
-        bin_size=1.0, end=1,
+        universe,
+        "Ow",
+        interface_coordinate=15.0,
+        eps=2.0,
+        axis="z",
+        bin_size=1.0,
+        end=1,
     )
 
     # A 4 A slab around z = 15 holds one sheet: 2000 atoms over

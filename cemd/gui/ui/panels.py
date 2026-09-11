@@ -288,7 +288,7 @@ class FilterPanel(BaseManagerPanel):
         # Reconnecting the Reset button
         try:
             self.btn_reset_vdw.clicked.disconnect()
-        except:
+        except TypeError:
             pass
         self.btn_reset_vdw.clicked.connect(self.reset_to_config)
 

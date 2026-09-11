@@ -99,7 +99,7 @@ You can mix parameters from different force field models:
    # back to an arbitrary model that also defines an "o_star" type.
    assignments = {
        'O': 'ClayFF.o_star',     # Water oxygen from ClayFF
-       'H': 'ClayFF.h_star',     # Water hydrogen from ClayFF
+       'H': 'ClayFF.h*',     # Water hydrogen from ClayFF
        'Si': 'ClayFF.st',        # Silicon from ClayFF
        'Ca': 'ClayFF.ca',        # Calcium from ClayFF
        'Ow': 'SPC.ospc',         # Water oxygen from SPC

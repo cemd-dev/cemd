@@ -124,11 +124,7 @@ class TCLGenerator:
         lines = []
         color_id = 20
 
-        # Extract the unique element symbols
-        if isinstance(elements, dict):
-            unique_elements = sorted(set(elements.values()))
-        else:
-            unique_elements = sorted(set(elements))
+        unique_elements = sorted(set(elements.values()))
 
         for element in unique_elements:
             if element in VMD_ELEMENT_COLORS:
@@ -189,12 +185,8 @@ class TCLGenerator:
 
             elem1, elem2 = pair.split("-")
 
-            print(elem1, elem2)
-
             types_elem1 = element_to_types.get(elem1, [])
             types_elem2 = element_to_types.get(elem2, [])
-
-            print(types_elem1, types_elem2)
 
             if not types_elem1 or not types_elem2:
                 continue
@@ -378,7 +370,7 @@ def view(
 
     with TempFileManager() as tmp:
         topology_file = tmp.create_file("tmp.data", "")
-        system.write(str(topology_file))
+        system.write(str(topology_file), oldstyle=True)
 
         config_file = tmp.create_file(
             "vmd_config.tcl", TCLGenerator.generate_config(system)

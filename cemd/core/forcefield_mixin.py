@@ -119,10 +119,20 @@ class ForceFieldMixin:
         # improper, so they piggyback on that category's ff-key assignments
         # rather than taking their own.
         self._set_topology_params_from_db(
-            "bondbond", {}, db, overwrite, types_attr="angle_types", ff_keys_attr="angle"
+            "bondbond",
+            {},
+            db,
+            overwrite,
+            types_attr="angle_types",
+            ff_keys_attr="angle",
         )
         self._set_topology_params_from_db(
-            "bondangle", {}, db, overwrite, types_attr="angle_types", ff_keys_attr="angle"
+            "bondangle",
+            {},
+            db,
+            overwrite,
+            types_attr="angle_types",
+            ff_keys_attr="angle",
         )
         self._set_topology_params_from_db(
             "angleangletorsion",
@@ -205,7 +215,7 @@ class ForceFieldMixin:
         --------
         >>> system = AtomicSystem(...)
         >>> system.explore_ff_database()
-        Assigned: H -> clayff.h_star
+        Assigned: H -> clayff.h*
         Assigned: O -> clayff.o_star
 
         >>> # Using custom database
@@ -753,7 +763,7 @@ class ForceFieldMixin:
     def _resolve_atom_assignments(
         self, assignments: dict, db: ForceFieldDatabase
     ) -> dict:
-        """Resolves atom abbreviations (ex: 'h_star' -> 'clayff.h_star')."""
+        """Resolves atom abbreviations (ex: 'h*' -> 'clayff.h*')."""
         resolved = {}
         for sys_type, db_type in assignments.items():
             if "." in db_type:

@@ -13,55 +13,55 @@ description = "Force field for calcium-silicate-hydrate"
 
 [atom]
 
-[atom.ca_cshff2014]
+[atom.ca]
 element = "Ca"
 charge = 1.435466
 environment = "intralayer calcium in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.cw_cshff2014]
+[atom.cw]
 element = "Ca"
 charge = 1.705529
 environment = "interlayer calcium in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.h_cshff2014]
+[atom.h]
 element = "H"
 charge = 0.425
 environment = "hydrogen in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.hw_cshff2014]
+[atom.hw]
 element = "H"
 charge = 0.41
 environment = "water hydrogen in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.o_cshff2014]
+[atom.o]
 element = "O"
 charge = -1.0
 environment = "oxygen in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.ob_cshff2014]
+[atom.ob]
 element = "O"
 charge = -1.14
 environment = "bridging oxygen in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.oh_cshff2014]
+[atom.oh]
 element = "O"
 charge = -1.0
 environment = "hydroxyl oxygen in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.ow_cshff2014]
+[atom.ow]
 element = "O"
 charge = -0.82
 environment = "water oxygen in csh"
 ref = "https://doi.org/10.1038/ncomms5960"
 
-[atom.si_cshff2014]
+[atom.si]
 element = "Si"
 charge = 1.722357
 environment = "silicate silicium in csh"
@@ -73,91 +73,91 @@ ref = "https://doi.org/10.1038/ncomms5960"
 
 [lj]
 
-[lj."ca_cshff2014-o_cshff2014"]
+[lj."ca-o"]
 epsilon = 0.0008694
 sigma = 4.365403719
 
-[lj."ca_cshff2014-ob_cshff2014"]
+[lj."ca-ob"]
 epsilon = 0.0007057
 sigma = 5.452300155
 
-[lj."ca_cshff2014-oh_cshff2014"]
+[lj."ca-oh"]
 epsilon = 0.0008694
 sigma = 4.365403719
 
-[lj."ca_cshff2014-ow_cshff2014"]
+[lj."ca-ow"]
 epsilon = 0.000876
 sigma = 4.365403719
 
-[lj."cw_cshff2014-o_cshff2014"]
+[lj."cw-o"]
 epsilon = 0.00146
 sigma = 4.365403719
 
-[lj."cw_cshff2014-ob_cshff2014"]
+[lj."cw-ob"]
 epsilon = 0.00104
 sigma = 4.445584604
 
-[lj."cw_cshff2014-oh_cshff2014"]
+[lj."cw-oh"]
 epsilon = 0.00104
 sigma = 4.445584604
 
-[lj."cw_cshff2014-ow_cshff2014"]
+[lj."cw-ow"]
 epsilon = 0.0006042
 sigma = 4.472311565
 
-[lj."h_cshff2014-h_cshff2014"]
+[lj."h-h"]
 epsilon = 0
 sigma = 0
 
-[lj."o_cshff2014-o_cshff2014"]
+[lj."o-o"]
 epsilon = 1.243
 sigma = 2.735059065
 
-[lj."o_cshff2014-ob_cshff2014"]
+[lj."o-ob"]
 epsilon = 0.04543
 sigma = 3.625957783
 
-[lj."o_cshff2014-oh_cshff2014"]
+[lj."o-oh"]
 epsilon = 0.04543
 sigma = 3.625957783
 
-[lj."o_cshff2014-ow_cshff2014"]
+[lj."o-ow"]
 epsilon = 0.005258
 sigma = 4.240677898
 
-[lj."o_cshff2014-si_cshff2014"]
+[lj."o-si"]
 epsilon = 0.0005604
 sigma = 3.269598296
 
-[lj."ob_cshff2014-ob_cshff2014"]
+[lj."ob-ob"]
 epsilon = 0.0618
 sigma = 3.447778039
 
-[lj."ob_cshff2014-oh_cshff2014"]
+[lj."ob-oh"]
 epsilon = 0.0618
 sigma = 3.447778039
 
-[lj."ob_cshff2014-ow_cshff2014"]
+[lj."ob-ow"]
 epsilon = 0.8717
 sigma = 2.895420834
 
-[lj."ob_cshff2014-si_cshff2014"]
+[lj."ob-si"]
 epsilon = 0.000595
 sigma = 3.260689308
 
-[lj."oh_cshff2014-oh_cshff2014"]
+[lj."oh-oh"]
 epsilon = 0.0618
 sigma = 3.447778039
 
-[lj."oh_cshff2014-ow_cshff2014"]
+[lj."oh-ow"]
 epsilon = 0.8717
 sigma = 2.895420834
 
-[lj."oh_cshff2014-si_cshff2014"]
+[lj."oh-si"]
 epsilon = 0.000595
 sigma = 3.260689308
 
-[lj."ow_cshff2014-ow_cshff2014"]
+[lj."ow-ow"]
 epsilon = 0.154
 sigma = 3.162690449
 
@@ -167,11 +167,11 @@ sigma = 3.162690449
 
 [bond.harmonic]
 
-[bond.harmonic."hw_cshff2014-ow_cshff2014"]
+[bond.harmonic."hw-ow"]
 k = 554.13
 r0 = 1.0
 
-[bond.harmonic."h_cshff2014-oh_cshff2014"]
+[bond.harmonic."h-oh"]
 k = 554.135
 r0 = 1.0
 
@@ -181,6 +181,6 @@ r0 = 1.0
 
 [angle.harmonic]
 
-[angle.harmonic."hw_cshff2014-ow_cshff2014-hw_cshff2014"]
+[angle.harmonic."hw-ow-hw"]
 k = 45.77
 theta0 = 109.47

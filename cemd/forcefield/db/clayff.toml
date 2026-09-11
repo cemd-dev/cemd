@@ -67,7 +67,7 @@ charge = 1.575
 environment = "octahedral iron"
 ref = "https://doi.org/10.1021/jp0363287"
 
-[atom.h_star]
+[atom."h*"]
 element = "H"
 charge = 0.41
 environment = "water hydrogen"
@@ -109,7 +109,7 @@ charge = 1.0
 environment = "aqueous sodium ion"
 ref = "https://doi.org/10.1063/1.466363"
 
-[atom.o_star]
+[atom."o*"]
 element = "O"
 charge = -0.82
 environment = "water oxygen"
@@ -199,7 +199,7 @@ sigma = 3.83104266774709
 epsilon = 9.0298e-06
 sigma = 4.90617924079885
 
-[lj."h_star-h_star"]
+[lj."h*-h*"]
 epsilon = 0
 sigma = 0
 
@@ -227,7 +227,7 @@ sigma = 5.256302437028
 epsilon = 0.1301
 sigma = 2.35001263871059
 
-[lj."o_star-o_star"]
+[lj."o*-o*"]
 epsilon = 0.1554
 sigma = 3.16554132529625
 
@@ -261,7 +261,7 @@ sigma = 3.30202700891535
 
 [bond.harmonic]
 
-[bond.harmonic."h_star-o_star"]
+[bond.harmonic."h*-o*"]
 k = 554.1349
 r0 = 1.0
 
@@ -279,7 +279,7 @@ r0 = 1.0
 
 [angle.harmonic]
 
-[angle.harmonic."h_star-o_star-h_star"]
+[angle.harmonic."h*-o*-h*"]
 k = 45.7696
 theta0 = 109.47
 

@@ -157,8 +157,8 @@ def test_set_improper_params_warns_when_type_absent(water_system):
 
 
 def test_set_atom_ff_keys_dict(water_system):
-    water_system.set_atom_ff_keys({"Ow": "SPC.ospc", "Hw": "SPC.hspc"})
-    assert water_system.ff_keys.atom == {"Ow": "SPC.ospc", "Hw": "SPC.hspc"}
+    water_system.set_atom_ff_keys({"Ow": "spc.ospc", "Hw": "spc.hspc"})
+    assert water_system.ff_keys.atom == {"Ow": "spc.ospc", "Hw": "spc.hspc"}
 
 
 def test_set_atom_ff_keys_sequence_must_match_length(water_system):
@@ -167,8 +167,8 @@ def test_set_atom_ff_keys_sequence_must_match_length(water_system):
 
 
 def test_set_bond_ff_keys_canonicalizes(water_system):
-    water_system.set_bond_ff_keys({"Ow-Hw": "SPC.hspc-ospc"})
-    assert water_system.ff_keys.bond == {"Hw-Ow": "SPC.hspc-ospc"}
+    water_system.set_bond_ff_keys({"Ow-Hw": "spc.hspc-ospc"})
+    assert water_system.ff_keys.bond == {"Hw-Ow": "spc.hspc-ospc"}
 
 
 def test_set_ff_keys_overwrite_false_keeps_existing(water_system):
@@ -184,8 +184,8 @@ def test_set_ff_keys_overwrite_false_keeps_existing(water_system):
 
 def test_set_ff_from_database_assigns_masses_charges_and_pair_params(water_system):
     water_system.set_ff_from_database(
-        atom_assignments={"Ow": "SPC.ospc", "Hw": "SPC.hspc"},
-        bond_assignments={"Hw-Ow": "SPC.hspc-ospc"},
+        atom_assignments={"Ow": "spc.ospc", "Hw": "spc.hspc"},
+        bond_assignments={"Hw-Ow": "spc.hspc-ospc"},
     )
 
     assert water_system.masses["Ow"] == pytest.approx(15.9994, rel=1e-2)
@@ -251,7 +251,7 @@ def test_set_ff_from_database_applies_the_charges_a_force_field_defines():
         }
     )
 
-    system.set_ff_keys(atom={"ao": "ClayFF.ao", "ob": "ClayFF.ob"})
+    system.set_ff_keys(atom={"ao": "clayff.ao", "ob": "clayff.ob"})
     system.set_ff_from_database()
 
     assert system.charges["ao"] == pytest.approx(1.575)

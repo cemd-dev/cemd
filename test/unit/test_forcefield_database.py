@@ -25,7 +25,7 @@ def db() -> ForceFieldDatabase:
 def test_database_loads_multiple_models(db):
     names = db.get_model_names()
     assert len(names) > 5
-    assert "SPC" in names
+    assert "spc" in names
 
 
 def test_database_loads_atoms_bonds_angles(db):
@@ -46,11 +46,11 @@ def test_custom_db_dir_starts_empty(tmp_path):
 
 
 def test_get_atom_type_by_full_name(db):
-    atom = db.get_atom_type("SPC.ospc")
+    atom = db.get_atom_type("spc.ospc")
     assert isinstance(atom, AtomType)
     assert atom.element == "O"
     assert atom.charge == pytest.approx(-0.82)
-    assert atom.model == "SPC"
+    assert atom.model == "spc"
 
 
 def test_get_atom_type_missing_returns_none(db):
@@ -58,7 +58,7 @@ def test_get_atom_type_missing_returns_none(db):
 
 
 def test_get_model(db):
-    model = db.get_model("SPC")
+    model = db.get_model("spc")
     assert model is not None
     assert model.name == "SPC"
 
@@ -68,10 +68,10 @@ def test_get_model_missing_returns_none(db):
 
 
 def test_get_atom_types_for_model(db):
-    types = db.get_atom_types_for_model("SPC")
-    assert all(t.startswith("SPC.") for t in types)
-    assert "SPC.ospc" in types
-    assert "SPC.hspc" in types
+    types = db.get_atom_types_for_model("spc")
+    assert all(t.startswith("spc.") for t in types)
+    assert "spc.ospc" in types
+    assert "spc.hspc" in types
 
 
 # ---------------------------------------------------------------------------
@@ -80,40 +80,40 @@ def test_get_atom_types_for_model(db):
 
 
 def test_get_lj_self_interaction(db):
-    params = db.get_lj("SPC.ospc", "SPC.ospc")
+    params = db.get_lj("spc.ospc", "spc.ospc")
     assert params is not None
     assert params.epsilon == pytest.approx(0.15535)
     assert params.sigma == pytest.approx(3.166)
 
 
 def test_get_lj_symmetric_short_names_with_explicit_model(db):
-    forward = db.get_lj("ospc", "hspc", model="SPC")
+    forward = db.get_lj("ospc", "hspc", model="spc")
     # SPC has no o-h cross LJ term defined directly, but a same-order
     # self-pair lookup on a real cross key should still work either way.
-    reverse = db.get_lj("hspc", "ospc", model="SPC")
+    reverse = db.get_lj("hspc", "ospc", model="spc")
     assert forward == reverse
 
 
 def test_get_lj_missing_returns_none(db):
-    assert db.get_lj("SPC.ospc", "not_a_real_type", model="SPC") is None
+    assert db.get_lj("spc.ospc", "not_a_real_type", model="spc") is None
 
 
 def test_get_bond_full_names(db):
-    params = db.get_bond("SPC.hspc", "SPC.ospc")
+    params = db.get_bond("spc.hspc", "spc.ospc")
     assert isinstance(params, HarmonicBondParams)
     assert params.k == pytest.approx(554.1349)
     assert params.r0 == pytest.approx(1.0)
 
 
 def test_get_bond_reversed_pair_matches(db):
-    forward = db.get_bond("hspc", "ospc", model="SPC")
-    reverse = db.get_bond("ospc", "hspc", model="SPC")
+    forward = db.get_bond("hspc", "ospc", model="spc")
+    reverse = db.get_bond("ospc", "hspc", model="spc")
     assert forward == reverse
     assert forward is not None
 
 
 def test_get_angle_short_names_with_model(db):
-    params = db.get_angle("hspc", "ospc", "hspc", model="SPC")
+    params = db.get_angle("hspc", "ospc", "hspc", model="spc")
     assert isinstance(params, HarmonicAngleParams)
     assert params.theta0 == pytest.approx(109.47)
 

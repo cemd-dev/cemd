@@ -140,59 +140,17 @@ class ForceFieldDatabase:
                 self._load_cvff_frc(filepath, "iff_cvff")
 
     def _load_toml_model(self, filepath: Path, model_name: str) -> None:
-        """Load a TOML force field file using the TOMLParser."""
+        """Load a TOML force field file using the TOMLParser.
+
+        `model_name` (the file's stem, e.g. "clayff") is the ff_key prefix
+        used for every entry, regardless of how [model.name] is capitalized
+        in the TOML -- that display name only feeds ForceFieldModel.name.
+        """
         from ._parsers._toml import TOMLParser
 
         parser = TOMLParser()
-        parse_result = parser.parse_file(str(filepath))
-
-        # Le nom du modèle peut être dans le fichier TOML ou dérivé du nom de fichier
-        actual_model_name = (
-            parse_result.model_name
-            if parse_result.model_name != "unknown"
-            else model_name
-        )
-
-        self.models[actual_model_name] = ForceFieldModel(
-            name=actual_model_name,
-            description=parse_result.metadata.get("description", ""),
-            ref=parse_result.metadata.get("ref", ""),
-            tags=parse_result.metadata.get("tags", []),
-        )
-
-        for short_name, atom_type in parse_result.atoms.items():
-            full_key = f"{actual_model_name}.{short_name}"
-            self.atom[full_key] = atom_type
-
-        for short_name, params in parse_result.lj.items():
-            self.lj[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.buckingham.items():
-            self.buckingham[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.bonds.items():
-            self.bond[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.angles.items():
-            self.angle[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.impropers.items():
-            self.improper[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.bondbond.items():
-            self.bondbond[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.bondangle.items():
-            self.bondangle[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.angleangletorsion.items():
-            self.angleangletorsion[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.angleangle.items():
-            self.angleangle[f"{actual_model_name}.{short_name}"] = params
-
-        for short_name, params in parse_result.dihedrals.items():
-            self.dihedral[f"{actual_model_name}.{short_name}"] = params
+        parse_result = parser.parse_file(str(filepath), model_name=model_name)
+        parse_result.to_database(self)
 
     def _load_gromos_lt(self, filepath: Path, model_name: str) -> None:
         """Load a GROMOS force field from a moltemplate .lt file."""
