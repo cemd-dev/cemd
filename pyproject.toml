@@ -1,6 +1,6 @@
 [project]
 name = "cemd"
-version = "0.1.0"
+version = "0.2.0"
 description = "Atomistic models of cements, clays, carbonates and oxide glasses, for LAMMPS"
 readme = "README.rst"
 authors = [{name = "Jérôme Claverie", email = "Jerome.claverie@univ-nantes.fr"}]

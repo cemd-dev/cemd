@@ -17,8 +17,8 @@ authors:
     orcid: "https://orcid.org/0000-0002-8650-567X"
     affiliation: "Nantes Université, École Centrale Nantes, CNRS, GeM, UMR 6183, F-44600 Saint-Nazaire, France"
 
-version: 0.1.0
-date-released: "2026-09-09"
+version: 0.2.0
+date-released: "2026-10-05"
 # Concept DOI: always resolves to the latest version, so a citation made
 # today still points at the software rather than at one frozen release.
 doi: "10.5281/zenodo.22675363"
