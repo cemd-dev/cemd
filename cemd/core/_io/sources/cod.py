@@ -145,7 +145,7 @@ def cod_search_by_name(mineral_name: str) -> list[dict[str, Any]]:
             return cleaned_results
 
     except Exception as e:
-        print(f"Connexion error (Name Search): {e}")
+        print(f"Connection error (Name Search): {e}")
 
     return []
 
@@ -175,8 +175,8 @@ def cod_search_by_id(cod_id: int) -> list[dict[str, Any]]:
                 }
                 for d in data
             ]
-    except:
-        return []
+    except (requests.RequestException, ValueError) as e:
+        print(f"Connection error (ID Search): {e}")
     return []
 
 

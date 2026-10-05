@@ -52,6 +52,7 @@ class PMGReader(BaseReader):
         """
         from itertools import permutations
 
+        from pymatgen.core import Lattice
         from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
         # Store initial structure parameters
@@ -87,14 +88,32 @@ class PMGReader(BaseReader):
 
         # Apply reindexing if order has changed
         if best_mapping != [0, 1, 2]:
+            # Permute the lattice vectors and the fractional coordinates together,
+            # so that the crystal itself is left unchanged (only the labels a, b, c
+            # move). An odd permutation makes the lattice left-handed: flip the
+            # last axis to stay right-handed and avoid mirroring the structure.
+            matrix = refined_structure.lattice.matrix[best_mapping].copy()
+            frac = refined_structure.frac_coords[:, best_mapping].copy()
+            if np.linalg.det(matrix) < 0:
+                matrix[2] *= -1
+                frac[:, 2] *= -1
+            permuted = Lattice(matrix)
+            reindexed_abc = list(permuted.abc)
+            reindexed_angles = list(permuted.angles)
+
+            # Express the positions in the standard orientation of the new box
+            # (a along x, b in the xy plane), as expected by the box parameters.
+            standard = Lattice.from_parameters(*reindexed_abc, *reindexed_angles)
+            positions = standard.get_cartesian_coords(frac)
+
             warnings.warn(
-                f"Axes reindexed: original {original_abc} -> refined {abc} with mapping {best_mapping}",
+                f"Axes reindexed with mapping {best_mapping}: "
+                f"original {original_abc} -> refined {abc} -> reindexed {reindexed_abc}",
                 category=UserWarning,
                 stacklevel=2,
             )
-            abc = [abc[i] for i in best_mapping]
-            angles = [angles[i] for i in best_mapping]
-            positions = positions[:, best_mapping].copy()
+            abc = reindexed_abc
+            angles = reindexed_angles
 
         # Extract Atom Types
         types = [site.species.elements[0].name for site in refined_structure]
@@ -140,7 +159,7 @@ class PMGReader(BaseReader):
             "atom_style": "full",
         }
 
-        # Store the refined structure
+        # Store the original structure (Miller indices of surfaces refer to its axes)
         topology["_pmg_struct"] = structure
 
         return topology

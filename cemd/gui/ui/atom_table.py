@@ -131,7 +131,7 @@ class AtomTable(QtWidgets.QTableView):  # We change QTableWidget to QTableView
         if current_model is not None:
             try:
                 current_model.dataChanged.disconnect()
-            except:
+            except (RuntimeError, TypeError):  # nothing connected yet
                 pass
 
         # Create the model (Force the reconstruction)

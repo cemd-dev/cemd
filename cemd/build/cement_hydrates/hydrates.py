@@ -61,8 +61,13 @@ class CSHBuilder(BaseBuilder):
         alone, no calcium is inserted, and the H2O/Si reported by
         :meth:`analyze` comes back exactly equal to ``ws_ratio``. Past that
         threshold ``min_mcl`` (see :meth:`build`) forbids further
-        vacancies, so the measured H2O/Si exceeds ``ws_ratio`` by
-        ``n_Ca_inserted / n_Si``.
+        vacancies, so calcium is inserted instead, one extra water molecule
+        per Ca²⁺. ``neutralize_csh_charge`` (``_silicate_helpers.py``) then
+        strips two hydrogens per inserted Ca²⁺ -- one each from up to two
+        water molecules, picked at random -- to neutralize the +2 charge,
+        which removes exactly as many hydrogens as that extra water added.
+        So the measured H2O/Si still comes back to ``ws_ratio`` (checked at
+        Ca/Si 1.4: 1.150).
     progress_callback : Callable, optional
         Progress callback function.
 
@@ -288,6 +293,7 @@ class CSHBuilder(BaseBuilder):
         )
         from ._silicate_helpers import (
             calculate_csh_modifiers,
+            find_dense_layer_seam_offset,
             neutralize_csh_charge,
             remove_bridging_silicates,
         )
@@ -312,6 +318,18 @@ class CSHBuilder(BaseBuilder):
 
         univ = system.to_mda()
         box = univ.dimensions
+
+        # Re-origin the z-axis so the periodic seam falls inside a dense
+        # silicate sheet rather than inside an interlayer gap -- see
+        # find_dense_layer_seam_offset for why this matters to Packmol.
+        seam_offset = find_dense_layer_seam_offset(univ)
+        if seam_offset is not None:
+            # AtomGroup.positions returns a copy (fancy indexing via .ix),
+            # so it must be reassigned as a whole array -- slice-assigning
+            # into the getter's return value silently no-ops.
+            positions = univ.atoms.positions.copy()
+            positions[:, 2] = (positions[:, 2] - seam_offset) % box[2]
+            univ.atoms.positions = positions
 
         # Calculate modifications
         nsi = len(univ.select_atoms("type Si"))
@@ -571,6 +589,7 @@ class AFBuilder(BaseBuilder):
             PackmolStructure,
             get_structure_path,
             run_packmol,
+            write_mda_pdb,
         )
 
         if supercell is not None and len(supercell) != 3:
@@ -603,7 +622,7 @@ class AFBuilder(BaseBuilder):
         with tempfile.TemporaryDirectory(dir=".") as tmp:
             tmp_path = Path(tmp)
             tempfile_ipdb = tmp_path / "itmp.pdb"
-            sel.write(tempfile_ipdb)
+            write_mda_pdb(sel, tempfile_ipdb)
 
             # get_structure_path may resolve to a .lt (moltemplate) file,
             # which Packmol cannot read directly; load it as an

@@ -2,23 +2,19 @@
 
 ## analysis
 
-The weakest part of the package. `compute_rdf`, `density_profile`,
-`density_map`, `msd` and `diffusion_coefficient` are now checked against
-values known analytically or from the literature; the rest is not checked
-at all.
+`compute_rdf`, `density_profile`, `density_map`, `msd` and
+`diffusion_coefficient` are checked against values known analytically or
+from the literature; `tcf`, `velocities` and `util` against synthetic
+trajectories and a brute-force reference on `traj_solution`.
 
-- [ ] `tcf.py`, `velocities.py` and `util.py` have no tests and no
-      validation. Nothing says whether they are right.
-- [ ] Rework the module around `MDAnalysis.analysis.base.AnalysisBase`:
-      a standard `run(start, stop, step)`, a progress bar, a `results`
-      namespace, and one pass over the trajectory instead of one per atom
-      type. Accumulate 1D and 2D histograms — a 3D grid costs 7.6 GB per
-      atom type on a 100 Å box at the default `bin_size=0.1`.
-- [ ] Consider delegating `compute_rdf`, `msd` and `density_profile` to
-      `InterRDF`, `EinsteinMSD` and `LinearDensity`. They do the same work,
-      are tested by a large community, and would leave us maintaining only
-      what is genuinely ours: the silicate analysis, the 2D map, the
-      profiles resolved along an axis, and `tcf`.
+- [ ] `end=-1` means "every frame" in `density_profile` but drops the last
+      frame in `density_map` (it is a plain `[start:-1]` slice), and
+      `compute_rdf` takes `skip` where the others take `start`/`end`. A
+      shared `start`/`stop`/`step` would settle it. Rebuilding the module on
+      `AnalysisBase` was weighed and left: the speed-up and the
+      reproducibility fix (`density_profile` counted frames in dask threads
+      sharing one reader) came from reading the trajectory once, in order,
+      which needed no framework.
 
 ## Robustness
 
@@ -34,26 +30,53 @@ at all.
       then, generate the surface before editing or typing the system,
       which is what the tutorials do.
 
-- [ ] 15 bare `except:` clauses swallow every error. One of them hid the
-      `H2O/Si = 0` bug for as long as it existed: an invalid selection
-      returned `None` instead of raising.
-- [ ] Several analysis functions index `universe.dimensions` without
-      checking it exists, so a trajectory carrying no box dies on
-      `TypeError: 'NoneType' object is not subscriptable`.
-- [ ] `MASSES_DICT` stops at barium, so any heavier element resolves to the
-      nearest one that is present. `elements` now refuses rather than
-      guessing, but the table itself is still short.
-- [ ] Element guessing from a type name mishandles two-letter symbols in
-      capitals: `gromos.CL` reads as carbon while carrying chlorine's mass,
-      `iff_charmm.NA+` as nitrogen. Trying the two-letter form first and
-      validating it against the mass would fix `CL`, `BR`, `FE`, `AR`,
-      `SE`, `SI`, `HE`, `NE` and `NA+` without breaking the united atoms.
-- [ ] Wrong parsing of certain datafiles with LAMMPS type labels with Topotools. 
-      As for now the tmp file in view() is written in oldstyle to avoid the error.
-- [ ] /forcefield_mixin.py:124: UserWarning: Parameters bondangle not found for: ['Hw-Ow-Hw']
-  self._set_topology_params_from_db(
-      while using set_ff_from_database with clayff.o* and clayff h* parameters (there is no bondangle for this forcefield)
-- [ ] The function neutralize_charge is no more part of the code, need to be implemented again in forcefield_mixin.py. And warnings regarding non-zero charges must be implemented when using set_charges (or set_ff_from_database)
+## Cement hydrates
+
+- [ ] `CSHBuilder.build`'s bridging-silicate vacancies are charge-neutralized
+      globally: `neutralize_csh_charge` (`_silicate_helpers.py`) strips H at
+      random from whatever water ended up in the box, unrelated to which
+      vacancy produced the imbalance. Reviewers suggest compensating each
+      vacancy locally with a Ca2+ instead, bridging the two dangling
+      non-bridging O left by the removed tetrahedron, which matches
+      EXAFS/PDF Ca coordination data and existing C-S-H molecular models
+      (Pellenq et al. 2009, Qomi et al. 2014) better than a diffuse H
+      removal, and should matter for Ca/Si-dependent stiffness (Ca-O
+      crosslinks between chains vs silanol H-bonds). `_find_symmetric_-
+      bridging_pairs` already tracks the paired vacancy positions per pore,
+      so the site data needed for placement exists; today this local
+      compensation only happens once `min_mcl` blocks further vacancies
+      (via `nca_to_add`), everything below that threshold goes through the
+      random-H path. A fraction parameter (silanol-cap vs Ca-bridge per
+      vacancy) would let the mix be calibrated against measured Q^n
+      distribution and density instead of picking one mechanism outright.
+
+      Resolved 2026-09-22: `tolerance` is now computed per layer in
+      `fill_csh_interlayers`, from that layer's own packing density
+      (`_estimate_packing_tolerance` in `_interlayer_helpers.py`), instead
+      of a single hard-coded 2.0. It scales down linearly, past the bulk
+      liquid-water density (0.03346 molecule/A^3), from 2.0 A down to a
+      1.5 A floor. Measured (not estimated) on the Ca/Si 1.2-1.7 sweep:
+      the cliff is sharp and sits almost exactly at bulk water density —
+      below it, tolerance=2.0 already converges in seconds; above it, the
+      build time explodes (up to ~250 s for a single interlayer) and then
+      code 173 appears once density is ~1.7x bulk. A single-layer sweep at
+      Ca/Si 1.7 (density ~1.7x bulk) went from 252.6 s + warning at
+      tolerance=2.0 to 8.3 s + no warning at 1.8. Full build,
+      Ca/Si 1.2-1.7: 570.9 s with 2 warnings before, 28.3 s with 0
+      warnings after for the 1.7 case alone; all six models together now
+      build in 3 min 7 s with zero Packmol warnings (was: the 1.7 case
+      alone took 9 min 33 s).
+
+      Not done: the O-O / O-H distances were only checked right after
+      Packmol (nearest-neighbour distance 0.97 A, consistent with an
+      intramolecular O-H bond, no pathological overlap), not after the
+      ReaxFF minimisation in `react.lmp` as the original plan asked.
+      `tolerance` was also not exposed as a `build` parameter -- the fix
+      picks it automatically per layer instead, so scripts don't need to
+      choose one. The other options considered (smaller margin, multi-pass
+      packing, failing loudly / capping `ws_ratio` past a density
+      threshold) were not implemented; the adaptive tolerance alone
+      removed the warning and the slowdown on the tested range.
 
 ## Provenance
 
@@ -68,14 +91,18 @@ at all.
 
 - [ ] `test_gui_smoke.py` checks that the window opens and the actions are
       wired. Nothing exercises a dialog or a build.
-- [ ] Undo covers the operations that change a structure in place. It does
-      not cover the type and connectivity managers.
 - [ ] Level of detail while rotating, for large systems.
+- [ ] Remove `_TooltipColorFixer` (`main_window.py`) once Qlementine ships
+      its fix. Today Qlementine paints the tooltip background dark, but Qt
+      resets the tooltip palette to the system default (black text) after
+      startup, so tooltips are black on dark grey. The filter re-applies
+      the theme colors to each tooltip as it is shown. When Qlementine is
+      fixed, drop the class and its `installEventFilter` line in `main()`,
+      bump the `PySide6-Qlementine` pin, and check that tooltips are still
+      readable.
 
 ## Housekeeping
 
 - [ ] 43 ruff findings, mostly pre-existing. Several are false positives on
       Qt conventions (`closeEvent` must stay camelCase). Worth triaging so a
       lint gate can be added to CI.
-- [ ] `docs/_build/` is no longer tracked, but `docs/api/generated/` still
-      is. Those files are produced by autosummary at build time.

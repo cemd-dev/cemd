@@ -54,7 +54,8 @@ def pubchem_search_by_name(name: str) -> list[dict[str, Any]]:
                     }
                 )
         return results
-    except:
+    except (requests.RequestException, ValueError, IndexError) as e:
+        print(f"PubChem error (Name Search): {e}")
         return []
 
 
@@ -86,7 +87,8 @@ def pubchem_search_by_formula(formula: str) -> list[dict[str, Any]]:
                 }
             )
         return results
-    except:
+    except (requests.RequestException, ValueError, IndexError) as e:
+        print(f"PubChem error (Formula Search): {e}")
         return []
 
 
@@ -116,7 +118,8 @@ def get_pubchem_details(cid: int) -> dict:
             "title": props.get("Title"),
             "iupac": props.get("IUPACName"),
         }
-    except:
+    except (requests.RequestException, ValueError, IndexError) as e:
+        print(f"PubChem error (Details): {e}")
         return {}
 
 

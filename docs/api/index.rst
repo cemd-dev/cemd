@@ -30,6 +30,7 @@ API Reference
 
       +++
       .. button-ref:: build
+         :ref-type: doc
          :expand:
          :color: primary
          :click-parent:

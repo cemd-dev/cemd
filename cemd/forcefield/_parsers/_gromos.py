@@ -18,6 +18,7 @@
 
 import re
 
+from ..._constants import two_letter_element_from_type
 from ..forcefield_database import ForceFieldDatabase
 from ..models import (
     AtomType,
@@ -86,7 +87,7 @@ class GromosLTParser(BaseForceFieldParser):
             if match:
                 atom_type, mass = match.groups()
                 result.atoms[atom_type] = AtomType(
-                    element=self._guess_element(atom_type),
+                    element=self._guess_element(atom_type, float(mass)),
                     # GROMOS carries partial charges per atom in the molecule
                     # topology, not per atom type.
                     charge=None,
@@ -95,8 +96,17 @@ class GromosLTParser(BaseForceFieldParser):
                     model=result.model_name,
                 )
 
-    def _guess_element(self, atom_type: str) -> str:
+    def _guess_element(self, atom_type: str, mass: float) -> str:
         "Guess the element from the name of the atom type."
+        # A two-letter symbol whose known mass agrees with the parsed mass
+        # is the element: this reads "CL" as chlorine and "SI" as silicon
+        # while leaving one-letter-plus-digit united atoms like "CH2" or
+        # "NR1" -- whose first two letters aren't a real element's mass --
+        # to the special-cased and first-character fallbacks below.
+        two_letter = two_letter_element_from_type(atom_type, mass)
+        if two_letter is not None:
+            return two_letter
+
         # Manage special cases
         special = {
             "OM": "O",

@@ -16,7 +16,13 @@ import pytest
 mda = pytest.importorskip("MDAnalysis")
 from MDAnalysis.coordinates.memory import MemoryReader  # noqa: E402
 
-from cemd.analysis import compute_rdf, density_map, density_profile  # noqa: E402
+from cemd.analysis import (  # noqa: E402
+    compute_rdf,
+    density_map,
+    density_profile,
+    msd,
+    msd_profile,
+)
 
 BOX = 20.0
 N_ATOMS = 8000
@@ -73,6 +79,51 @@ def test_density_map_recovers_a_uniform_density():
     )
 
     assert density.values.mean() == pytest.approx(EXPECTED_DENSITY, rel=0.02)
+
+
+def test_density_profile_is_reproducible_on_a_trajectory_file(tmp_path):
+    """Two identical calls used to disagree, by a few atoms in a few bins.
+
+    The frames were counted by dask worker threads that each moved the one
+    trajectory reader of the shared universe, so a thread could count the
+    positions of another's frame. It only happens with a reader that seeks
+    on disk: an in-memory trajectory, as in the other tests, cannot show it.
+    """
+    n_atoms, n_frames, bin_size = 3000, 300, 0.5
+    rng = np.random.default_rng(1)
+    universe = mda.Universe.empty(
+        n_atoms,
+        n_residues=n_atoms,
+        atom_resindex=np.arange(n_atoms),
+        residue_segindex=np.zeros(n_atoms, dtype=int),
+        trajectory=True,
+    )
+    universe.add_TopologyAttr("type", ["Ow", "Hw", "Ca"] * (n_atoms // 3))
+    universe.add_TopologyAttr("mass", [1.0] * n_atoms)
+    path = str(tmp_path / "traj.dcd")
+    with mda.Writer(path, n_atoms) as writer:
+        for _ in range(n_frames):
+            universe.atoms.positions = rng.uniform(0, BOX, (n_atoms, 3))
+            universe.dimensions = [BOX, BOX, BOX, 90.0, 90.0, 90.0]
+            writer.write(universe.atoms)
+    universe.load_new(path)
+
+    types = ["Ow", "Hw", "Ca"]
+    first = density_profile(universe, types, axis="z", bin_size=bin_size)
+    second = density_profile(universe, types, axis="z", bin_size=bin_size)
+
+    # The reference is a plain loop, one frame after the other. `end=-1`
+    # means every frame here, unlike in `density_map`.
+    bins = np.arange(0, BOX, bin_size)
+    counts = np.zeros((len(bins) - 1, len(types)))
+    for ts in universe.trajectory:
+        for i, atom_type in enumerate(types):
+            z = universe.select_atoms(f"type {atom_type}").positions[:, 2] % BOX
+            counts[:, i] += np.histogram(z, bins=bins)[0]
+    expected = counts / (bin_size * BOX * BOX) / n_frames * 1000
+
+    np.testing.assert_array_equal(first.values, second.values)
+    np.testing.assert_allclose(first.values, expected)
 
 
 def test_density_profile_and_map_agree():
@@ -249,3 +300,35 @@ def test_density_map_takes_a_slab_centred_on_the_interface():
     # 20 x 20 x 4 A^3.
     expected = n_per_sheet / (BOX * BOX * 4.0) * 1000
     assert density.values.mean() == pytest.approx(expected, rel=0.05)
+
+
+# ---------------------------------------------------------------------------
+# A trajectory that carries no box
+# ---------------------------------------------------------------------------
+
+
+def boxless_universe(n_frames: int = 60) -> mda.Universe:
+    """The same gas as `uniform_universe`, but with no cell at all."""
+    universe = uniform_universe(n_frames=n_frames)
+    for ts in universe.trajectory:
+        ts.dimensions = None
+    universe.trajectory[0]
+    return universe
+
+
+@pytest.mark.parametrize(
+    "analysis",
+    [
+        lambda u: density_profile(u, ["Ow"], "z"),
+        lambda u: density_map(u, ["Ow"], 10.0, "z"),
+        lambda u: compute_rdf(u, "Ow", "Ow"),
+        lambda u: msd(u, "Ow", 1.0, nblocks=2, corrlength=10, gaplength=5),
+        lambda u: msd_profile(u, "Ow", 1.0, "z", nblocks=2, corrlength=10, gaplength=5),
+    ],
+    ids=["density_profile", "density_map", "rdf", "msd", "msd_profile"],
+)
+def test_analyses_say_so_when_the_trajectory_has_no_box(analysis):
+    """Used to die on `'NoneType' object is not subscriptable`; the RDF
+    quietly returned `inf` from a zero volume."""
+    with pytest.raises(ValueError, match="periodic box"):
+        analysis(boxless_universe())

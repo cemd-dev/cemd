@@ -158,3 +158,126 @@ def test_every_writer_goes_through_userdata():
                 f"{source.relative_to(package)} writes a file but does not use "
                 "_userdata; a path built from __file__ lands in site-packages"
             )
+
+
+# ----------------------------------------------------------------------
+# Undo through the type and connectivity managers
+#
+# The 3D view cannot be built headless (see the module docstring), so these
+# use a bare QWidget as the tab: the managers only need `.system`,
+# `.session_ff_dict` and the main window's `push_undo` / `sync_ui`.
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def water_tab(window, monkeypatch):
+    from PySide6 import QtWidgets
+
+    from conftest import make_water_system
+
+    tab = QtWidgets.QWidget()
+    tab.system = make_water_system()
+    tab.session_ff_dict = {}
+    monkeypatch.setattr(window, "sync_ui", lambda *a, **k: None)
+    window.tabs.addTab(tab, "water")
+    window.tabs.setCurrentWidget(tab)
+    yield tab
+    window.tabs.removeTab(window.tabs.indexOf(tab))
+
+
+def test_undo_restores_the_force_field_choices_with_the_system(window, water_tab):
+    water_tab.session_ff_dict = {"Ow": {"type": "OW", "model": "spce"}}
+    window.push_undo()
+
+    water_tab.session_ff_dict.clear()
+    water_tab.system.set_types({"Ow": "O"})
+    window.undo_clicked()
+
+    assert "Ow" in water_tab.system.atom_types
+    assert water_tab.session_ff_dict == {"Ow": {"type": "OW", "model": "spce"}}
+
+
+def test_type_manager_edits_can_be_undone(window, water_tab):
+    from cemd.gui.ui.managers import TypeManagerDialog
+
+    dialog = TypeManagerDialog(window)
+    original_charges = dict(water_tab.system.charges)
+
+    # Rename a type and change a charge through the table, then Apply.
+    table = dialog.table
+    for row in range(table.rowCount()):
+        if table.item(row, 0).text() == "Ow":
+            table.item(row, 0).setText("Ox")
+            table.item(row, 3).setText("-0.9000")
+    dialog.apply_and_refresh()
+
+    assert "Ox" in water_tab.system.atom_types
+    assert len(water_tab.undo_stack) == 1
+
+    # Nothing changed the second time: no snapshot is spent on it.
+    dialog.apply_and_refresh()
+    assert len(water_tab.undo_stack) == 1
+
+    window.undo_clicked()
+    assert "Ow" in water_tab.system.atom_types
+    assert "Ox" not in water_tab.system.atom_types
+    assert dict(water_tab.system.charges) == original_charges
+
+
+def test_neutralize_and_guess_types_can_be_undone(window, water_tab):
+    from cemd.gui.ui.managers import TypeManagerDialog
+
+    dialog = TypeManagerDialog(window)
+    system = water_tab.system
+    system.set_charges({"Ow": -0.5, "Hw": 0.4})
+    charges = dict(system.charges)
+
+    dialog.neutralize_logic({"Ow": 1.0})
+    assert abs(system.atoms["charge"].sum()) < 1e-6
+    window.undo_clicked()
+    assert dict(water_tab.system.charges) == charges
+
+    # An already-neutral system takes no snapshot.
+    system = water_tab.system
+    system.set_charges({"Ow": -0.8, "Hw": 0.4})
+    depth = len(water_tab.undo_stack)
+    dialog.neutralize_logic({"Ow": 1.0})
+    assert len(water_tab.undo_stack) == depth
+
+    dialog.reset_via_masses()
+    assert len(water_tab.undo_stack) == depth + 1
+
+
+def test_connectivity_edits_can_be_undone(window, water_tab, monkeypatch):
+    from PySide6 import QtWidgets
+
+    from cemd.gui.ui.managers import ConnectivityDialog
+
+    dialog = ConnectivityDialog(window)
+    n_bonds = len(water_tab.system.bonds)
+    bond_type = water_tab.system.bonds["type"].iloc[0]
+
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "question",
+        staticmethod(lambda *a, **k: QtWidgets.QMessageBox.Yes),
+    )
+    dialog.delete_by_type("Bonds", bond_type)
+    assert water_tab.system.bonds is None or len(water_tab.system.bonds) < n_bonds
+    window.undo_clicked()
+    assert len(water_tab.system.bonds) == n_bonds
+
+
+def test_a_declined_deletion_takes_no_snapshot(window, water_tab, monkeypatch):
+    from PySide6 import QtWidgets
+
+    from cemd.gui.ui.managers import ConnectivityDialog
+
+    dialog = ConnectivityDialog(window)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "question",
+        staticmethod(lambda *a, **k: QtWidgets.QMessageBox.No),
+    )
+    dialog.delete_by_type("Bonds", water_tab.system.bonds["type"].iloc[0])
+    assert not getattr(water_tab, "undo_stack", [])

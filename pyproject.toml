@@ -49,7 +49,6 @@ dependencies = [
     "MDAnalysis>=2.10",
     "pymatgen>=2024.0",
     "rdkit",
-    "dask",
     "pydantic>=2.0,<3",
     "xlrd",
     "questionary",

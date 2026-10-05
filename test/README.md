@@ -6,7 +6,7 @@ large or not reproducible from the source.
 
 ## `unit/` — the automated suite
 
-262 tests, run on every push by `.github/workflows/tests.yml`.
+368 tests, run on every push by `.github/workflows/tests.yml`.
 
 ```bash
 pytest
@@ -24,6 +24,7 @@ from the repository root. `pyproject.toml` restricts collection to
 | `test_forcefield.py`, `test_forcefield_database.py` | ff keys, parameters, the bundled database |
 | `test_build_*.py` | one file per builder, plus `test_builders.py` for what they share |
 | `test_analysis.py` | RDF, density, MSD and diffusion |
+| `test_analysis_tcf.py`, `test_analysis_util.py` | bond survival and lifetime; DCD writing, recentring, mean positions, `velocity_profile`. Also run against `traj_solution` when present |
 | `test_gui_smoke.py` | the interface opens and its actions are wired |
 
 Two things the tests need from outside Python: **Packmol** on `PATH` (the
@@ -75,3 +76,6 @@ The frame interval is **100 fs**, and it cannot be read from the file:
 `universe.trajectory.dt` reports 4.888821 ps, a factor of 49 out. Passing
 that to `msd()` yields a diffusion coefficient wrong by the same factor,
 with a perfectly straight curve and nothing to suggest a problem.
+
+A DCD carries positions only, so `velocity_profile` cannot run on it
+(`NoDataError`); its tests build their own velocities.

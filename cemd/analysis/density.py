@@ -17,12 +17,13 @@
 
 from __future__ import annotations
 
-import dask
 import MDAnalysis as mda
 import numpy as np
 import pandas as pd
 from scipy import integrate
 from tqdm import tqdm
+
+from .util import require_box
 
 _AXIS_MAP = {
     "x": {"axid": 0, "axida": 1, "axidb": 2},
@@ -68,7 +69,7 @@ def density_profile(
         Average density profile for the specified atom types.
     """
 
-    box = universe.dimensions
+    box = require_box(universe, "density_profile")
 
     ids = _get_axis_ids(axis)
     axid = ids["axid"]
@@ -77,61 +78,30 @@ def density_profile(
 
     bins = np.arange(0, box[axid], bin_size)
     pos = (bins[1:] + bins[:-1]) / 2
-    density_total = []
-    columns = []
-
-    def count_pframe(frame_index, sel):
-
-        sel.universe.trajectory[frame_index]
-
-        posi = sel.positions[:, axid]
-
-        posi = posi % box[axid]
-
-        count = np.histogram(posi, bins=bins, range=[0, box[axid]])[0]
-
-        return count
 
     if atom_types == "all":
         atom_types = np.unique(universe.atoms.types)
 
-    for t in atom_types:
-        print(f"Compute 1D atomic density of {t} atoms...")
+    stop = None if end == -1 else end
+    nframes = len(range(len(universe.trajectory))[start:stop])
+    if nframes == 0:
+        raise ValueError("The trajectory slice [start:end] contains no frame.")
 
-        sel = universe.select_atoms(f"type {t}")
+    # One pass over the trajectory, all types together. The frames are read
+    # one after the other on purpose: they used to be counted by dask worker
+    # threads, each moving the trajectory reader of the shared universe, and
+    # a thread could count the positions of another's frame -- two identical
+    # calls did not return the same profile.
+    selections = [universe.select_atoms(f"type {t}") for t in atom_types]
+    atom_count = np.zeros((len(selections), len(pos)))
+    for _ in tqdm(universe.trajectory[start:stop], desc="1D atomic density"):
+        for i, sel in enumerate(selections):
+            coords = sel.positions[:, axid] % box[axid]
+            atom_count[i] += np.histogram(coords, bins=bins)[0]
 
-        # nframes = len(universe.trajectory[start:end])
+    density = atom_count / slice_vol / nframes * 1000
 
-        # job_list = []
-        # for frame_index in tqdm( range(nframes) ):
-        #     job_list.append(dask.delayed(count_pframe)(frame_index, sel))
-
-        frames = (
-            range(len(universe.trajectory))[start:end]
-            if end != -1
-            else range(len(universe.trajectory))[start:]
-        )
-        nframes = len(frames)
-
-        if nframes == 0:
-            raise ValueError(
-                "Le slice de la trajectoire [start:end] ne contient aucune frame."
-            )
-
-        job_list = []
-        for frame_index in tqdm(frames):
-            job_list.append(dask.delayed(count_pframe)(frame_index, sel))
-
-        result = dask.compute(job_list)
-        atom_count = np.sum(result[0], axis=0)
-
-        density = atom_count / slice_vol / nframes * 1000
-
-        density_total.append(density)
-
-        columns.append(f"{t}")
-
-    return pd.DataFrame(np.array(density_total).T, columns=columns, index=pos)
+    return pd.DataFrame(density.T, columns=[f"{t}" for t in atom_types], index=pos)
 
 
 def density_map(
@@ -172,7 +142,7 @@ def density_map(
         2D average density map.
     """
 
-    box = univ.dimensions
+    box = require_box(univ, "density_map")
 
     type_str = " ".join(atom_types) if isinstance(atom_types, list) else atom_types
 
@@ -208,25 +178,16 @@ def density_map(
 
     nframes = len(univ.trajectory[start:end])
 
-    print(f"Compute 2D atomic density of {type_str} atoms...")
-
-    pos_a_list, pos_b_list = [], []
-    for ts in tqdm(univ.trajectory[start:end]):
-        posi, posj = sel.positions[:, axida], sel.positions[:, axidb]
-
+    # Accumulate one 2D histogram per frame rather than keeping every
+    # position until the end, which costs n_atoms * n_frames * 16 bytes.
+    hist = np.zeros((len(bins_a) - 1, len(bins_b) - 1))
+    for _ in tqdm(univ.trajectory[start:end], desc="2D atomic density"):
         posi = sel.positions[:, axida] % box[axida]
         posj = sel.positions[:, axidb] % box[axidb]
+        hist += np.histogram2d(posi, posj, bins=(bins_a, bins_b))[0]
 
-        pos_a_list.append(posi)
-        pos_b_list.append(posj)
-
-    pos_a = np.concatenate(pos_a_list)
-    pos_b = np.concatenate(pos_b_list)
-
-    hist, edges_a, edges_b = np.histogram2d(pos_a, pos_b, bins=(bins_a, bins_b))
-
-    ra = (edges_a[1:] + edges_a[:-1]) / 2
-    rb = (edges_b[1:] + edges_b[:-1]) / 2
+    ra = (bins_a[1:] + bins_a[:-1]) / 2
+    rb = (bins_b[1:] + bins_b[:-1]) / 2
 
     density = hist / column_vol / nframes * 1000
 

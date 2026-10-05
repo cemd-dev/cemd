@@ -20,18 +20,18 @@ from .rules import NeighborCriterion, TopologyRule
 CLAYFF_RULES: list[TopologyRule] = [
     # --- Silicate oxygens ---
     # Bridging Si-O-Si (exactly 2 Si)
-    TopologyRule("type O", NeighborCriterion("type Si", 1.85, 2), new_type="Ob"),
+    TopologyRule("type O", NeighborCriterion("type Si", 2.0, 2), new_type="Ob"),
     # Bridging Si-O-Al (exactly 1 Si and 1 Al)
     TopologyRule(
         "type O",
-        [NeighborCriterion("type Si", 1.85, 1), NeighborCriterion("type Al", 1.85, 1)],
+        [NeighborCriterion("type Si", 2.0, 1), NeighborCriterion("type Al", 2.0, 1)],
         new_type="Obs",
     ),
     # Non-bridging Si-OH (exactly 1 Si)
-    TopologyRule("type O", NeighborCriterion("type Si", 1.85, 1), new_type="Osi"),
+    TopologyRule("type O", NeighborCriterion("type Si", 2.0, 1), new_type="Osi"),
     # --- Aluminate oxygens ---
     # Non-bridging Al-OH (exactly 1 Al)
-    TopologyRule("type O", NeighborCriterion("type Al", 1.85, 1), new_type="Oa"),
+    TopologyRule("type O", NeighborCriterion("type Al", 2.0, 1), new_type="Oa"),
     # --- Water molecules (O bonded to exactly 2 H) ---
     TopologyRule(
         "type O Oa Osi",

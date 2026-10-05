@@ -76,6 +76,36 @@ MASSES_DICT = {
     "Xe": 131.2936,
     "Cs": 132.90545196,
     "Ba": 137.3277,
+    "La": 138.90547,
+    "Ce": 140.116,
+    "Pr": 140.90765,
+    "Nd": 144.242,
+    "Pm": 145.0,
+    "Sm": 150.36,
+    "Eu": 151.964,
+    "Gd": 157.25,
+    "Tb": 158.92535,
+    "Dy": 162.5,
+    "Ho": 164.93032,
+    "Er": 167.259,
+    "Tm": 168.93421,
+    "Yb": 173.04,
+    "Lu": 174.967,
+    "Hf": 178.49,
+    "Ta": 180.94788,
+    "W": 183.84,
+    "Re": 186.207,
+    "Os": 190.23,
+    "Ir": 192.217,
+    "Pt": 195.084,
+    "Au": 196.966569,
+    "Hg": 200.59,
+    "Tl": 204.3833,
+    "Pb": 207.2,
+    "Bi": 208.9804,
+    "Th": 232.03806,
+    "Pa": 231.03588,
+    "U": 238.02891,
     "D": 2.01410178,
     "T": 3.01604928,
 }
@@ -250,3 +280,42 @@ CHARGES_DICT = {
 
 INV_MASSES = {float(v): k for k, v in MASSES_DICT.items()}
 MASS_KEYS = np.array(list(INV_MASSES.keys()))
+
+#: How far an atom type's mass may sit from a real element's before the type
+#: is judged not to be that element. Every genuine element in the bundled
+#: force fields matches to better than 0.05 amu, while a GROMOS united atom
+#: -- a carbon carrying its apolar hydrogens, CH3 at 15.035 -- sits about
+#: 1 amu away from anything real. The gap is wide.
+ELEMENT_MASS_TOLERANCE = 0.2
+
+
+def element_from_mass(mass: float, tolerance: float = ELEMENT_MASS_TOLERANCE) -> str | None:
+    """Return the element symbol whose known mass is closest to `mass`, or
+    None if even the closest one is farther than `tolerance` amu away."""
+    distances = np.abs(MASS_KEYS - mass)
+    index = distances.argmin()
+    if distances[index] > tolerance:
+        return None
+    return str(INV_MASSES[MASS_KEYS[index]])
+
+
+def two_letter_element_from_type(
+    atom_type: str, mass: float, tolerance: float = ELEMENT_MASS_TOLERANCE
+) -> str | None:
+    """Read `atom_type`'s first two characters as an element symbol (e.g.
+    GROMOS ``CL`` or CHARMM ``NA+`` as chlorine and sodium), and accept it
+    only if that element's known mass agrees with `mass`.
+
+    This disambiguates real two-letter elements -- Cl, Br, Fe, Si, Na... --
+    from one-letter-plus-digit force field type names that happen to share
+    the same first two capitals, such as GROMOS's ``CE1`` (carbon) or
+    ``NR1`` (nitrogen), which the mass check rules out.
+    """
+    if len(atom_type) < 2:
+        return None
+
+    candidate = atom_type[:2].capitalize()
+    if candidate in MASSES_DICT and abs(MASSES_DICT[candidate] - mass) <= tolerance:
+        return candidate
+
+    return None

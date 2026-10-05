@@ -23,38 +23,49 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def velocity_profile(universe: mda.Universe, atom_types: list[str], bin_size=0.1):
+def velocity_profile(
+    universe: mda.Universe, atom_types: str | list[str], bin_size: float = 0.1
+) -> pd.Series:
+    """Mean speed of the selected atoms as a function of their z position.
 
-    sel = universe.select_atoms(f"type {atom_types}")
+    Parameters
+    ----------
+    universe : mda.Universe
+        Universe whose trajectory carries velocities (a LAMMPS dump or a
+        TRR, not a DCD).
+    atom_types : str or list of str
+        Atom type(s) to select.
+    bin_size : float, default=0.1
+        Width of the z bins, in Angstroms.
 
-    box = universe.dimensions
+    Returns
+    -------
+    pd.Series
+        Mean speed ``|v|`` in each bin, in the trajectory's velocity unit
+        (Angstrom/ps for MDAnalysis readers), indexed by the bin centre.
+        A bin no atom visited holds NaN.
+    """
+    if isinstance(atom_types, str):
+        atom_types = [atom_types]
+    sel = universe.select_atoms("type {}".format(" ".join(map(str, atom_types))))
 
     positions = []
-    velocities = []
+    speeds = []
 
     for ts in tqdm(universe.trajectory):
-        # collect positions w.r.t the center of mass to remove the drift
-        pos = sel.positions
-        vel = sel.velocities
+        positions.append(sel.positions[:, 2])
+        # One speed per atom, so that it lines up with its z position.
+        speeds.append(np.linalg.norm(sel.velocities, axis=1))
 
-        positions.append(pos[:, 2])
-        velocities.append(abs(vel))
+    positions_array = np.concatenate(positions)
+    speeds_array = np.concatenate(speeds)
 
-    positions_array = np.array(positions).flatten()
-    velocities_array = np.array(velocities).flatten()
+    edges = np.arange(positions_array.min(), positions_array.max(), bin_size)
+    centres = (edges[:-1] + edges[1:]) / 2
 
-    drange = np.arange(np.min(positions_array), np.max(positions_array), bin_size)
-    binned_pos = (drange[:-1] + drange[1:]) / 2
+    counts, _ = np.histogram(positions_array, bins=edges)
+    sums, _ = np.histogram(positions_array, bins=edges, weights=speeds_array)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean_speed = sums / counts
 
-    velocities_mean = np.array(
-        [
-            np.mean(
-                velocities_array[
-                    np.where((positions_array > low) & (positions_array <= high))
-                ]
-            )
-            for low, high in zip(drange[:-1], drange[1:])
-        ]
-    )
-
-    return pd.Series(velocities_mean, binned_pos)
+    return pd.Series(mean_speed, centres)

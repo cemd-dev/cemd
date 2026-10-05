@@ -101,7 +101,7 @@ class AtomicPlotter(QtInteractor):
         try:
             h = h.lstrip("#")
             return [int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4)]
-        except:
+        except (ValueError, AttributeError):
             return [0.5, 0.5, 0.5]
 
     def add_axes(self) -> None:
@@ -400,6 +400,13 @@ class AtomicPlotter(QtInteractor):
                 actor = self.renderer.actors[actor_name]
                 base_radius = self.radius_map.get(str(atype), 1.5)
                 actor.prop.point_size = base_radius * 10 * self.global_scale
+
+    def update_atom_visibility(self, visible_types: set[str]) -> None:
+        """Show/hide whole per-type atom actors without rebuilding geometry."""
+        for actor_name, actor in self.renderer.actors.items():
+            if actor_name.startswith("atoms_"):
+                atype = actor_name[len("atoms_") :]
+                actor.visibility = atype in visible_types
 
     def update_atom_colors(self) -> None:
         """Only updates the colors of existing atom actors."""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -56,6 +58,83 @@ def test_total_charge_reflects_charge_updates(water_system):
     water_system.set_charges({"Ow": -1.0, "Hw": 0.5})
     expected = 2 * (-1.0) + 4 * 0.5
     assert water_system.total_charge == pytest.approx(expected)
+
+
+def test_set_charges_warns_when_system_is_not_neutral(water_system):
+    with pytest.warns(UserWarning, match="not charge-neutral"):
+        water_system.set_charges({"Ow": -1.0})
+
+
+def test_set_charges_does_not_warn_when_result_is_neutral(water_system, recwarn):
+    water_system.set_charges({"Ow": -0.8, "Hw": 0.4})
+    assert not any(
+        "charge-neutral" in str(w.message) for w in recwarn.list
+    )
+
+
+# ---------------------------------------------------------------------------
+# neutralize_charge
+# ---------------------------------------------------------------------------
+
+
+def test_neutralize_charge_is_noop_when_already_neutral(water_system):
+    before = water_system.atoms["charge"].copy()
+    water_system.neutralize_charge()
+    pd.testing.assert_series_equal(water_system.atoms["charge"], before)
+
+
+def test_neutralize_charge_default_spreads_uniformly_over_every_atom(water_system):
+    water_system.set_charges({"Ow": -1.0})  # total charge becomes -0.4
+    water_system.neutralize_charge()
+
+    assert water_system.total_charge == pytest.approx(0.0, abs=1e-10)
+    # -(-0.4) / 6 atoms = +0.0666... added to every atom, regardless of type.
+    expected_delta = 0.4 / 6
+    assert water_system.charges["Ow"] == pytest.approx(-1.0 + expected_delta)
+    assert water_system.charges["Hw"] == pytest.approx(0.4 + expected_delta)
+
+
+def test_neutralize_charge_with_weights_targets_selected_types(water_system):
+    water_system.set_charges({"Ow": -1.0})  # total charge becomes -0.4
+    water_system.neutralize_charge({"Hw": 1.0})
+
+    assert water_system.total_charge == pytest.approx(0.0, abs=1e-10)
+    # Only Hw (4 atoms) absorbs the correction; Ow is untouched.
+    assert water_system.charges["Ow"] == pytest.approx(-1.0)
+    assert water_system.charges["Hw"] == pytest.approx(0.4 + 0.4 / 4)
+
+
+def test_neutralize_charge_weights_control_relative_share(water_system):
+    water_system.set_charges({"Ow": -1.0, "Hw": 0.0})  # total charge becomes -2.0
+    water_system.neutralize_charge({"Ow": 1.0, "Hw": 3.0})
+
+    assert water_system.total_charge == pytest.approx(0.0, abs=1e-10)
+    # Per-atom weights: each Hw atom gets 3x the offset of each Ow atom,
+    # 2 * d + 4 * 3d = +2.0 -> d = 1/7.
+    assert water_system.charges["Ow"] == pytest.approx(-1.0 + 1 / 7)
+    assert water_system.charges["Hw"] == pytest.approx(0.0 + 3 / 7)
+
+
+def test_neutralize_charge_equal_weights_give_same_offset_per_atom(water_system):
+    water_system.set_charges({"Ow": -1.0, "Hw": 0.0})  # total charge becomes -2.0
+    water_system.neutralize_charge({"Ow": 1.0, "Hw": 1.0})
+
+    assert water_system.total_charge == pytest.approx(0.0, abs=1e-10)
+    # Same offset on all 6 atoms, although there are twice as many Hw as Ow.
+    assert water_system.charges["Ow"] == pytest.approx(-1.0 + 2.0 / 6)
+    assert water_system.charges["Hw"] == pytest.approx(0.0 + 2.0 / 6)
+
+
+def test_neutralize_charge_warns_on_unknown_type(water_system):
+    water_system.set_charges({"Ow": -1.0})
+    with pytest.warns(UserWarning, match="not present in the system"):
+        water_system.neutralize_charge({"Zz": 1.0, "Ow": 1.0})
+
+
+def test_neutralize_charge_raises_when_no_weight_available(water_system):
+    water_system.set_charges({"Ow": -1.0})
+    with pytest.raises(ValueError, match="Cannot neutralize charge"):
+        water_system.neutralize_charge({"Ow": 0.0, "Hw": 0.0})
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +278,42 @@ def test_set_ff_from_database_assigns_masses_charges_and_pair_params(water_syste
     assert "Hw-Ow" in water_system._ff_params.bond
 
 
+def test_set_ff_from_database_retyping_atoms_drops_their_stale_bond_keys(water_system):
+    # Regression test: water packed by `SolutionBuilder` carries GROMOS
+    # bond/angle keys; re-typing its atoms to ClayFF kept the GROMOS bond.
+    water_system.set_ff_from_database(
+        atom_assignments={"Ow": "spc.ospc", "Hw": "spc.hspc"},
+        bond_assignments={"Hw-Ow": "spc.hspc-ospc"},
+    )
+    water_system.set_ff_from_database(
+        atom_assignments={"Ow": "clayff.o*", "Hw": "clayff.h*"}
+    )
+
+    assert "Hw-Ow" not in water_system.ff_keys.bond
+    bond = water_system._ff_params.bond["Hw-Ow"]
+    assert (bond.k, bond.r0) == pytest.approx((554.1349, 1.0), rel=1e-4)
+
+
+def test_set_ff_from_database_accepts_the_display_name_as_model(water_system):
+    # Regression test: "SPC.ospc" picked up IFF-CVFF's mass and charge while
+    # finding no SPC pair or bond parameter at all.
+    water_system.set_ff_from_database(
+        atom_assignments={"Ow": "SPC.ospc", "Hw": "SPC.hspc"},
+        bond_assignments={"Hw-Ow": "SPC.hspc-ospc"},
+    )
+
+    assert water_system.ff_keys.atom["Ow"] == "spc.ospc"
+    assert water_system.charges["Ow"] == pytest.approx(-0.82)
+    pair_key = water_system._normalize_binary_key("Ow", "Ow")
+    assert water_system._ff_params.pair[pair_key].sigma == pytest.approx(3.166)
+    assert "Hw-Ow" in water_system._ff_params.bond
+
+
+def test_set_ff_from_database_warns_on_unknown_qualified_type(water_system):
+    with pytest.warns(UserWarning, match="not found in database"):
+        water_system.set_ff_from_database(atom_assignments={"Ow": "clayff.o_star"})
+
+
 def test_set_ff_from_database_warns_on_unresolvable_atom_abbreviation(water_system):
     with pytest.warns(UserWarning, match="not found in database"):
         water_system.set_ff_from_database(
@@ -258,3 +373,42 @@ def test_set_ff_from_database_applies_the_charges_a_force_field_defines():
     assert system.charges["ob"] == pytest.approx(-1.05)
     # The per-atom column follows, so the total is the force field's.
     assert system.total_charge == pytest.approx(1.575 - 1.05)
+
+
+# ---------------------------------------------------------------------------
+# class2 cross terms in set_ff_from_database
+# ---------------------------------------------------------------------------
+
+
+def _missing_param_warnings(system, atom_assignments):
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        system.set_ff_from_database(atom_assignments=atom_assignments)
+    return [
+        str(w.message)
+        for w in record
+        if issubclass(w.category, UserWarning) and "not found for" in str(w.message)
+    ]
+
+
+def test_set_ff_from_database_class1_ff_does_not_warn_about_cross_terms(
+    water_system,
+):
+    # ClayFF is class1: it defines no bondbond/bondangle entries at all, so
+    # their absence for Hw-Ow-Hw is expected, not a gap to report.
+    messages = _missing_param_warnings(
+        water_system, {"Ow": "clayff.o*", "Hw": "clayff.h*"}
+    )
+
+    assert messages == []
+    assert "Hw-Ow-Hw" in water_system._ff_params.angle
+
+
+def test_set_ff_from_database_class2_gap_still_warns(water_system):
+    # Raiteri 2015 defines class2 cross terms, but only for Oc-C-Oc: a water
+    # angle assigned to it is a genuine gap and must still be reported.
+    messages = _missing_param_warnings(
+        water_system, {"Ow": "raiteri2015.Ow", "Hw": "raiteri2015.Hw"}
+    )
+
+    assert any("Hw-Ow-Hw" in m for m in messages)

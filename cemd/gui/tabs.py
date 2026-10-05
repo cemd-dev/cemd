@@ -388,12 +388,12 @@ class StructureTabWidget(QtWidgets.QWidget):
             self.table.update_data(self.system)
             try:
                 self.table.model().dataChanged.disconnect()
-            except:
+            except (RuntimeError, TypeError):  # nothing connected yet
                 pass
             self.table.model().dataChanged.connect(self.on_data_changed)
             try:
                 self.table.selectionModel().selectionChanged.disconnect()
-            except:
+            except (RuntimeError, TypeError):  # nothing connected yet
                 pass
             self.table.selectionModel().selectionChanged.connect(
                 self.on_table_selection_changed
@@ -436,12 +436,17 @@ class StructureTabWidget(QtWidgets.QWidget):
 
         # --- 3D RENDERING ---
         if full_rebuild:
+            # Draw every type, hidden ones included: an actor that a
+            # rebuild never creates cannot be shown again later by simply
+            # toggling its checkbox back on.
             self.plotter.clear()
-            self.plotter.draw_atoms(self.df_visible)
+            self.plotter.draw_atoms(self.system.atoms)
             self.plotter.draw_box(self.system)
         else:
             self.plotter.update_atom_sizes()
             self.plotter.update_atom_colors()
+
+        self.plotter.update_atom_visibility(set(sel_types))
 
         if refresh_bonds and not self.df_visible.empty:
             self.plotter.update_bonds_only(self.df_visible, bond_settings)

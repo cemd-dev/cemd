@@ -24,6 +24,8 @@ from MDAnalysis.lib.distances import calc_bonds, capped_distance
 from scipy.optimize import leastsq
 from tqdm import tqdm
 
+from .util import require_box
+
 __all__ = ["bondcorr", "lifetime"]
 
 
@@ -56,13 +58,13 @@ def bondcorr(
     dt : float, optional
         The simulation timestep of the trajectory (in femtoseconds).
     nblocks : int, optional
-        Number of blocks used for averaging. Automatically calculated if None.
+        Number of blocks used for averaging. If None, as many as fit in the
+        trajectory.
     corrlength : int, optional
         Correlation length (number of frames per block).
     gaplength : int, optional
-        Number of frames between the start of consecutive blocks.
-    csv_file : str, optional
-        Path to save the output results as a CSV file.
+        Number of frames between the start of consecutive blocks. Defaults
+        to a fiftieth of the trajectory.
 
     Returns
     -------
@@ -82,16 +84,24 @@ def bondcorr(
             atom_types = [atom_types]
         return univ.select_atoms("type {}".format(" ".join(atom_types)))
 
-    box = universe.dimensions
+    nframes = len(universe.trajectory)
 
     if gaplength is None:
-        gaplength = int(len(universe.trajectory) / 50)
+        gaplength = max(1, nframes // 50)
 
-    nblocks = int((len(universe.trajectory) - corrlength) / gaplength)
+    # Blocks start at 0, gaplength, 2*gaplength... and each needs corrlength
+    # frames: the last one must start at or before nframes - corrlength.
+    max_blocks = (nframes - corrlength) // gaplength + 1 if corrlength <= nframes else 0
+    if nblocks is None:
+        # One short of max_blocks when the last block would end exactly on
+        # the last frame: the count this function has always used.
+        nblocks = (nframes - corrlength) // gaplength
 
-    if (gaplength * nblocks + corrlength) > len(universe.trajectory):
-        raise ValueError("""Gap between correlation block, correlation length,
-        or number of block too large.""")
+    if nblocks < 1 or nblocks > max_blocks:
+        raise ValueError(
+            f"{nblocks} block(s) of {corrlength} frames, {gaplength} frames "
+            f"apart, do not fit in a trajectory of {nframes} frames."
+        )
 
     sel_a = _make_type_selection(universe, atom_types_a)
     sel_b = _make_type_selection(universe, atom_types_b)
@@ -104,13 +114,21 @@ def bondcorr(
 
     for i, (start, end) in enumerate(tqdm(zip(starts, ends), total=len(starts)), 1):
         # Initialize the bond recording
-        universe.trajectory[start]
+        ts = universe.trajectory[start]
 
-        distances = capped_distance(
-            sel_a.positions, sel_b.positions, max_cutoff=distance, box=box
+        pairs = capped_distance(
+            sel_a.positions,
+            sel_b.positions,
+            max_cutoff=distance,
+            box=require_box(ts, "bondcorr"),
+            return_distances=False,
         )
+        idx1, idx2 = pairs[:, 0], pairs[:, 1]
 
-        idx1, idx2 = np.transpose(distances[0])
+        # An atom of both selections (like-species pair, Ow-Ow) is found at
+        # zero distance from itself: a "bond" that never breaks.
+        distinct = sel_a.indices[idx1] != sel_b.indices[idx2]
+        idx1, idx2 = idx1[distinct], idx2[distinct]
 
         nbonds = len(idx1)
 
@@ -119,7 +137,11 @@ def bondcorr(
 
             # Check if the initial bond still exist during the correlation time
             for j, ts in enumerate(universe.trajectory[start:end]):
-                b = calc_bonds(sel_a.positions[idx1], sel_b.positions[idx2], box=box)
+                b = calc_bonds(
+                    sel_a.positions[idx1],
+                    sel_b.positions[idx2],
+                    box=require_box(ts, "bondcorr"),
+                )
 
                 winners = b < distance
                 results[j] = winners.sum()

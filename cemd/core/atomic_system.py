@@ -25,7 +25,9 @@ from typing import TYPE_CHECKING, Any, Self
 import numpy as np
 import pandas as pd
 
-from .._constants import AVOGADRO, INV_MASSES, MASS_KEYS, MASSES_DICT
+from .._constants import AVOGADRO, MASSES_DICT
+from .._constants import ELEMENT_MASS_TOLERANCE as _ELEMENT_MASS_TOLERANCE
+from .._constants import element_from_mass
 from ._edit import EditMixin
 from ._format import (
     ANGLES_COLUMNS,
@@ -326,7 +328,9 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
             self._velocities.copy() if self._velocities is not None else None
         )
 
-        new._box_lmp = self._box_lmp
+        # Through `set_box`, as in `_replace_internals`: assigning `_box_lmp`
+        # alone left the copy without `.box` at all.
+        new.set_box(self._box_lmp)
         new._masses = dict(self._masses)
         new._charges = dict(self._charges)
         new._atom_style = self._atom_style
@@ -449,7 +453,7 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
     #: bundled force fields matches to better than 0.05 amu, while a GROMOS
     #: united atom -- a carbon carrying its apolar hydrogens, CH3 at 15.035
     #: -- sits about 1 amu away from anything real. The gap is wide.
-    ELEMENT_MASS_TOLERANCE = 0.2
+    ELEMENT_MASS_TOLERANCE = _ELEMENT_MASS_TOLERANCE
 
     @property
     def elements(self) -> dict[str | int, str]:
@@ -465,7 +469,8 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         apolar hydrogens into their carbon, so GROMOS ``CH3`` weighs 15.035
         and the nearest element is oxygen -- the information needed to say
         "carbon" is simply not in the mass. And an element absent from the
-        internal table (which covers hydrogen through barium) would
+        internal table (hydrogen through bismuth, plus thorium, protactinium and
+        uranium; the other radioactive elements have no unambiguous mass) would
         otherwise be reported as the nearest one that is present.
 
         Returns
@@ -483,21 +488,21 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
             if mass_val is None or np.isnan(mass_val):
                 continue
 
-            distances = np.abs(MASS_KEYS - mass_val)
-            index = distances.argmin()
+            symbol = element_from_mass(mass_val, self.ELEMENT_MASS_TOLERANCE)
 
-            if distances[index] > self.ELEMENT_MASS_TOLERANCE:
+            if symbol is None:
                 unmatched.append((t, float(mass_val)))
                 continue
 
-            element_dict[t] = str(INV_MASSES[MASS_KEYS[index]])
+            element_dict[t] = symbol
 
         if unmatched:
             detail = ", ".join(f"{t} ({mass:g} amu)" for t, mass in unmatched)
             warnings.warn(
                 f"No element matches the mass of: {detail}. These types are "
                 "absent from `elements`. A united-atom force field (GROMOS "
-                "CH1-CH4) and any element heavier than barium both land here.",
+                "CH1-CH4) and an element missing from the mass table (polonium to "
+                "actinium, neptunium onwards) both land here.",
                 UserWarning,
                 stacklevel=2,
             )

@@ -200,7 +200,7 @@ class PubChemBrowserDialog(BaseBuilderDialog):
         try:
             with open(self.cache_file, "w") as f:
                 json.dump({"query": query, "mode": mode, "results": results}, f)
-        except:
+        except (OSError, TypeError):
             pass
 
     def load_last_search(self) -> None:
@@ -212,5 +212,5 @@ class PubChemBrowserDialog(BaseBuilderDialog):
                 self.search_input.setText(data["query"])
                 self.combo_type.setCurrentText(data["mode"])
                 self.display_results(data["results"])
-        except:
+        except (OSError, ValueError, KeyError):
             pass

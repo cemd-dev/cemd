@@ -18,9 +18,13 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+from ...analysis.util import require_box
+from .._packmol import write_mda_pdb
 
 if TYPE_CHECKING:
     import MDAnalysis as mda
@@ -83,7 +87,7 @@ def _detect_z_factor(universe: mda.Universe) -> int:
     Assumes a unit cell height of ~22 Å (Tobermorite 11) or ~28 Å (Tobermorite 14).
     """
     # Get the z-dimension of the simulation box
-    box_z = universe.dimensions[2]
+    box_z = require_box(universe, "Silicate analysis")[2]
 
     # Determine the reference unit cell height based on the total box size
     # If the box is a multiple of ~28 Å, we use 28, otherwise we default to 22.
@@ -133,6 +137,46 @@ def _get_silicate_planes(
     return si_plane_positions, si_indices_per_plane, si_count_per_plane
 
 
+def find_dense_layer_seam_offset(universe: mda.Universe) -> float | None:
+    """
+    Find a z-offset that puts the periodic seam (z=0 / box_z) inside a
+    dense, intra-sheet silicate gap instead of inside an interlayer.
+
+    Packmol has no notion of periodicity: when a C-S-H interlayer gap
+    straddles the box's z boundary (the last silicate plane wrapping
+    around to the first one), water/Ca get packed by
+    :func:`~._interlayer_helpers.fill_csh_interlayers` at raw
+    z-coordinates beyond ``box_z``, without ever being checked against the
+    real framework atoms sitting at the periodic-equivalent position near
+    z=0 -- producing severe atom overlaps right at the seam. Moving the
+    seam into solid material instead sidesteps the problem: every
+    interlayer then lies fully inside ``[0, box_z)``, so the existing
+    plane-bounded Packmol packing (already correct in x/y) just works.
+
+    Returns
+    -------
+    float or None
+        The offset to subtract from every z-coordinate (then wrap into
+        ``[0, box_z)``), or ``None`` if fewer than two silicate planes are
+        found, or none of the gaps between them is a dense (<=5 A)
+        intra-sheet gap to move the seam into.
+    """
+    box_z = require_box(universe, "Seam alignment")[2]
+    layers, _, _ = _get_silicate_planes(universe)
+    nplanes = len(layers)
+    if nplanes < 2:
+        return None
+
+    for i in range(nplanes):
+        z_start = layers[i]
+        z_end = layers[(i + 1) % nplanes]
+        dist = (z_end - z_start) % box_z
+        if dist <= 5.0:
+            return (z_start + dist / 2.0) % box_z
+
+    return None
+
+
 def _find_symmetric_bridging_pairs(
     universe: mda.Universe, planar_distance_cutoff: float | None = 5.0
 ) -> list[list[tuple[int, int]]]:
@@ -155,7 +199,7 @@ def _find_symmetric_bridging_pairs(
         List of pores, each containing a list of (idx1, idx2) pairs of bridging
         silicates that are symmetrically positioned.
     """
-    box = universe.dimensions
+    box = require_box(universe, "Bridging-silicate pairing")
     box_x, box_y, box_z = box[0], box[1], box[2]
 
     si_sel = universe.select_atoms("type Si")
@@ -376,7 +420,7 @@ def substitute_si_by_al(
     return univ, substituted_ids
 
 
-def neutralize_csh_charge(pdb_path: str) -> float:
+def neutralize_csh_charge(pdb_path: str | Path) -> float:
     """Remove hydrogens to neutralize the C-S-H system"""
 
     import MDAnalysis as mda
@@ -385,8 +429,10 @@ def neutralize_csh_charge(pdb_path: str) -> float:
 
     si_sel = univ.select_atoms("name Si SI")
     ca_sel = univ.select_atoms("name Ca CA")
-    o_sel = univ.select_atoms("name O")
-    h_sel = univ.select_atoms("name H")
+    # Water atoms come from h2o.lt and are named O1/H1/H2, so O and H are
+    # selected by element; a "name H" selection silently matched nothing.
+    o_sel = univ.select_atoms("element O")
+    h_sel = univ.select_atoms("element H")
     total_charge = 2 * len(ca_sel) + len(h_sel) + 4 * len(si_sel) - 2 * len(o_sel)
     h_candidates = list(h_sel.indices[::2])
     if len(h_candidates) < total_charge:
@@ -395,7 +441,7 @@ def neutralize_csh_charge(pdb_path: str) -> float:
 
     # Filter universe and overwrite PDB
     remaining_indices = np.setdiff1d(univ.atoms.indices, to_remove)
-    univ.atoms[remaining_indices].write(pdb_path)
+    write_mda_pdb(univ.atoms[remaining_indices], pdb_path)
 
     return total_charge / 2
 

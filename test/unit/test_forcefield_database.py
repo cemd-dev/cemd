@@ -57,6 +57,30 @@ def test_get_atom_type_missing_returns_none(db):
     assert db.get_atom_type("not_a_real_type_xyz") is None
 
 
+@pytest.mark.parametrize(
+    "name, key",
+    [("SPC.ospc", "spc.ospc"), ("ClayFF.st", "clayff.st"), ("CSHFF2014.ca", "cshff2014.ca")],
+)
+def test_get_atom_type_model_prefix_ignores_case(db, name, key):
+    # Regression test: entries are keyed by file stem, so "SPC.ospc" fell
+    # through to the first model defining an "ospc" -- IFF-CVFF's -- and
+    # "CSHFF2014.ca" to ClayFF's calcium.
+    assert db.get_atom_type(name) is db.atom[key]
+    assert db.canonical_key(name) == key
+
+
+def test_get_atom_type_full_name_never_switches_model(db):
+    assert "tip3p.ospc" not in db.atom
+    assert db.get_atom_type("tip3p.ospc") is None
+
+
+def test_pair_and_model_lookups_ignore_case(db):
+    assert db.get_lj("SPC.ospc", "SPC.ospc") is db.get_lj("spc.ospc", "spc.ospc")
+    assert db.get_bond("hspc", "ospc", model="SPC") is not None
+    assert db.get_model("SPC") is db.get_model("spc")
+    assert db.get_atom_types_for_model("SPC") == db.get_atom_types_for_model("spc")
+
+
 def test_get_model(db):
     model = db.get_model("spc")
     assert model is not None
@@ -204,3 +228,41 @@ def test_gromos_atom_types_declare_no_per_type_charge(db):
     gromos_atoms = [v for k, v in db.atom.items() if k.startswith("gromos.")]
     assert gromos_atoms
     assert all(a.charge is None for a in gromos_atoms)
+
+
+# ---------------------------------------------------------------------------
+# Element guessing: two-letter symbols validated against the parsed mass
+# ---------------------------------------------------------------------------
+
+
+def test_gromos_two_letter_type_resolves_by_mass(db):
+    # "CL" carries chlorine's mass but has no "-" suffix, so it wasn't in
+    # the special-cased dict and fell through to its first letter, "C".
+    assert db.get_atom_type("gromos.CL").element == "Cl"
+    assert db.get_atom_type("gromos.SI").element == "Si"
+    assert db.get_atom_type("gromos.BR").element == "Br"
+    assert db.get_atom_type("gromos.FE").element == "Fe"
+
+
+def test_gromos_united_atoms_are_unaffected_by_two_letter_guessing(db):
+    # "CH2", "CR1", "NE"... start with two capitals that could misread as a
+    # real element (Ch, Cr, Ne), but their mass doesn't back that up.
+    assert db.get_atom_type("gromos.CH2").element == "C"
+    assert db.get_atom_type("gromos.CH3").element == "C"
+    assert db.get_atom_type("gromos.CR1").element == "C"
+    assert db.get_atom_type("gromos.NE").element == "N"
+
+
+def test_iff_charmm_ion_types_resolve_by_mass(db):
+    # "NA+" was stripped to "NA" before the dict lookup, which only has
+    # "NA+" as a key, so it silently missed and fell back to "N".
+    assert db.get_atom_type("iff_charmm.NA+").element == "Na"
+    assert db.get_atom_type("iff_charmm.NA+").mass == pytest.approx(22.99)
+
+
+def test_iff_charmm_cl_stays_carbon(db):
+    # Unlike GROMOS, CHARMM Interface's "CL" is a lipid-tail carbon type
+    # (mass 12.011), not chlorine -- the mass check must keep it that way.
+    atom = db.get_atom_type("iff_charmm.CL")
+    assert atom.element == "C"
+    assert atom.mass == pytest.approx(12.011)

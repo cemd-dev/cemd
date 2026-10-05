@@ -173,19 +173,45 @@ class ForceFieldDatabase:
         loader = CVFFInterfaceLoader(self)
         loader.load_from_file(filepath, model_name)
 
+    def _canonical_model(self, model: str | None) -> str | None:
+        """Return the loaded model name matching `model` regardless of case.
+
+        Entries are keyed by the file's stem ("spc", "cshff2014"), while
+        scripts and the documentation have long written the display name
+        ("SPC", "CSHFF2014"). An unknown model is returned unchanged, so the
+        lookup that follows fails instead of guessing.
+        """
+        if model is None or model in self.models:
+            return model
+        folded = model.casefold()
+        for name in self.models:
+            if name.casefold() == folded:
+                return name
+        return model
+
     def _extract_short_name(self, name: str) -> tuple[str | None, str]:
         """Extract model and short name from a full name."""
         if "." in name:
             model, short = name.split(".", 1)
-            return model, short
+            return self._canonical_model(model), short
         return None, name
 
-    def get_atom_type(self, name: str) -> AtomType | None:
-        """Get atom type by full name (model.type) or short name."""
-        if name in self.atom:
-            return self.atom[name]
+    def canonical_key(self, name: str) -> str:
+        """Return `name` ("model.type") with the model spelled as loaded."""
+        model, short = self._extract_short_name(name)
+        return name if model is None else f"{model}.{short}"
 
-        _, short = self._extract_short_name(name)
+    def get_atom_type(self, name: str) -> AtomType | None:
+        """Get atom type by full name (model.type) or short name.
+
+        A full name only ever matches its own model: "SPC.ospc" used to fall
+        through to the first model defining an "ospc" (IFF-CVFF's), and
+        silently hand over its mass and charge.
+        """
+        model, short = self._extract_short_name(name)
+        if model is not None:
+            return self.atom.get(f"{model}.{short}")
+
         for full_key, params in self.atom.items():
             if full_key.endswith(f".{short}"):
                 return params
@@ -199,9 +225,9 @@ class ForceFieldDatabase:
         _, short2 = self._extract_short_name(type2)
 
         if model is None:
-            m1, _ = self._extract_short_name(type1)
-            if m1 is not None:
-                model = m1
+            model, _ = self._extract_short_name(type1)
+        else:
+            model = self._canonical_model(model)
 
         key = f"{short1}-{short2}"
         key_rev = f"{short2}-{short1}"
@@ -228,9 +254,9 @@ class ForceFieldDatabase:
         _, short3 = self._extract_short_name(type3)
 
         if model is None:
-            m1, _ = self._extract_short_name(type1)
-            if m1 is not None:
-                model = m1
+            model, _ = self._extract_short_name(type1)
+        else:
+            model = self._canonical_model(model)
 
         key = f"{short1}-{short2}-{short3}"
         key_rev = f"{short3}-{short2}-{short1}"
@@ -264,9 +290,9 @@ class ForceFieldDatabase:
         _, short4 = self._extract_short_name(type4)
 
         if model is None:
-            m1, _ = self._extract_short_name(type1)
-            if m1 is not None:
-                model = m1
+            model, _ = self._extract_short_name(type1)
+        else:
+            model = self._canonical_model(model)
 
         key = f"{short1}-{short2}-{short3}-{short4}"
         key_rev = f"{short4}-{short3}-{short2}-{short1}"
@@ -356,11 +382,11 @@ class ForceFieldDatabase:
 
     def get_model(self, name: str) -> ForceFieldModel | None:
         """Get model metadata by name."""
-        return self.models.get(name)
+        return self.models.get(self._canonical_model(name))
 
     def get_atom_types_for_model(self, model: str) -> list[str]:
         """Get all atom type names for a specific model."""
-        prefix = f"{model}."
+        prefix = f"{self._canonical_model(model)}."
         return [key for key in self.atom.keys() if key.startswith(prefix)]
 
     def clear(self) -> None:

@@ -101,6 +101,7 @@ Force Field
 
    AtomicSystem.set_masses
    AtomicSystem.set_charges
+   AtomicSystem.neutralize_charge
    AtomicSystem.set_ff_from_database
    AtomicSystem.explore_ff_database
    AtomicSystem.set_pair_params

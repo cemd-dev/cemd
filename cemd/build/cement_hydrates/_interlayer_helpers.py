@@ -24,8 +24,54 @@ import numpy as np
 
 from ...core._format import lattice2vectors
 from ...core.atomic_system import AtomicSystem
-from .._packmol import PackmolInput, PackmolStructure, get_structure_path, run_packmol
+from .._packmol import (
+    PackmolInput,
+    PackmolStructure,
+    get_structure_path,
+    run_packmol,
+    write_mda_pdb,
+)
 from ._silicate_helpers import grouped_average
+
+# Number density of bulk liquid water (1 g/cm^3, 18 g/mol), in molecules/A^3.
+# Below this density, Packmol's default tolerance (2.0 A) packs quickly. Above
+# it -- i.e. once an interlayer is asked to hold water denser than the bulk
+# liquid, as happens with nanoconfined water at high ws_ratio -- the same
+# tolerance describes a target that is barely (or no longer) geometrically
+# achievable in a thin slab, and Packmol's GENCAN optimizer can spend minutes
+# hunting for a packing that doesn't exist before giving up with the "ended
+# without a perfect packing" warning.
+_BULK_WATER_DENSITY = 0.03346  # molecules / A^3
+
+# Never relax below this: still far above typical bond lengths, so Packmol's
+# random start stays a safe input for the ReaxFF relaxation that follows.
+_MIN_PACKING_TOLERANCE = 1.5
+
+
+def _estimate_packing_tolerance(
+    n_molecules: int,
+    volume: float,
+    max_tolerance: float = 2.0,
+) -> float:
+    """Pick a Packmol tolerance from the target packing density.
+
+    Scales down linearly, past the bulk-water density, from
+    ``max_tolerance`` at bulk density to ``_MIN_PACKING_TOLERANCE`` once the
+    target is ~1.7x bulk density -- calibrated against CSH interlayer
+    packings, where a small reduction (2.0 -> 1.8 A) turns a multi-minute,
+    warning-prone packing into one that converges in seconds.
+    """
+    if n_molecules == 0 or volume <= 0:
+        return max_tolerance
+
+    density = n_molecules / volume
+    excess = density / _BULK_WATER_DENSITY - 1.0
+
+    if excess <= 0:
+        return max_tolerance
+
+    tolerance = max_tolerance - 1.0 * excess
+    return max(_MIN_PACKING_TOLERANCE, min(max_tolerance, tolerance))
 
 
 def _plane(vecp: np.ndarray, vecq: np.ndarray, vecr: np.ndarray) -> str:
@@ -119,7 +165,7 @@ def fill_csh_interlayers(
     ca_pdb = get_structure_path("ca", tmp_path) if nca_to_add != 0 else None
 
     current_pdb = tmp_path / "tmp0.pdb"
-    univ.write(str(current_pdb))
+    write_mda_pdb(univ, current_pdb)
 
     for i in range(nlayers):
         z_start, z_end, dist = interlayers_bounds[i]
@@ -164,9 +210,19 @@ def fill_csh_interlayers(
 
         next_pdb = tmp_path / f"tmp{i + 1}.pdb"
 
+        # Pick the tolerance from how dense this particular interlayer is
+        # asked to be. Nanoconfined layers (high ws_ratio, thin gap) can
+        # exceed bulk water density, at which point Packmol's default
+        # tolerance describes a packing that barely exists (or doesn't),
+        # and spends minutes searching before giving up -- see
+        # `_estimate_packing_tolerance`.
+        layer_volume = float(box[0]) * float(box[1]) * (dist - 3.0)
+        n_layer_molecules = int(nw_layers[i]) + int(nca_layers[i])
+        tolerance = _estimate_packing_tolerance(n_layer_molecules, layer_volume)
+
         # Construction of the Packmol configuration object
         packmol_input = PackmolInput(
-            tolerance=2.0,
+            tolerance=tolerance,
             output=str(next_pdb),
             structures=structures,
         )

@@ -15,7 +15,10 @@ import pytest
 
 from cemd import AtomicSystem
 from cemd.build import AFBuilder, CSHBuilder
-from cemd.build.cement_hydrates._silicate_helpers import calculate_csh_modifiers
+from cemd.build.cement_hydrates._silicate_helpers import (
+    calculate_csh_modifiers,
+    neutralize_csh_charge,
+)
 
 
 def _make_silicate_chain() -> AtomicSystem:
@@ -109,6 +112,18 @@ def test_analyze_matches_from_system_analysis():
     builder = CSHBuilder.from_system(system)
     result = builder.analyze()
     assert result == builder._analysis
+
+
+def test_analyze_silicates_raises_on_an_invalid_selection():
+    # A malformed selection used to be swallowed and turned into `None`,
+    # surfacing later as a misleading "types must be defined" error -- or,
+    # for the hydrogens, as silent zero ratios.
+    from MDAnalysis.exceptions import SelectionError
+
+    from cemd.analysis.silicates import analyze_silicates
+
+    with pytest.raises(SelectionError):
+        analyze_silicates(_make_silicate_chain(), types_map={"si_types": "Si and and"})
 
 
 def test_repr_includes_system_and_analysis():
@@ -251,3 +266,77 @@ def test_calculate_csh_modifiers_adds_no_calcium_below_the_vacancy_cap():
     # silicates alone, so H2O/Si comes back exactly as requested.
     _, n_ca_added, _ = calculate_csh_modifiers(240, 240, 1.2, 3.0)
     assert n_ca_added == 0
+
+
+# ---------------------------------------------------------------------------
+# neutralize_csh_charge
+# ---------------------------------------------------------------------------
+
+
+def _make_csh_like_system(n_si: int, n_ca: int, ws_ratio: float) -> AtomicSystem:
+    """A silica framework that is charge-neutral on its own (4*n_si ==
+    2*n_o), plus `n_ca` inserted Ca2+ and the water CSHBuilder.build would
+    add for them (`round(n_si * ws_ratio) + n_ca` molecules, one extra per
+    Ca2+). Water is named O1/H1/H2, like the real h2o.lt structure, not
+    bare O/H -- that distinction is exactly what the selection bug in
+    `neutralize_csh_charge` used to miss.
+    """
+    n_o_framework = 2 * n_si
+    n_water = round(n_si * ws_ratio) + n_ca
+
+    rows = [{"type": "Si", "charge": 0.0} for _ in range(n_si)]
+    rows += [{"type": "O", "charge": 0.0} for _ in range(n_o_framework)]
+    rows += [{"type": "Ca", "charge": 0.0} for _ in range(n_ca)]
+    for _ in range(n_water):
+        rows.append({"type": "O1", "charge": 0.0})
+        rows.append({"type": "H1", "charge": 0.0})
+        rows.append({"type": "H2", "charge": 0.0})
+
+    n = len(rows)
+    atoms = pd.DataFrame(rows, index=range(1, n + 1))
+    atoms["x"] = [float(i) for i in range(n)]
+    atoms["y"] = 0.0
+    atoms["z"] = 0.0
+
+    return AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [200.0, 200.0, 200.0, 90.0, 90.0, 90.0],
+            "masses": {
+                "Si": 28.085,
+                "O": 15.999,
+                "Ca": 40.078,
+                "O1": 15.999,
+                "H1": 1.008,
+                "H2": 1.008,
+            },
+            "charges": {},
+        }
+    )
+
+
+def test_neutralize_csh_charge_neutralizes_and_preserves_h2o_si(tmp_path):
+    # Regression test: `neutralize_csh_charge` used to select `name H` /
+    # `name O`, which matches nothing on h2o.lt's O1/H1/H2 water, so no
+    # hydrogen was stripped and the box came out charged. With the fixed
+    # element-based selection, the one extra water molecule added per
+    # inserted Ca2+ loses exactly the two hydrogens needed to neutralize
+    # that Ca2+, so the built system ends up both neutral and back at the
+    # requested H2O/Si.
+    n_si, n_ca, ws_ratio = 4, 2, 1.5
+    system = _make_csh_like_system(n_si, n_ca, ws_ratio)
+    pdb_path = tmp_path / "csh.pdb"
+    system.write(str(pdb_path))
+
+    neutralize_csh_charge(str(pdb_path))
+
+    result = AtomicSystem.from_file(str(pdb_path))
+    counts = result.atoms["type"].value_counts()
+    n_h = counts.get("H1", 0) + counts.get("H2", 0)
+    n_o = counts.get("O", 0) + counts.get("O1", 0)
+    n_si_out = counts.get("Si", 0)
+    n_ca_out = counts.get("Ca", 0)
+
+    total_charge = 2 * n_ca_out + n_h + 4 * n_si_out - 2 * n_o
+    assert total_charge == 0
+    assert (n_h / 2) / n_si_out == pytest.approx(ws_ratio)

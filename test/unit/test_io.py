@@ -42,6 +42,64 @@ def test_from_file_cif():
     assert set(system.atom_types) == {"C", "Ca", "O"}
 
 
+def _relabel_axes(structure, perm):
+    """Same crystal described with permuted axes (a sign flip keeps it right-handed)."""
+    from pymatgen.core import Lattice, Structure
+
+    matrix = structure.lattice.matrix[perm].copy()
+    frac = structure.frac_coords[:, perm].copy()
+    if np.linalg.det(matrix) < 0:
+        matrix[2] *= -1
+        frac[:, 2] *= -1
+    return Structure(Lattice(matrix), structure.species, frac)
+
+
+@pytest.mark.parametrize("angles", [(90, 90, 90), (80, 95, 100)])
+@pytest.mark.parametrize("perm", [[0, 2, 1], [2, 0, 1], [1, 2, 0]])
+def test_pmg_reader_reindex_preserves_crystal(monkeypatch, angles, perm):
+    from pymatgen.core import Lattice, Structure
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+    from cemd.core._io.formats.pmg import PMGReader
+
+    original = Structure(
+        Lattice.from_parameters(6.732, 7.369, 22.68, *angles),
+        ["Ca", "O", "O", "Si"],
+        [[0.1, 0.2, 0.3], [0.6, 0.1, 0.8], [0.3, 0.7, 0.2], [0.9, 0.5, 0.6]],
+    )
+    # Simulate a refinement that relabels the axes
+    refined = _relabel_axes(original, perm)
+    monkeypatch.setattr(
+        SpacegroupAnalyzer, "get_refined_structure", lambda self: refined
+    )
+
+    with pytest.warns(UserWarning, match="Axes reindexed"):
+        topology = PMGReader.read(original, refine=True)
+
+    # The long axis stays along c
+    assert topology["box"][2] == pytest.approx(22.68)
+
+    # Same crystal: periodic distances are unchanged
+    result = Structure(
+        Lattice.from_parameters(*topology["box"]),
+        topology["atoms"]["type"].tolist(),
+        topology["atoms"][["x", "y", "z"]].to_numpy(),
+        coords_are_cartesian=True,
+    )
+    assert np.allclose(
+        np.sort(result.distance_matrix, axis=None),
+        np.sort(original.distance_matrix, axis=None),
+    )
+
+    # Same handedness: the structure is rotated, not mirrored
+    def signed_volume(pos):
+        return np.linalg.det(pos[1:4] - pos[0])
+
+    assert signed_volume(topology["atoms"][["x", "y", "z"]].to_numpy()) == pytest.approx(
+        signed_volume(original.cart_coords)
+    )
+
+
 def test_from_file_sdf():
     system = AtomicSystem.from_file(DATA_DIR / "ho.sdf")
     assert system.num_atoms == 2

@@ -17,6 +17,7 @@
 
 from typing import Any
 
+from ..._constants import two_letter_element_from_type
 from ..forcefield_database import ForceFieldDatabase
 from ..models import (
     AtomType,
@@ -362,7 +363,7 @@ class CHARMMInterfaceParser(BaseForceFieldParser):
             except ValueError:
                 pass
 
-    def _guess_element(self, atom_type: str) -> str:
+    def _guess_element(self, atom_type: str, mass: float) -> str:
         """Guess the element from atom type name."""
         # CHARMM atom types
         elements = {
@@ -484,6 +485,19 @@ class CHARMMInterfaceParser(BaseForceFieldParser):
         }
 
         all_elements = {**elements, **interface_elements}
+
+        # A two-letter symbol whose known mass agrees with the parsed mass
+        # is the element: this reads "CL" as carbon (CHARMM's lipid tail
+        # carbon) or "NA+" as sodium correctly, deferring to the
+        # dictionaries above only when the mass doesn't back up that guess.
+        two_letter = two_letter_element_from_type(atom_type, mass)
+        if two_letter is not None:
+            return two_letter
+
+        # Some keys above, like "NA+" and "CA++", carry their +/- suffix;
+        # look those up before stripping it.
+        if atom_type in all_elements:
+            return all_elements[atom_type]
 
         # Remove + and - suffixes
         clean_type = atom_type.rstrip("+-")
@@ -648,6 +662,11 @@ class CHARMMInterfaceParser(BaseForceFieldParser):
             "DUM": 0.000,
         }
 
+        # Some keys above, like "NA+" and "CA++", carry their +/- suffix;
+        # look those up before stripping it.
+        if atom_type in masses:
+            return masses[atom_type]
+
         clean_type = atom_type.rstrip("+-")
         if clean_type in masses:
             return masses[clean_type]
@@ -671,8 +690,8 @@ class CHARMMInterfaceParser(BaseForceFieldParser):
             if atom_type in result.atoms:
                 continue
 
-            element = self._guess_element(atom_type)
             mass = self._guess_mass(atom_type)
+            element = self._guess_element(atom_type, mass)
 
             result.atoms[atom_type] = AtomType(
                 element=element,

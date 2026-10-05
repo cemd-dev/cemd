@@ -66,6 +66,40 @@ def test_split_removes_bond_crossing_the_gap():
     assert frozenset((3, 4)) in bond_pairs
 
 
+def test_bond_through_an_unrelated_periodic_boundary_survives_the_cut():
+    """A bond that wraps through the box's own periodic boundary -- common
+    in any packed/replicated system -- has nothing to do with the cut
+    plane elsewhere in the box. Measured as a raw Cartesian difference it
+    looks artificially long even before the split, and moving only one of
+    its two atoms then falsely reads as 'stretched by the cut'."""
+    atoms = pd.DataFrame(
+        {
+            "type": ["X", "X"],
+            "charge": [0.0, 0.0],
+            "x": [0.0, 0.0],
+            "y": [0.0, 0.0],
+            "z": [19.6, 0.6],  # true (minimum-image) separation: 1.0 A
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"X": 1.0},
+            "charges": {},
+        }
+    )
+    system.add_bond([1, 2])
+
+    # Cut at z=10 moves atom 1 (z=19.6 >= 10) but not atom 2 (z=0.6 < 10);
+    # neither atom is anywhere near the cut plane.
+    result = Splitter(system, coordinate=10.0, axis="z", gap_size=10.0).split()
+
+    assert result.bonds is not None
+    assert len(result.bonds) == 1
+
+
 def test_axis_accepts_string_or_int():
     a = Splitter(_make_chain_system(), coordinate=5.0, axis="z", gap_size=10.0)
     b = Splitter(_make_chain_system(), coordinate=5.0, axis=2, gap_size=10.0)
@@ -272,7 +306,7 @@ def test_scan_broken_bonds_separates_layers_from_interlayer():
 
     scan = splitter.scan_broken_bonds(step=1.0)
 
-    assert list(scan.columns) == ["coordinate", "n_broken"]
+    assert list(scan.columns) == ["coordinate", "n_broken", "n_ionic"]
     assert scan["n_broken"].max() == 3
     # The best cut sits in the interlayer, away from both silicate layers.
     best = scan.loc[scan["n_broken"] == 0, "coordinate"]
@@ -426,6 +460,43 @@ def test_repair_reports_what_it_did():
     assert splitter.repair_report == {"broken": 1, "capped": 3, "skipped": 0}
 
 
+def test_repair_resets_a_specifically_typed_dangling_oxygen_to_generic():
+    """An oxygen that already carries a specific force-field type (e.g.
+    'Osi', a non-bridging Si-OH oxygen) loses that type's meaning once the
+    cut removes its Si neighbor. `set_topology()` only ever revisits atoms
+    matching a literal 'type O' selection, so leaving the stale specific
+    type in place would make the atom permanently unreachable for
+    re-typing."""
+    atoms = pd.DataFrame(
+        {
+            "type": ["Si", "Osi"],
+            "charge": [1.5, -0.8],
+            "x": [0.0, 0.0],
+            "y": [0.0, 0.0],
+            "z": [0.4, 2.0],
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "Osi": 15.999},
+            "charges": {},
+        }
+    )
+    splitter = Splitter(
+        system, coordinate=1.0, axis="z", gap_size=10.0,
+        bonds_dict={("Si", "Osi"): 1.8},
+    )
+    result = splitter.split(repair=True)
+
+    # The dangling former-Osi (atom 2) is reset to generic "O"; the Si-side
+    # restored oxygen (atom 3) was already generic on creation.
+    assert result.atoms.loc[2, "type"] == "O"
+    assert result.atoms.loc[3, "type"] == "O"
+
+
 def test_repair_does_not_stack_atoms_on_a_shared_bridging_oxygen():
     """A bridging O that loses both its cations must not have each of them
     restore a copy of it at the very same site."""
@@ -461,3 +532,198 @@ def test_repair_does_not_stack_atoms_on_a_shared_bridging_oxygen():
     for i in range(len(positions)):
         for j in range(i + 1, len(positions)):
             assert np.linalg.norm(positions[i] - positions[j]) > 0.5
+
+
+# ---------------------------------------------------------------------------
+# keep_molecules: cut along the molecules, not along a plane
+# ---------------------------------------------------------------------------
+
+
+def test_keep_molecules_breaks_no_bond_where_a_plane_would():
+    system = _make_layered_system()
+    plane = Splitter(_make_layered_system(), coordinate=1.0, axis="z", gap_size=15.0)
+    assert plane.count_broken_bonds() == 3
+
+    splitter = Splitter(
+        system, coordinate=1.0, axis="z", gap_size=15.0, keep_molecules=True
+    )
+    assert splitter.count_broken_bonds() == 0
+
+    splitter.split()
+    assert splitter.split_report["bonds_broken"] == []
+    # Each Si-O pair moved as a whole: still 1.6 A apart
+    z = system.atoms["z"].to_numpy()
+    np.testing.assert_allclose(z[1:12:2] - z[0:12:2], 1.6, atol=1e-5)
+
+
+def test_keep_molecules_keeps_explicit_bonds_beyond_the_cutoffs():
+    # O-H at 1.15 A: longer than the default H-O cutoff, but bonded
+    atoms = pd.DataFrame(
+        {
+            "type": ["Ow", "Hw"],
+            "charge": [0.0, 0.0],
+            "x": [0.0, 0.0],
+            "y": [0.0, 0.0],
+            "z": [4.5, 5.65],
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [10.0, 10.0, 10.0, 90.0, 90.0, 90.0],
+            "masses": {"Ow": 15.999, "Hw": 1.008},
+            "charges": {},
+        }
+    )
+    system.add_bond([1, 2])
+
+    splitter = Splitter(system, coordinate=5.0, axis="z", gap_size=10.0)
+    assert splitter.count_broken_bonds() == 1
+
+    splitter = Splitter(
+        system, coordinate=5.0, axis="z", gap_size=10.0, keep_molecules=True
+    )
+    splitter.split()
+    assert system.num_bonds == 1
+    assert splitter.split_report["bonds_broken"] == []
+    assert splitter.split_report["explicit_bonds_removed"] == 0
+
+
+def test_keep_molecules_keeps_a_molecule_wrapped_through_the_boundary():
+    # Si at the top of the cell, its O through the boundary at the bottom,
+    # and a cut right next to the O: the pair must still move together.
+    atoms = pd.DataFrame(
+        {
+            "type": ["O", "Si"],
+            "charge": [0.0, 0.0],
+            "x": [0.0, 0.0],
+            "y": [0.0, 0.0],
+            "z": [0.8, 19.2],
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "O": 15.999},
+            "charges": {},
+        }
+    )
+    splitter = Splitter(
+        system, coordinate=0.5, axis="z", gap_size=10.0, keep_molecules=True
+    )
+    assert splitter.count_broken_bonds() == 0
+    splitter.split()
+    assert splitter.split_report["bonds_broken"] == []
+
+
+def test_keep_molecules_puts_a_cation_with_most_of_its_shell():
+    # Ca just above the cut, three O below it and one above
+    atoms = pd.DataFrame(
+        {
+            "type": ["Ca", "O", "O", "O", "O"],
+            "charge": [0.0] * 5,
+            "x": [5.0, 7.4, 2.6, 5.0, 5.0],
+            "y": [5.0, 5.0, 5.0, 7.4, 5.0],
+            "z": [5.2, 4.4, 4.4, 4.4, 7.6],
+        },
+        index=range(1, 6),
+    )
+    payload = {
+        "atoms": atoms,
+        "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+        "masses": {"Ca": 40.078, "O": 15.999},
+        "charges": {},
+    }
+
+    plane = Splitter(AtomicSystem(payload), coordinate=5.0, axis="z")
+    assert plane.count_broken_ionic() == 3
+
+    splitter = Splitter(
+        AtomicSystem(payload), coordinate=5.0, axis="z", keep_molecules=True
+    )
+    assert not splitter.side_mask()[0]  # Ca stays below, with its 3 O
+    assert splitter.count_broken_ionic() == 1
+
+
+def test_coordinate_none_cuts_through_an_interlayer():
+    system = _make_layered_system()
+    splitter = Splitter(system, axis="z", gap_size=15.0, keep_molecules=True)
+    splitter.split()
+
+    # Either interlayer will do (one runs through the z boundary), as long
+    # as the plane itself crosses no layer.
+    plane = Splitter(_make_layered_system(), coordinate=splitter.coordinate, axis="z")
+    assert plane.count_broken_bonds() == 0
+    assert splitter.split_report["bonds_broken"] == []
+
+
+def test_periodic_covalent_network_cannot_be_kept_whole():
+    # A Si-O chain running through the cell along z, closed on itself
+    zs = [0.0, 1.6, 3.2, 4.8]
+    atoms = pd.DataFrame(
+        {
+            "type": ["Si", "O", "Si", "O"],
+            "charge": [0.0] * 4,
+            "x": [0.0] * 4,
+            "y": [0.0] * 4,
+            "z": zs,
+        },
+        index=range(1, 5),
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [10.0, 10.0, 6.4, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "O": 15.999},
+            "charges": {},
+        }
+    )
+    splitter = Splitter(
+        system, coordinate=2.0, axis="z", gap_size=10.0, keep_molecules=True
+    )
+    with pytest.raises(ValueError, match="periodic"):
+        splitter.side_mask()
+
+
+@requires_packmol
+def test_solution_stays_clear_of_units_sticking_into_the_pore():
+    system = _make_layered_system()
+    # Cut between Si (z=12) and its O (z=13.6): the O stays with its Si,
+    # 1.6 A above the cut plane
+    splitter = Splitter(
+        system, coordinate=13.0, axis="z", gap_size=20.0, keep_molecules=True
+    ).add_solution(SolutionBuilder.from_water(density=1.0), padding=2.0)
+    result = splitter.split()
+
+    n_solid = 12 + 6
+    z = result.atoms["z"].to_numpy()
+    liquid = z[n_solid:]
+    assert liquid.min() >= 13.6 + 2.0 - 1e-6
+    assert splitter.split_report["bonds_broken"] == []
+
+
+def test_stretched_si_o_bond_counts_as_a_bond():
+    # Regression test: at 1.8 A, the default Si-O cutoff missed the
+    # stretched bonds of ReaxFF-relaxed C-S-H (up to ~2.0 A)
+    atoms = pd.DataFrame(
+        {
+            "type": ["Si", "O"],
+            "charge": [0.0, 0.0],
+            "x": [0.0, 0.0],
+            "y": [0.0, 0.0],
+            "z": [4.0, 5.9],
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "O": 15.999},
+            "charges": {},
+        }
+    )
+    assert Splitter(system, coordinate=5.0, axis="z").count_broken_bonds() == 1

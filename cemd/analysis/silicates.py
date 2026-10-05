@@ -90,24 +90,18 @@ def _process_analyze(source, si_types, o_types, al_types, ca_types, cutoff):
     def safe_select(types_str):
         if not types_str.strip():
             return None
-        try:
-            return source.select_atoms(f"type {types_str}")
-        except:
-            return None
+        return source.select_atoms(f"type {types_str}")
 
     sel_si = safe_select(si_types)
     sel_o = safe_select(o_types)
     sel_al = safe_select(al_types)
     sel_ca = safe_select(ca_types)
 
-    try:
-        # "H*h*" only ever matched types carrying a second, lowercase "h"
-        # (i.e. "Hh"), so the water hydrogens -- "H" straight from a build,
-        # "Hw" after the ClayFF/CSHFF rules -- were skipped and the H2O
-        # ratios below came out as 0. Count every hydrogen-named type.
-        sel_h = source.select_atoms("type H*")
-    except:
-        sel_h = None
+    # "H*h*" only ever matched types carrying a second, lowercase "h"
+    # (i.e. "Hh"), so the water hydrogens -- "H" straight from a build,
+    # "Hw" after the ClayFF/CSHFF rules -- were skipped and the H2O
+    # ratios below came out as 0. Count every hydrogen-named type.
+    sel_h = source.select_atoms("type H*")
 
     if sel_si is None or sel_o is None:
         raise ValueError(
@@ -117,7 +111,7 @@ def _process_analyze(source, si_types, o_types, al_types, ca_types, cutoff):
     n_si = len(sel_si)
     n_al = len(sel_al) if sel_al is not None else 0
     n_ca = len(sel_ca) if sel_ca is not None else 0
-    n_h = len(sel_h) if sel_h is not None else 0
+    n_h = len(sel_h)
 
     # Calculation of chemical stoichiometric ratios
     denom = n_si + n_al

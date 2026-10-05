@@ -45,7 +45,7 @@ The interactive explorer allows you to browse and select force field parameters 
    o_silica_silanol     iff             | oxygen atom in silica (silanol)
    ogp                  sperinck        | geopolymer/metakaolin
    owgp                 sperinck        | fw/spc water for geopolymer/metakaolin
-   o_star               clayff          | water oxygen
+   o*                   clayff          | water oxygen
  ➜ ob                   clayff          | bridging oxygen in csh
    obos                 clayff          | bridging oxygen with octahedral substitution
    obss                 clayff          | bridging oxygen with double substitution
@@ -93,17 +93,17 @@ You can mix parameters from different force field models:
 
 .. code-block:: python
 
-   # Mix ClayFF and SPC parameters. Model names are case-sensitive as
-   # loaded (check with ForceFieldDatabase().get_model_names()) --
-   # "clayff.o_star" would *not* raise an error, it would silently fall
-   # back to an arbitrary model that also defines an "o_star" type.
+   # Mix ClayFF and SPC parameters. A model is named after its file
+   # (ForceFieldDatabase().get_model_names() lists them), in any case:
+   # "ClayFF.st" and "clayff.st" are the same entry. A type the model does
+   # not define is reported and skipped, never looked up in another model.
    assignments = {
-       'O': 'ClayFF.o_star',     # Water oxygen from ClayFF
-       'H': 'ClayFF.h*',     # Water hydrogen from ClayFF
-       'Si': 'ClayFF.st',        # Silicon from ClayFF
-       'Ca': 'ClayFF.ca',        # Calcium from ClayFF
-       'Ow': 'SPC.ospc',         # Water oxygen from SPC
-       'Hw': 'SPC.hspc',         # Water hydrogen from SPC
+       'O': 'clayff.o*',         # Water oxygen from ClayFF
+       'H': 'clayff.h*',         # Water hydrogen from ClayFF
+       'Si': 'clayff.st',        # Silicon from ClayFF
+       'Ca': 'clayff.ca',        # Calcium from ClayFF
+       'Ow': 'spc.ospc',         # Water oxygen from SPC
+       'Hw': 'spc.hspc',         # Water hydrogen from SPC
    }
 
    system.set_ff_from_database(assignments)
@@ -207,12 +207,12 @@ For a more complex example with cementitious materials:
 
    # Assign CSHFF2014 parameters
    assignments = {
-       'Si': 'CSHFF2014.si_cshff2014',    # Silicon in C-S-H
-       'O': 'CSHFF2014.o_cshff2014',      # Oxygen in C-S-H
-       'Ca': 'CSHFF2014.ca_cshff2014',    # Calcium in C-S-H
-       'H': 'CSHFF2014.h_cshff2014',      # Hydrogen in C-S-H
-       'Ow': 'CSHFF2014.ow_cshff2014',    # Water oxygen in C-S-H
-       'Hw': 'CSHFF2014.hw_cshff2014',    # Water hydrogen in C-S-H
+       'Si': 'cshff2014.si',              # Silicon in C-S-H
+       'O': 'cshff2014.o',                # Oxygen in C-S-H
+       'Ca': 'cshff2014.ca',              # Calcium in C-S-H
+       'H': 'cshff2014.h',                # Hydrogen in C-S-H
+       'Ow': 'cshff2014.ow',              # Water oxygen in C-S-H
+       'Hw': 'cshff2014.hw',              # Water hydrogen in C-S-H
    }
 
    system.set_ff_from_database(assignments)

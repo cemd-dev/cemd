@@ -28,6 +28,10 @@ from ..forcefield.forcefield_database import ForceFieldDatabase
 from ..forcefield.models import LJParams
 from ._format import canonical_ff_type
 
+# Below this absolute total charge, a system is considered charge-neutral;
+# above it, set_charges/set_ff_from_database warn about the residual charge.
+_CHARGE_NEUTRALITY_TOL = 1e-6
+
 
 class ForceFieldMixin:
     """Mixin for force field operations on AtomicSystem."""
@@ -95,6 +99,26 @@ class ForceFieldMixin:
             db,
         )
 
+        # A connectivity key set earlier (e.g. the GROMOS water packed by
+        # `SolutionBuilder`) would otherwise outlive the re-typing of its
+        # atoms and keep supplying the old model's parameters: drop it, so
+        # that it is derived again from the new atom keys.
+        if overwrite and resolved_atom_assignments:
+            explicit = {
+                "bond": bond_assignments,
+                "angle": angle_assignments,
+                "dihedral": dihedral_assignments,
+                "improper": improper_assignments,
+            }
+            for kind, assigned in explicit.items():
+                keys = getattr(self._ff_keys, kind)
+                for topo_str in list(keys):
+                    members = [t.strip() for t in topo_str.split("-")]
+                    if topo_str not in assigned and any(
+                        m in resolved_atom_assignments for m in members
+                    ):
+                        del keys[topo_str]
+
         self.set_ff_keys(
             atom=resolved_atom_assignments,
             bond=bond_assignments,
@@ -125,6 +149,7 @@ class ForceFieldMixin:
             overwrite,
             types_attr="angle_types",
             ff_keys_attr="angle",
+            optional=True,
         )
         self._set_topology_params_from_db(
             "bondangle",
@@ -133,6 +158,7 @@ class ForceFieldMixin:
             overwrite,
             types_attr="angle_types",
             ff_keys_attr="angle",
+            optional=True,
         )
         self._set_topology_params_from_db(
             "angleangletorsion",
@@ -141,6 +167,7 @@ class ForceFieldMixin:
             overwrite,
             types_attr="dihedral_types",
             ff_keys_attr="dihedral",
+            optional=True,
         )
         self._set_topology_params_from_db(
             "angleangle",
@@ -149,6 +176,7 @@ class ForceFieldMixin:
             overwrite,
             types_attr="improper_types",
             ff_keys_attr="improper",
+            optional=True,
         )
 
     def set_atom_ff_keys(self, value: Sequence[str] | dict[str | int, str]) -> None:
@@ -378,6 +406,77 @@ class ForceFieldMixin:
         """Set or update the charges for the atomic system and the atoms DataFrame."""
         self._apply_property_mapping("charge", value, self._charges)
 
+    def neutralize_charge(
+        self,
+        atom_types: dict[str, float] | None = None,
+        tol: float = 1e-8,
+    ) -> None:
+        """Neutralize the system by spreading its excess charge over atom types.
+
+        The current :attr:`total_charge` is subtracted back into the
+        system as a per-atom offset, split across the given atom types.
+        The offset for a type is added to every atom of that type, so any
+        charge variation between individual atoms of the same type (e.g.
+        per-atom ReaxFF/EEM charges) is preserved rather than overwritten.
+
+        Parameters
+        ----------
+        atom_types
+            Mapping from atom type to a relative *per-atom* weight: every
+            atom of type ``t`` receives the offset
+            ``-excess * w_t / sum(w_i * n_i)``, where ``n_i`` is the number
+            of atoms of type ``i``. Equal weights therefore give the same
+            offset to every atom of the listed types, whatever their
+            number (only the ratio between weights matters, they need not
+            sum to 1). Types absent from the mapping are left untouched.
+            If omitted, the excess is divided uniformly over every atom in
+            the system.
+        tol
+            Below this absolute total charge, the system is already
+            considered neutral and nothing is done.
+        """
+        if "charge" not in self.atoms:
+            return
+
+        excess = self.total_charge
+        if abs(excess) <= tol:
+            return
+
+        counts = self.atoms["type"].value_counts()
+
+        if atom_types is None:
+            weights = {t: 1.0 for t in self.atom_types}
+        else:
+            unknown_types = [t for t in atom_types if t not in self.atom_types]
+            if unknown_types:
+                warnings.warn(
+                    f"Weight given for atom types not present in the system: "
+                    f"{unknown_types}",
+                    UserWarning,
+                )
+            weights = {t: w for t, w in atom_types.items() if t in self.atom_types}
+
+        # per-atom weights: the normalization runs over atoms, not types
+        total_weight = sum(
+            w * counts.get(t, 0) for t, w in weights.items() if w > 0
+        )
+        if total_weight <= 0:
+            raise ValueError(
+                "Cannot neutralize charge: no atom type available to absorb "
+                "the excess charge (empty system, or all weights are zero)."
+            )
+
+        for atom_type, weight in weights.items():
+            if weight <= 0:
+                continue
+            n_atoms_type = counts.get(atom_type, 0)
+            if n_atoms_type == 0:
+                continue
+            delta = -excess * weight / total_weight
+            type_mask = self.atoms["type"] == atom_type
+            self.atoms.loc[type_mask, "charge"] += delta
+            self._charges[atom_type] = self._charges.get(atom_type, 0.0) + delta
+
     def set_pair_params(
         self,
         atom_type1: str | int,
@@ -560,6 +659,15 @@ class ForceFieldMixin:
                     UserWarning,
                 )
 
+            total_charge = float(self.atoms["charge"].sum())
+            if abs(total_charge) > _CHARGE_NEUTRALITY_TOL:
+                warnings.warn(
+                    f"System is not charge-neutral: total charge = "
+                    f"{total_charge:.6g} e. Use 'neutralize_charge' to "
+                    "redistribute the excess.",
+                    UserWarning,
+                )
+
     def _apply_topology_ff_keys(
         self, kind: str, value: Sequence[str] | dict[str, str]
     ) -> None:
@@ -701,6 +809,7 @@ class ForceFieldMixin:
         overwrite: bool,
         types_attr: str | None = None,
         ff_keys_attr: str | None = None,
+        optional: bool = False,
     ) -> None:
         """Generic method to retrieve topology parameters (bonds, angles, etc.) from the DB.
 
@@ -713,6 +822,14 @@ class ForceFieldMixin:
             no connectivity or ff-key category of their own: they apply to
             an existing angle/dihedral/improper, so they reuse that
             category's type list and ff-key assignments instead.
+        optional
+            Class2 cross terms only exist for class2 force fields (e.g.
+            COMPASS); class1 force fields such as clayff never define
+            bondbond/bondangle/etc. entries at all. When True, a missing
+            entry is only reported if the assigned model defines *some*
+            entries for this category -- meaning it is a class2 force
+            field with a genuine gap -- rather than for every model that
+            simply doesn't use cross terms.
         """
         missing_items = []
 
@@ -722,15 +839,28 @@ class ForceFieldMixin:
         db_get_method = getattr(db, f"get_{topo_type}", None)
         params_storage = getattr(self._ff_params, topo_type)
 
+        # Models that actually define at least one entry for this category,
+        # used by `optional` below to tell "this model has no such terms at
+        # all" (nothing to warn about) from "this model has some, but not
+        # this particular one" (a genuine gap).
+        db_attr_models = {key.split(".", 1)[0] for key in db_attr} if db_attr else set()
+
         for topo_str in types_list:
             params = None
+            attempted_models = set()
 
             ff_key = ff_keys_dict.get(topo_str)
-            if ff_key and db_attr:
-                params = db_attr.get(ff_key)
+            if ff_key:
+                ff_key = db.canonical_key(ff_key)
+                attempted_models.add(ff_key.split(".", 1)[0])
+                if db_attr:
+                    params = db_attr.get(ff_key)
 
             if params is None and topo_str in assignments:
                 target_key = assignments[topo_str]
+                if target_key:
+                    target_key = db.canonical_key(target_key)
+                    attempted_models.add(target_key.split(".", 1)[0])
                 if db_attr:
                     params = db_attr.get(target_key)
 
@@ -739,23 +869,26 @@ class ForceFieldMixin:
                 ff_types = [self._get_ff_key_for_type(e) for e in elements]
 
                 if all(ff_types):
+                    attempted_models.update(ft.split(".", 1)[0] for ft in ff_types)
                     params = db_get_method(*ff_types)
 
             if params is not None:
                 if topo_str not in params_storage or overwrite:
                     params_storage[topo_str] = params
+            elif optional and attempted_models and not (
+                attempted_models & db_attr_models
+            ):
+                # None of the models involved define any entry at all for
+                # this cross-term category (a class1 force field), so there
+                # is nothing to warn about -- it was never expected to
+                # provide one.
+                continue
             else:
                 missing_items.append(topo_str)
 
         if missing_items:
-            fr_names = {
-                "bond": "liaisons",
-                "angle": "d'angles",
-                "dihedral": "de dièdres",
-                "improper": "impropres",
-            }
             warnings.warn(
-                f"Parameters {fr_names.get(topo_type, topo_type)} not found for: {missing_items}",
+                f"{topo_type.capitalize()} parameters not found for: {missing_items}",
                 category=UserWarning,
                 stacklevel=2,
             )
@@ -767,7 +900,17 @@ class ForceFieldMixin:
         resolved = {}
         for sys_type, db_type in assignments.items():
             if "." in db_type:
-                resolved[sys_type] = db_type
+                # "SPC.ospc" -> "spc.ospc": every later lookup (pair, bond,
+                # angle...) takes its model from this key.
+                full_type = db.canonical_key(db_type)
+                if full_type not in db.atom:
+                    warnings.warn(
+                        f"Atom type '{db_type}' not found in database.",
+                        category=UserWarning,
+                        stacklevel=3,
+                    )
+                    continue
+                resolved[sys_type] = full_type
             else:
                 found = next(
                     (
@@ -823,7 +966,7 @@ class ForceFieldMixin:
 
         if missing_types:
             warnings.warn(
-                f"Types introuvables pour les masses/charges : {missing_types}",
+                f"Mass and charge not found for: {missing_types}",
                 category=UserWarning,
                 stacklevel=2,
             )

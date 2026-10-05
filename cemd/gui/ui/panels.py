@@ -205,6 +205,10 @@ class FilterPanel(BaseManagerPanel):
         Reconstructs the content from the AtomicSystem (data) object.
         Adds atom count by type.
         """
+        # Remember which types were hidden so a rebuild (undo, a type/bond
+        # edit, ...) does not silently bring every hidden type back.
+        previous_visibility = {k: cb.isChecked() for k, cb in self.checkboxes.items()}
+
         # Clean up the legacy layout
         count_removed = 0
         while self.list_layout.count():
@@ -236,7 +240,7 @@ class FilterPanel(BaseManagerPanel):
 
             # Checkbox (Tight left) ---
             cb = QtWidgets.QCheckBox(atype_str)
-            cb.setChecked(True)
+            cb.setChecked(previous_visibility.get(atype_str, True))
             cb.stateChanged.connect(self._emit_everything)
             # Prevent the checkbox from taking up the full width
             cb.setSizePolicy(

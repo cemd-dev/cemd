@@ -26,6 +26,7 @@ from MDAnalysis.lib.distances import capped_distance
 from tqdm import tqdm
 
 from ..core.atomic_system import AtomicSystem
+from .util import require_box
 
 # __all__ = ['compute_rdf']
 
@@ -100,12 +101,13 @@ def _(
     nframes = 0
     volumes = []
 
-    for ts in tqdm(source.trajectory[::skip], desc="Calcul de la RDF"):
+    for ts in tqdm(source.trajectory[::skip], desc="RDF"):
         nframes += 1
+        box = require_box(ts, "compute_rdf")
         volumes.append(ts.volume)
 
         _, dists = capped_distance(
-            sel1.positions, sel2.positions, max_cutoff=cutoff, box=ts.dimensions
+            sel1.positions, sel2.positions, max_cutoff=cutoff, box=box
         )
         dists = dists[dists > 0.01]
 

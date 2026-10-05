@@ -617,8 +617,13 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
 
         Call this *before* mutating a system, from every handler that
         changes one in place: replicating, protonating, orthogonalizing,
-        adding a liquid, splitting. Operations that open a new tab leave
-        the original untouched and need no snapshot.
+        adding a liquid, splitting, and the type and connectivity
+        managers. Operations that open a new tab leave the original
+        untouched and need no snapshot.
+
+        The tab's force-field choices (`session_ff_dict`) are kept with
+        the system: they live on the tab, not in the system, and the
+        type manager rewrites both.
         """
         tab = self.tabs.currentWidget()
         if tab is None or getattr(tab, "system", None) is None:
@@ -628,9 +633,17 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         if stack is None:
             stack = tab.undo_stack = []
 
-        stack.append(tab.system.copy())
+        stack.append((tab.system.copy(), dict(getattr(tab, "session_ff_dict", {}))))
         # Keep only the last UNDO_DEPTH snapshots.
         del stack[: -self.UNDO_DEPTH]
+        self.refresh_undo_state()
+
+    def discard_undo(self) -> None:
+        """Drop the snapshot `push_undo` just took, for an edit that failed."""
+        tab = self.tabs.currentWidget()
+        stack = getattr(tab, "undo_stack", None) if tab else None
+        if stack:
+            stack.pop()
         self.refresh_undo_state()
 
     @QtCore.Slot()
@@ -643,7 +656,8 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             self.statusBar().showMessage("Nothing to undo.", 3000)
             return
 
-        tab.system = stack.pop()
+        tab.system, session_ff = stack.pop()
+        tab.session_ff_dict = session_ff
         self.sync_ui(full_rebuild=True)
         self.statusBar().showMessage("Undone.", 3000)
         self.refresh_undo_state()
@@ -1038,6 +1052,35 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         line_edit.editingFinished.connect(save_name)
 
 
+class _TooltipColorFixer(QtCore.QObject):
+    """Give each tooltip the theme's colors as it appears.
+
+    Qlementine paints the tooltip background with its dark theme color,
+    but Qt keeps resetting the tooltip palette to the system default --
+    black text -- after startup, so ``QToolTip.setPalette`` does not
+    stick. Setting the palette on the label itself when it is shown is
+    the only point that wins.
+    """
+
+    def __init__(self, style: QlementineStyle) -> None:
+        super().__init__(style)
+        self._style = style
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if (
+            event.type() == QtCore.QEvent.Type.Show
+            and obj.metaObject().className() == "QTipLabel"
+        ):
+            theme = self._style.theme()
+            palette = obj.palette()
+            palette.setColor(QtGui.QPalette.ColorRole.ToolTipBase, theme.secondaryColor)
+            palette.setColor(
+                QtGui.QPalette.ColorRole.ToolTipText, theme.secondaryColorForeground
+            )
+            obj.setPalette(palette)
+        return False
+
+
 def main() -> int:
     """Launch the graphical interface.
 
@@ -1048,6 +1091,7 @@ def main() -> int:
 
     style = QlementineStyle(app)
     app.setStyle(style)
+    app.installEventFilter(_TooltipColorFixer(style))
 
     # Force dot as decimal separator
     qt_locale = QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates)

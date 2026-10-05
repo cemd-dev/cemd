@@ -166,20 +166,26 @@ class IOMixin:
     # Write methods
     # ========================================================================
 
-    def write(
-        self, path: str | Path, atom_style: str = "full", oldstyle: bool = False
-    ) -> None:
+    def write(self, path: str | Path, **kwargs) -> None:
         """
         Write the system to a file.
+
+        The format is chosen from the file extension, and ``**kwargs`` go
+        straight to the matching writer, as :meth:`from_file` does for
+        readers. An argument the writer does not know raises a
+        ``TypeError``.
 
         Parameters
         ----------
         path : str or Path
-            Path to the output file (supports .data, .pdb, etc.)
-        atom_style : str, default='full'
-            LAMMPS atom style.
-        oldstyle : bool, default=False
-            Use old style formatting if applicable.
+            Path to the output file (supports .data, .lmp, .pdb).
+        **kwargs
+            Additional arguments passed to the specific writer:
+
+            - For LAMMPS data files: ``atom_style`` (str, default
+              ``"full"``); ``oldstyle`` (bool, default ``False``) to write
+              numeric IDs instead of text labels, as VMD/topotools expect.
+            - For PDB files: no additional argument.
         """
         file_path = Path(path)
 
@@ -187,13 +193,14 @@ class IOMixin:
 
         writers = {
             ".data": self._write_lammps_data,
+            ".lmp": self._write_lammps_data,
             ".pdb": self._write_pdb,
         }
 
         if ext not in writers:
             raise ValueError(f"Unsupported output format: {ext}")
 
-        writers[ext](str(file_path), atom_style=atom_style, oldstyle=oldstyle)
+        writers[ext](str(file_path), **kwargs)
 
     # ========================================================================
     # Converters
@@ -328,7 +335,7 @@ class IOMixin:
 
         LAMMPSWriter.write(self, path, atom_style=atom_style, oldstyle=oldstyle)
 
-    def _write_pdb(self, path: str, **kwargs) -> None:
+    def _write_pdb(self, path: str) -> None:
         """Write to PDB file."""
         from .formats.pdb import PDBWriter
 

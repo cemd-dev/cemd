@@ -53,6 +53,13 @@ def test_copy_is_independent(water_system):
     assert clone.num_atoms == water_system.num_atoms + 1
 
 
+def test_copy_carries_the_box(water_system):
+    # Regression test: `copy()` set `_box_lmp` only, so `.box` raised.
+    clone = water_system.copy()
+    np.testing.assert_allclose(clone.box, water_system.box)
+    assert clone.volume == pytest.approx(water_system.volume)
+
+
 # ---------------------------------------------------------------------------
 # Properties: atoms/bonds/.../velocities getters and setters
 # ---------------------------------------------------------------------------
@@ -312,12 +319,13 @@ def test_total_charge_still_follows_set_charges():
 
 def test_elements_skips_a_mass_matching_nothing():
     # Regression test: the element was taken as the nearest mass in the
-    # table, however far away. The table stops at barium, so platinum
+    # table, however far away. The table once stopped at barium, so platinum
     # (195.08) came back as barium (137.33) -- a 58 amu error, reported
-    # with no warning at all.
+    # with no warning at all. Curium is still absent from the table (its
+    # radioactive masses are ambiguous), so it stands in for "unknown".
     atoms = pd.DataFrame(
         {
-            "type": ["O", "Pt"],
+            "type": ["O", "Cm"],
             "charge": [0.0, 0.0],
             "x": [0.0, 3.0],
             "y": [0.0, 0.0],
@@ -329,7 +337,7 @@ def test_elements_skips_a_mass_matching_nothing():
         {
             "atoms": atoms,
             "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
-            "masses": {"O": 15.9994, "Pt": 195.084},
+            "masses": {"O": 15.9994, "Cm": 247.0},
             "charges": {},
         }
     )
@@ -338,7 +346,38 @@ def test_elements_skips_a_mass_matching_nothing():
         elements = dict(system.elements)
 
     assert elements == {"O": "O"}
-    assert "Pt" not in elements
+    assert "Cm" not in elements
+
+
+def test_elements_resolves_elements_heavier_than_barium():
+    atoms = pd.DataFrame(
+        {
+            "type": ["Pt", "Pb", "U"],
+            "charge": [0.0, 0.0, 0.0],
+            "x": [0.0, 3.0, 6.0],
+            "y": [0.0, 0.0, 0.0],
+            "z": [0.0, 0.0, 0.0],
+        },
+        index=[1, 2, 3],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"Pt": 195.084, "Pb": 207.2, "U": 238.02891},
+            "charges": {},
+        }
+    )
+
+    assert dict(system.elements) == {"Pt": "Pt", "Pb": "Pb", "U": "U"}
+
+
+def test_mass_table_has_no_duplicate_masses():
+    # `INV_MASSES` maps a mass back to one element; two elements sharing a
+    # mass would silently drop one of them from `elements`.
+    from cemd._constants import INV_MASSES, MASSES_DICT
+
+    assert len(INV_MASSES) == len(MASSES_DICT)
 
 
 def test_elements_still_resolves_ordinary_types():

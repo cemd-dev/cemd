@@ -997,7 +997,11 @@ class LAMMPSWriter(BaseWriter):
 
         if atom_style == "full":
             df.insert(0, "molecule", np.ones(len(df), dtype=int))
-        f.write(df.to_string(header=False, index_names=False))
+        # to_string rounds floats to 6 digits by default: with thousands of
+        # atoms sharing the same fractional charge (e.g. after
+        # neutralize_charge), the rounding error adds up to ~1e-3 e
+        formatters = {"charge": lambda q: f"{q:.10f}"} if "charge" in df else None
+        f.write(df.to_string(header=False, index_names=False, formatters=formatters))
         f.write("\n")
 
     @staticmethod

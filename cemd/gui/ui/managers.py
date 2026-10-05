@@ -230,6 +230,7 @@ class TypeManagerDialog(BaseBuilderDialog):
             self.on_ff_changed(item.row())
 
     def reset_via_masses(self) -> None:
+        self.parent().push_undo()
         self.system_obj.set_types_from_elements()
         self.fill_table()
 
@@ -277,6 +278,17 @@ class TypeManagerDialog(BaseBuilderDialog):
                         color_map[new_name] = color_map[original_id]
                     if original_id in radius_map:
                         radius_map[new_name] = radius_map[original_id]
+
+        # Apply and Accept All both land here; only snapshot when the table
+        # differs from the system, so a second click does not eat a slot of
+        # the undo history.
+        system = self.system_obj
+        if (
+            any(temp_names[t] != t for t in temp_names)
+            or any(temp_charges[t] != system.charges[t] for t in temp_charges)
+            or new_session_map != self.session_ff_dict
+        ):
+            self.parent().push_undo()
 
         # `set_types`/`set_charges` take a {old_value: new_value} mapping,
         # not a bare list of new values -- `temp_names`/`temp_charges` are
@@ -508,6 +520,7 @@ class TypeManagerDialog(BaseBuilderDialog):
             else:
                 new_charges[atype] = current_q
 
+        self.parent().push_undo()
         system.set_charges(new_charges)
 
 
@@ -746,18 +759,11 @@ class ConnectivityDialog(BaseBuilderDialog):
             self, "Confirmation", f"Delete all {category} of type '{type_id}' ?"
         )
         if confirm == QtWidgets.QMessageBox.Yes:
+            self.parent().push_undo()
             if category == "Bonds":
                 self.system_obj.remove_connection_types(bond_types=[type_id])
             elif category == "Angles":
                 self.system_obj.remove_connection_types(angle_types=[type_id])
-        main_win = self.parent()
-        main_win.sync_ui()
-
-    def delete_by_id(self, category: str, index: int) -> None:
-        if category == "Bonds":
-            self.system_obj.remove_bond(index)
-        elif category == "Angles":
-            self.system_obj.remove_angle(index)
         main_win = self.parent()
         main_win.sync_ui()
 
@@ -769,7 +775,13 @@ class ConnectivityDialog(BaseBuilderDialog):
             new_rule = dialog.get_rule()
             try:
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-                self.system_obj.set_topology(new_rule)
+                main_win = self.parent()
+                main_win.push_undo()
+                try:
+                    self.system_obj.set_topology(new_rule)
+                except Exception:
+                    main_win.discard_undo()
+                    raise
                 print(new_rule)
                 self.setup_ui()
                 main_win = self.parent()
@@ -850,7 +862,7 @@ class ConnectivityDialog(BaseBuilderDialog):
                         r0 = params["details"].split("|")[1].split(":")[1].strip()
                         lines.append(f"bond_coeff {b_type} {k} {r0}  # Harmonic")
                         count += 1
-                    except:
+                    except (IndexError, KeyError, TypeError):
                         lines.append(f"# Error parsing bond type {b_type}")
 
         if self.system_obj.angles is not None and not self.system_obj.angles.empty:
@@ -865,7 +877,7 @@ class ConnectivityDialog(BaseBuilderDialog):
                         t0 = params["details"].split("|")[1].split(":")[1].strip()
                         lines.append(f"angle_coeff {a_type} {k} {t0}  # Harmonic")
                         count += 1
-                    except:
+                    except (IndexError, KeyError, TypeError):
                         lines.append(f"# Error parsing angle type {a_type}")
 
         full_text = "\n".join(lines)

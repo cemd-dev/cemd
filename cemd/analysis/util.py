@@ -23,8 +23,49 @@ from collections.abc import Sequence
 import MDAnalysis as mda
 import numpy as np
 import pandas as pd
-from MDAnalysis import transformations
+from MDAnalysis.lib.distances import minimize_vectors, transform_RtoS, transform_StoR
 from tqdm import tqdm
+
+
+def require_box(source, caller: str) -> np.ndarray:
+    """Return the periodic box of a universe or timestep, or say it is missing.
+
+    MDAnalysis reports ``dimensions`` as ``None`` for a trajectory that
+    carries no cell (some readers report zeros instead). Analyses that wrap
+    positions or divide by the cell volume cannot proceed without it, and
+    would otherwise fail on ``TypeError: 'NoneType' object is not
+    subscriptable`` -- or, for the RDF, quietly return ``inf``.
+
+    Parameters
+    ----------
+    source : mda.Universe or Timestep
+        Anything exposing ``dimensions``.
+    caller : str
+        Name of the analysis, quoted in the error message.
+
+    Returns
+    -------
+    np.ndarray
+        ``[lx, ly, lz, alpha, beta, gamma]``.
+
+    Raises
+    ------
+    ValueError
+        If the box is missing, non-finite or has a non-positive length.
+    """
+    dimensions = source.dimensions
+    if (
+        dimensions is None
+        or not np.all(np.isfinite(dimensions))
+        or np.any(np.asarray(dimensions)[:3] <= 0)
+    ):
+        raise ValueError(
+            f"{caller} needs the periodic box, but this trajectory carries "
+            "none. Set it with `universe.dimensions = [lx, ly, lz, 90, 90, 90]` "
+            "(for every frame of an in-memory trajectory) or load a file that "
+            "stores the cell."
+        )
+    return np.asarray(dimensions)
 
 
 def write_dcd(
@@ -82,10 +123,53 @@ def write_dcd(
     print("DCD trajectory written successfully!")
 
 
+def _whole_center_of_mass(group: mda.AtomGroup, box: np.ndarray) -> np.ndarray:
+    """Centre of mass of a group made whole across the periodic boundaries.
+
+    Along each cell vector, the group is cut through the widest band it
+    leaves empty -- the pore, for a slab -- rather than at the box edge, so
+    a group straddling the boundary is averaged in one piece.
+    """
+    frac = transform_RtoS(group.positions, box) % 1.0
+    for axis in range(3):
+        values = frac[:, axis]
+        ordered = np.sort(values)
+        gaps = np.diff(ordered)
+        # The band across the boundary, from the last atom back to the first.
+        wrap_gap = ordered[0] + 1.0 - ordered[-1]
+        if len(gaps) and gaps.max() > wrap_gap:
+            cut = ordered[gaps.argmax()]
+            values[values <= cut] += 1.0
+    positions = transform_StoR(frac.astype(np.float32), box)
+    return np.average(positions, axis=0, weights=group.masses)
+
+
+def _com_trajectory(group: mda.AtomGroup, unwrap: bool, caller: str):
+    """Yield the centre of mass of `group` at every frame of its trajectory.
+
+    With `unwrap`, each centre is the periodic image closest to the
+    previous one, so that it never jumps by a box length between frames.
+    """
+    previous = None
+    for ts in tqdm(group.universe.trajectory):
+        if not unwrap:
+            yield group.center_of_mass()
+            continue
+        box = require_box(ts, caller)
+        current = _whole_center_of_mass(group, box)
+        if previous is not None:
+            current = previous + minimize_vectors(
+                (current - previous)[None].astype(np.float32), box
+            )[0]
+        previous = current
+        yield current
+
+
 def shift2com(
     universe: mda.Universe,
     atom_types: list[str | int],
     output_trajectory: str = "recentered_traj.dcd",
+    unwrap: bool = False,
 ) -> None:
     """Recenter all atoms relative to the center of mass (COM) of a selection.
 
@@ -97,6 +181,13 @@ def shift2com(
         List of atom types used to define the reference center of mass.
     output_trajectory : str, optional
         Path to the output recentered DCD trajectory file.
+    unwrap : bool, default=False
+        Make the reference group whole across the periodic boundaries
+        before taking its COM. Set it for a compact group the boundary may
+        cut through, such as a slab: without it, a slab split by the
+        boundary has its COM in the middle of the pore. Leave it off for a
+        group spread through the whole box (ions in solution), whose COM is
+        then the plain average of the wrapped positions.
     """
 
     selection_string = f"type {' '.join(atom_types)}"
@@ -108,9 +199,7 @@ def shift2com(
     all_atoms = universe.atoms
 
     with mda.Writer(output_trajectory, all_atoms.n_atoms) as W:
-        for ts in universe.trajectory:
-            com = ref_atoms.center_of_mass()
-
+        for com in _com_trajectory(ref_atoms, unwrap, "shift2com"):
             all_atoms.positions -= com
 
             W.write(all_atoms)
@@ -181,12 +270,10 @@ def minmax_position(
 
     sel = universe.select_atoms(selstr)
 
-    if axis == "x":
-        axid = 0
-    if axis == "y":
-        axid = 1
-    if axis == "z":
-        axid = 2
+    axes = {"x": 0, "y": 1, "z": 2}
+    if axis not in axes:
+        raise ValueError(f"axis must be 'x', 'y' or 'z', not {axis!r}.")
+    axid = axes[axis]
 
     mins, maxs = [], []
 
@@ -212,23 +299,25 @@ def mean_pos(universe) -> pd.DataFrame:
     """
 
     ag = universe.atoms
-    transform = transformations.unwrap(ag)
-    universe.trajectory.add_transformations(transform)
 
+    # Molecules are made whole frame by frame, without touching the
+    # universe: an unwrap *transformation* stayed attached to it, and a
+    # second call failed on "Can't add transformations again".
     mean_pos = np.zeros((len(ag), 3))
     for ts in tqdm(universe.trajectory):
-        mean_pos += ag.positions
+        mean_pos += ag.unwrap(compound="fragments", inplace=False)
 
     mean_pos /= len(universe.trajectory)
 
-    combined = np.column_stack((universe.atoms.types, mean_pos))
-
-    df = pd.DataFrame(combined, columns=["type", "x", "y", "z"])
+    df = pd.DataFrame(mean_pos, columns=["x", "y", "z"])
+    df.insert(0, "type", ag.types)
 
     return df
 
 
-def com(universe: mda.Universe, atom_types: list[str | int]) -> float:
+def com(
+    universe: mda.Universe, atom_types: list[str | int], unwrap: bool = False
+) -> np.ndarray:
     """Calculate the mean position of the center of mass of a selection.
 
     Parameters
@@ -237,18 +326,23 @@ def com(universe: mda.Universe, atom_types: list[str | int]) -> float:
         MDAnalysis universe object.
     atom_types : list
         List of atom type strings to select.
+    unwrap : bool, default=False
+        Make the group whole across the periodic boundaries first; see
+        :func:`shift2com`. The result is then brought back into the box.
 
     Returns
     -------
-    float
+    np.ndarray
         The mean position of the center of mass over the trajectory.
     """
 
     sel = universe.select_atoms("type {}".format(" ".join(atom_types)))
 
-    comlist = []
+    mean = np.mean(list(_com_trajectory(sel, unwrap, "com")), axis=0)
 
-    for ts in tqdm(universe.trajectory):
-        comlist.append(sel.center_of_mass())
+    if unwrap:
+        box = require_box(universe, "com")
+        frac = transform_RtoS(mean[None].astype(np.float32), box) % 1.0
+        mean = transform_StoR(frac, box)[0]
 
-    return np.mean(comlist, axis=0)
+    return mean

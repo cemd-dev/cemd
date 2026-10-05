@@ -31,6 +31,23 @@ from ..core._format import canonical_ff_type, get_ff_key
 from ._structures import STRUCTURES_DIR
 
 
+def write_mda_pdb(obj, path: str | Path) -> None:
+    """Write an MDAnalysis Universe/AtomGroup to a scratch PDB, quietly.
+
+    `AtomicSystem` only carries the topology attributes it needs, but
+    MDAnalysis's PDB writer wants several more (altLocs, resnames, icodes,
+    segids, chainIDs, resids, occupancies, tempfactors, record_types,
+    formalcharges) and warns once per missing one. These are Packmol
+    scratch files read straight back into an `AtomicSystem` afterwards, so
+    the values are irrelevant -- silence the warning here instead of
+    inventing attributes nothing uses, or leaving every caller script to
+    filter it out for itself.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module="MDAnalysis")
+        obj.write(str(path))
+
+
 @dataclass
 class PackmolStructure:
     """Molecular structure definition for Packmol."""

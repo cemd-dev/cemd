@@ -4,6 +4,7 @@
 
 # docs/conf.py
 
+import importlib.metadata
 import os
 import shutil
 import subprocess
@@ -102,8 +103,10 @@ def setup(app):
 project = "cemd"
 copyright = "2022-2026, Jérôme Claverie"
 author = "Jérôme Claverie"
-version = "0.1.0"
-release = "0.1.0"
+# From the installed package, so the site can never announce a version
+# other than the one pyproject.toml declares.
+release = importlib.metadata.version("cemd")
+version = release
 
 # ---------------------------------------------------------------------------
 # General configuration
