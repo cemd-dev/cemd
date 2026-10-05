@@ -12,6 +12,7 @@ test/*
 /dist/
 *.egg-info/
 docs/_build/
+docs/api/generated/
 .coverage
 htmlcov/
 
@@ -28,3 +29,6 @@ htmlcov/
 # behind in the source tree.
 cemd/gui/config.json
 cemd/gui/*_cache.json
+
+# Logo design drafts, kept locally only
+/.logo_preview/
