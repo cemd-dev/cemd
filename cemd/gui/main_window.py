@@ -15,7 +15,6 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-import json
 import os
 import sys
 
@@ -34,7 +33,7 @@ from PySide6Qlementine import QlementineStyle
 
 from cemd import __version__
 from cemd.core.atomic_system import AtomicSystem
-from cemd.gui import _userdata
+from cemd.gui import _userdata, display_settings
 from cemd.gui.logic.build import (
     on_protonate,
     open_add_droplet,
@@ -59,38 +58,14 @@ from cemd.gui.ui.panels import BondManagerPanel, FilterPanel, SystemSummaryPanel
 from cemd.gui.ui.pubchem import PubChemBrowserDialog
 
 
-def deep_update(base_dict: dict, update_with: dict) -> None:
-    """Recursively merge dictionaries (for color_map, etc.)"""
-    for key, value in update_with.items():
-        if isinstance(value, dict) and key in base_dict:
-            deep_update(base_dict[key], value)
-        else:
-            base_dict[key] = value
-
-
-def get_config_diff(default: dict, current: dict) -> dict:
-    """Compares two dicts and returns only modified or new values."""
-    diff = {}
-    for key, val in current.items():
-        if key not in default:
-            diff[key] = val
-        elif isinstance(val, dict):
-            nested_diff = get_config_diff(default.get(key, {}), val)
-            if nested_diff:
-                diff[key] = nested_diff
-        elif val != default[key]:
-            diff[key] = val
-    return diff
-
-
 class AtomViewerGUI(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
         self._is_syncing = False
 
-        self._config_cache = {}
-        self.load_initial_config_from_disk()
+        #: How every tab draws its structure; see `display_settings`.
+        self.display = display_settings.load()
 
         self.setWindowTitle(
             f"cemd {__version__} \u2014 atomistic model builder for LAMMPS"
@@ -127,117 +102,6 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         if tab:
             tab.file_path = value
 
-    @property
-    def global_config(self) -> dict[str, Any]:
-        """Reads the current merged state (Cache + Plotters + UI)."""
-
-        return self._build_config()
-
-    @global_config.setter
-    def global_config(self, value: dict[str, Any]) -> None:
-        """Injects a config dictionary DIRECTLY into the UI widgets."""
-        if not value or not isinstance(value, dict) or self._is_syncing:
-            return
-
-        self._config_cache.update(value)
-
-        # PHYSICAL update of the FilterPanel (Sliders/Labels)
-        fp = self.filter_panel
-        fp.blockSignals(True)  # Avoid looping refreshes during the update
-
-        scale = value.get("global_scale", 1.0)
-        fp.global_scale_slider.setValue(int(scale * 100))
-        fp.lbl_scale_val.setText(f"x{scale:.1f}")
-
-        fp.blockSignals(False)
-
-        # PHYSICAL update of the BondManager
-        bm = self.bond_manager
-        bm.blockSignals(True)
-
-        b_radius = value.get("global_bond_radius", 0.1)
-        bm.bond_radius_slider.setValue(int(b_radius * 100))
-        # bm.refresh_from_map(value.get("bond_map", {}))
-
-        bm.blockSignals(False)
-
-        # In the global_config setter (MainWindow)
-        new_bg = value.get("bg_color")
-        if new_bg:
-            for i in range(self.tabs.count()):
-                tab = self.tabs.widget(i)
-                p = tab.plotter
-                # apply the color physically
-                p.set_background(new_bg)
-                if new_bg in p.bg_cycle:
-                    p.bg_idx = p.bg_cycle.index(new_bg)
-                p.update_background_style()
-
-    def _build_config(self) -> dict[str, Any]:
-        """Construit et retourne la config mergée sans modifier l'état."""
-        cfg = self._config_cache.copy()
-
-        for i in range(self.tabs.count()):
-            tab = self.tabs.widget(i)
-            p = tab.plotter
-            p_cfg = p.get_current_config_dict()
-            cfg.setdefault("color_map", {}).update(p_cfg["color_map"])
-            cfg.setdefault("radius_map", {}).update(p_cfg["radius_map"])
-            cfg.setdefault("bond_map", {}).update(p_cfg["bond_map"])
-            cfg["global_scale"] = p_cfg["global_scale"]
-            cfg["global_bond_radius"] = p_cfg["global_bond_radius"]
-            cfg["bg_color"] = p_cfg["bg_color"]
-
-        f_settings = self.filter_panel.get_settings()
-        cfg["global_scale"] = f_settings.get("global_scale", 100) / 100.0
-        cfg.setdefault("radius_map", {}).update(f_settings.get("radii", {}))
-
-        b_settings = self.bond_manager.get_settings()
-        cfg.setdefault("bond_map", {}).update(
-            {k: v for k, v in b_settings.items() if k != "global_bond_radius"}
-        )
-        cfg["global_bond_radius"] = self.bond_manager.get_bond_radius()
-
-        return cfg
-
-    def load_initial_config_from_disk(self) -> None:
-        """Loads the default THEN the user modifications."""
-        base_dir = os.path.dirname(os.path.realpath(__file__))
-
-        default_path = os.path.join(base_dir, "default_config.json")
-        # Preferences live under the user's own config directory. Fall back
-        # to the copy earlier versions left inside the package, so that an
-        # upgrade does not discard settings already saved.
-        user_path = _userdata.config_file()
-        if not user_path.exists():
-            legacy = _userdata.legacy_config_file()
-            if legacy.exists():
-                user_path = legacy
-
-        merged_cfg = {}
-
-        # Load the default base (Unchangeable)
-        if os.path.exists(default_path):
-            try:
-                with open(default_path, encoding="utf-8") as f:
-                    merged_cfg = json.load(f) or {}
-            except Exception as e:
-                print(f"Erreur lecture default_config: {e}")
-
-        # Overwrite with user preferences (Priority)
-        if user_path.exists():
-            try:
-                with open(user_path, encoding="utf-8") as f:
-                    user_cfg = json.load(f) or {}
-                    # use update to merge the first level dictionaries
-                    # Note: if you have nested dicts (ex: color_map),
-                    # it may need a recursive merge.
-                    deep_update(merged_cfg, user_cfg)
-            except Exception as e:
-                print(f"Erreur lecture config.json: {e}")
-
-        self._config_cache = merged_cfg
-
     def setup_ui(self) -> None:
         """Initialize the main UI layout, tab manager, and side control panels."""
         central = QtWidgets.QWidget()
@@ -266,14 +130,13 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         right_layout.addWidget(self.system_summary)
 
         self.filter_panel = FilterPanel()
-        # synchronize the UI when check/uncheck a type
-        self.filter_panel.type_changed.connect(
-            lambda settings: self.sync_ui(full_rebuild=False)
-        )
+        self.filter_panel.set_scale_value(self.display.global_scale)
+        self.filter_panel.type_changed.connect(self.on_view_settings_changed)
         right_layout.addWidget(self.filter_panel, stretch=2)
 
         # Bonds manager
         self.bond_manager = BondManagerPanel()
+        self.bond_manager.set_bond_radius(self.display.global_bond_radius)
         self.bond_manager.bond_settings_changed.connect(self.refresh_bonds_view)
         right_layout.addWidget(self.bond_manager, stretch=2)
 
@@ -637,6 +500,9 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         # Keep only the last UNDO_DEPTH snapshots.
         del stack[: -self.UNDO_DEPTH]
         self.refresh_undo_state()
+        # Every destructive edit comes through here first, which makes it
+        # the one place that has to know the structure is about to change.
+        self.set_tab_modified(tab, True)
 
     def discard_undo(self) -> None:
         """Drop the snapshot `push_undo` just took, for an edit that failed."""
@@ -661,6 +527,46 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         self.sync_ui(full_rebuild=True)
         self.statusBar().showMessage("Undone.", 3000)
         self.refresh_undo_state()
+        # Undo may or may not land back on the saved state; nothing records
+        # which snapshot was saved, so stay on the safe side.
+        self.set_tab_modified(tab, True)
+
+    #: Shown on the tab of a structure with unsaved changes. The title
+    #: itself stays clean: other dialogs list structures by tab title.
+    _MODIFIED_TIP = "Unsaved changes"
+
+    def set_tab_modified(self, tab: QtWidgets.QWidget, modified: bool) -> None:
+        """Record whether `tab` holds changes that are not on disk."""
+        if tab is None:
+            return
+        tab.modified = modified
+        index = self.tabs.indexOf(tab)
+        if index < 0:
+            return
+        self.tabs.setTabIcon(
+            index, self._modified_icon() if modified else QtGui.QIcon()
+        )
+        self.tabs.setTabToolTip(index, self._MODIFIED_TIP if modified else "")
+
+    def _modified_icon(self) -> QtGui.QIcon:
+        """A small dot in the theme's accent color."""
+        if getattr(self, "_modified_icon_cache", None) is None:
+            size = 10
+            pixmap = QtGui.QPixmap(size, size)
+            pixmap.fill(QtCore.Qt.transparent)
+            painter = QtGui.QPainter(pixmap)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(self.palette().color(QtGui.QPalette.Highlight))
+            painter.drawEllipse(1, 1, size - 2, size - 2)
+            painter.end()
+            self._modified_icon_cache = QtGui.QIcon(pixmap)
+        return self._modified_icon_cache
+
+    def modified_tabs(self) -> list[QtWidgets.QWidget]:
+        """The open tabs whose structure has unsaved changes."""
+        tabs = (self.tabs.widget(i) for i in range(self.tabs.count()))
+        return [tab for tab in tabs if getattr(tab, "modified", False)]
 
     def refresh_undo_state(self) -> None:
         """Grey out Undo when the active tab has no history."""
@@ -684,7 +590,7 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         system, path = open_file(self)
         if system:
             self.add_structure_tab(system, path)
-            self.statusBar().showMessage(f"Chargé : {path}", 3000)
+            self.statusBar().showMessage(f"Loaded: {path}", 3000)
 
     @QtCore.Slot()
     def save_file_clicked(self) -> None:
@@ -693,7 +599,8 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             return
 
         if self.current_file_path:
-            save_file(self, self.system, self.current_file_path)
+            if save_file(self, self.system, self.current_file_path):
+                self.set_tab_modified(self.tabs.currentWidget(), False)
         else:
             self.save_file_as_clicked()
 
@@ -707,37 +614,21 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         if new_path:
             self.current_file_path = new_path
             self.tabs.setTabText(self.tabs.currentIndex(), os.path.basename(new_path))
+            self.set_tab_modified(self.tabs.currentWidget(), False)
 
     def on_tab_changed(self, index: int) -> None:
-        """Synchronize global configuration and UI settings when switching between structure tabs."""
+        """Show the incoming tab's structure in the side panels and redraw it.
+
+        The display settings are shared, so there is nothing to carry
+        over from one tab to the next: the incoming plotter only has to
+        catch up with changes made while it was hidden.
+        """
         if index == -1 or self._is_syncing:
             return
         current_tab = self.tabs.widget(index)
 
         if current_tab and hasattr(current_tab, "plotter"):
-            # Complete synchro
-            # recover EVERYTHING stored in the MainWindow
-            cfg = self.global_config
-
-            # inject the global settings into the plotter of the incoming tab
-            current_tab.plotter.color_map.update(cfg.get("color_map", {}))
-            current_tab.plotter.radius_map.update(cfg.get("radius_map", {}))
-            current_tab.plotter.bond_map.update(cfg.get("bond_map", {}))
-
-            # also synchronize the scalar values
-            current_tab.plotter.global_scale = cfg.get(
-                "global_scale", current_tab.plotter.global_scale
-            )
-            current_tab.plotter.global_bond_radius = cfg.get(
-                "global_bond_radius", current_tab.plotter.global_bond_radius
-            )
-
-            # UI UPDATE (Sliders <---Plotter)
-            # The setter will now place the cursors in the correct positions
-            self.global_config = current_tab.plotter.get_current_config_dict()
-
-            # DEFINITION OF ACTIVE SYSTEM AND DRAWING
-            self.system = current_tab.system
+            current_tab.plotter.update_background_style()
             self.sync_ui(full_rebuild=True, reset_camera=True)
 
     def add_structure_tab(
@@ -754,41 +645,72 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             name = f"# {self.tabs.count() + 1}"
 
         new_tab = StructureTabWidget(system, self, file_path=path)
+        # A structure read from a file matches it; one built or downloaded
+        # here exists nowhere else until it is saved.
+        new_tab.modified = path is None
 
         self._is_syncing = True
 
         try:
             self.tabs.blockSignals(True)
             index = self.tabs.addTab(new_tab, name)
+            self.set_tab_modified(new_tab, new_tab.modified)
 
             self.tabs.setCurrentIndex(index)
             self.set_tools_enabled(True)
-
-            self.tabs.blockSignals(False)
         except Exception as e:
-            print(f"CRASH dans sync_ui: {e}")
+            print(f"Could not add the tab: {e}")
         finally:
+            # In `finally`: a failure above used to leave the tab bar mute,
+            # and switching tabs then stopped refreshing anything.
+            self.tabs.blockSignals(False)
             self._is_syncing = False
 
         self.sync_ui(full_rebuild=True, reset_camera=True)
 
     def request_close_tab(self, index: int) -> None:
-        """Request confirmation before closing a tab."""
-        name = self.tabs.tabText(index)
+        """Close a tab, offering to save it first if it has unsaved changes.
 
-        msg = QtWidgets.QMessageBox.question(
+        A saved structure closes at once: asking every time trained users
+        to click Yes without reading, which is what lost changes.
+        """
+        tab = self.tabs.widget(index)
+        if getattr(tab, "modified", False) and not self._confirm_discard(tab):
+            return
+
+        # By widget, not by the index passed in: saving may have run in
+        # between.
+        self.tabs.removeTab(self.tabs.indexOf(tab))
+        # removeTab only hides the page. Without this, each closed tab
+        # kept its render window, its GPU buffers and its system (and
+        # undo snapshots) alive until the application quit.
+        if tab is not None:
+            if hasattr(tab, "plotter"):
+                tab.plotter.close()
+            tab.deleteLater()
+        # If we closed everything, we gray out the tools
+        if self.tabs.count() == 0:
+            self.set_tools_enabled(False)
+
+    def _confirm_discard(self, tab: QtWidgets.QWidget) -> bool:
+        """Ask what to do with `tab`'s unsaved changes; True to go ahead."""
+        buttons = QtWidgets.QMessageBox.StandardButton
+        name = self.tabs.tabText(self.tabs.indexOf(tab))
+        answer = QtWidgets.QMessageBox.warning(
             self,
-            "Close structure",
-            f"Do you want to close '{name}'?\nMake sure you have saved your changes.",
-            QtWidgets.QMessageBox.StandardButton.Yes
-            | QtWidgets.QMessageBox.StandardButton.No,
+            "Unsaved changes",
+            f"'{name}' has changes that are not saved.\nSave them before closing?",
+            buttons.Save | buttons.Discard | buttons.Cancel,
+            buttons.Save,
         )
-
-        if msg == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.tabs.removeTab(index)
-            # If we closed everything, we gray out the tools
-            if self.tabs.count() == 0:
-                self.set_tools_enabled(False)
+        if answer == buttons.Discard:
+            return True
+        if answer == buttons.Save:
+            self.tabs.setCurrentWidget(tab)
+            self.save_file_clicked()
+            # Cancelling the file dialog leaves the tab modified: keep it.
+            return not getattr(tab, "modified", False)
+        return False
 
     def sync_ui(
         self, full_rebuild=True, reset_camera=False, refresh_bonds=True
@@ -811,15 +733,19 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             if full_rebuild:
                 self.filter_panel.refresh(
                     self.system,
-                    active_tab.plotter.color_map,
-                    active_tab.plotter.radius_map,
-                    active_tab.plotter.global_scale,
+                    self.display.color_map,
+                    self.display.radius_map,
+                    self.display.global_scale,
                 )
+                # A type the settings do not know yet gets the panel's
+                # default color and radius; record them so the drawing
+                # uses the values the panel shows.
+                self._store_view_settings(self.filter_panel.get_settings())
                 self.system_summary.update_info(self.system)
 
                 # Updating the Global Topology Manager
                 if refresh_bonds:
-                    self.bond_manager.refresh(self.system, active_tab.plotter.bond_map)
+                    self.bond_manager.refresh(self.system, self.display.bond_map)
 
             # DELEGATION TO ACTIVE TAB
             active_tab.refresh_tab_view(
@@ -831,16 +757,30 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         finally:
             self._is_syncing = False
 
-    def refresh_bonds_view(self) -> None:
-        """Ask the active tab to update the joint drawing."""
-        active_tab = self.tabs.currentWidget()
-        # retrieve the settings from the right panel
-        settings = self.bond_manager.get_settings()
+    def _store_view_settings(self, panel_settings: dict[str, Any]) -> None:
+        """Copy the type panel's colors, radii and scale into the settings."""
+        self.display.color_map.update(panel_settings.get("colors", {}))
+        self.display.radius_map.update(panel_settings.get("radii", {}))
+        self.display.global_scale = panel_settings.get("global_scale", 100) / 100.0
 
-        # ask the tab plotter to redraw only the jumps
-        # using its own df_visible
-        active_tab.plotter.update_bonds_only(active_tab.df_visible, settings)
-        active_tab.plotter.render()
+    def on_view_settings_changed(self, panel_settings: dict[str, Any]) -> None:
+        """The user changed a color, a radius, the scale or a visible type."""
+        self._store_view_settings(panel_settings)
+        self.sync_ui(full_rebuild=False)
+
+    def refresh_bonds_view(self, panel_settings: dict[str, Any] | None = None) -> None:
+        """Store the bond panel's rules and redraw the active tab's bonds."""
+        active_tab = self.tabs.currentWidget()
+        if active_tab is None or self.system is None:
+            return
+
+        panel_settings = dict(panel_settings or self.bond_manager.get_settings())
+        self.display.global_bond_radius = panel_settings.pop(
+            "global_bond_radius", self.display.global_bond_radius
+        )
+        self.display.set_bond_rules(self.system.atom_types, panel_settings)
+
+        active_tab.refresh_tab_view(full_rebuild=False)
 
     def update_protonate_state(self) -> None:
         """Activates the protonate icon if at least one atom is selected in the active tab."""
@@ -890,14 +830,9 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
         if not active_tab:
             return
 
-        # change the index
-        new_idx = (active_tab.plotter.bg_idx + 1) % len(active_tab.plotter.bg_cycle)
-
-        # synchronize all the tabs
-        for i in range(self.tabs.count()):
-            tab = self.tabs.widget(i)
-            tab.plotter.bg_idx = new_idx
-            tab.plotter.update_background_style()
+        self.display.next_background()
+        # The other tabs catch up when they are shown (`on_tab_changed`).
+        active_tab.plotter.update_background_style()
 
     @QtCore.Slot()
     def open_rdf_analysis(self) -> None:
@@ -963,31 +898,33 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             )
 
     def save_global_to_json(self) -> None:
-        """Only saves differences from the default."""
-        base_dir = os.path.dirname(os.path.realpath(__file__))
-        default_path = os.path.join(base_dir, "default_config.json")
-        user_path = _userdata.config_file()
-
-        # Load fault to compare
-        default_data = {}
-        if os.path.exists(default_path):
-            with open(default_path) as f:
-                default_data = json.load(f)
-
-        # Calculate only what is different from the original
-        current_data = self.global_config
-        diff_data = get_config_diff(default_data, current_data)
-
-        # Write delta to config.json
+        """Save the display settings that differ from the shipped defaults."""
         try:
-            with open(user_path, "w") as f:
-                json.dump(diff_data, f, indent=4)
-            print(f"Saved user configuration ({user_path})")
-        except Exception as e:
-            print(f"JSON writing error: {e}")
+            path = display_settings.save(self.display)
+            print(f"Saved user configuration ({path})")
+        except OSError as e:
+            print(f"Could not save the user configuration: {e}")
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         """Centralized global backup on shutdown."""
+        unsaved = self.modified_tabs()
+        if unsaved:
+            buttons = QtWidgets.QMessageBox.StandardButton
+            names = "\n".join(
+                f"  \u2022 {self.tabs.tabText(self.tabs.indexOf(t))}" for t in unsaved
+            )
+            answer = QtWidgets.QMessageBox.warning(
+                self,
+                "Unsaved changes",
+                f"{len(unsaved)} structure(s) have changes that are not saved:\n"
+                f"{names}\n\nQuit anyway and lose them?",
+                buttons.Discard | buttons.Cancel,
+                buttons.Cancel,
+            )
+            if answer != buttons.Discard:
+                event.ignore()
+                return
+
         try:
             self.save_global_to_json()
 
@@ -1091,7 +1028,7 @@ def main() -> int:
 
     style = QlementineStyle(app)
     app.setStyle(style)
-    app.installEventFilter(_TooltipColorFixer(style))
+    # app.installEventFilter(_TooltipColorFixer(style))
 
     # Force dot as decimal separator
     qt_locale = QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates)

@@ -50,33 +50,18 @@ trajectories and a brute-force reference on `traj_solution`.
       vacancy) would let the mix be calibrated against measured Q^n
       distribution and density instead of picking one mechanism outright.
 
-      Resolved 2026-09-22: `tolerance` is now computed per layer in
-      `fill_csh_interlayers`, from that layer's own packing density
-      (`_estimate_packing_tolerance` in `_interlayer_helpers.py`), instead
-      of a single hard-coded 2.0. It scales down linearly, past the bulk
-      liquid-water density (0.03346 molecule/A^3), from 2.0 A down to a
-      1.5 A floor. Measured (not estimated) on the Ca/Si 1.2-1.7 sweep:
-      the cliff is sharp and sits almost exactly at bulk water density —
-      below it, tolerance=2.0 already converges in seconds; above it, the
-      build time explodes (up to ~250 s for a single interlayer) and then
-      code 173 appears once density is ~1.7x bulk. A single-layer sweep at
-      Ca/Si 1.7 (density ~1.7x bulk) went from 252.6 s + warning at
-      tolerance=2.0 to 8.3 s + no warning at 1.8. Full build,
-      Ca/Si 1.2-1.7: 570.9 s with 2 warnings before, 28.3 s with 0
-      warnings after for the 1.7 case alone; all six models together now
-      build in 3 min 7 s with zero Packmol warnings (was: the 1.7 case
-      alone took 9 min 33 s).
+- [ ] Check the O-O and O-H distances in the C-S-H interlayers after the
+      ReaxFF minimisation in `react.lmp`. They were only checked right after
+      Packmol (nearest neighbour 0.97 A, no overlap), when the packing
+      tolerance became adaptive.
 
-      Not done: the O-O / O-H distances were only checked right after
-      Packmol (nearest-neighbour distance 0.97 A, consistent with an
-      intramolecular O-H bond, no pathological overlap), not after the
-      ReaxFF minimisation in `react.lmp` as the original plan asked.
-      `tolerance` was also not exposed as a `build` parameter -- the fix
-      picks it automatically per layer instead, so scripts don't need to
-      choose one. The other options considered (smaller margin, multi-pass
-      packing, failing loudly / capping `ws_ratio` past a density
-      threshold) were not implemented; the adaptive tolerance alone
-      removed the warning and the slowdown on the tested range.
+## Performance
+
+- [ ] Writing a LAMMPS data file formats each section with
+      `DataFrame.to_string`: 2.7 s for 120 000 atoms, most of it in pandas'
+      column-width pass. Formatting the columns with numpy would be several
+      times faster, but the output has to stay byte-identical (LAMMPS does
+      not care, diffs between versions of a model do).
 
 ## Provenance
 
@@ -89,20 +74,34 @@ trajectories and a brute-force reference on `traj_solution`.
 
 ## GUI
 
-- [ ] `test_gui_smoke.py` checks that the window opens and the actions are
-      wired. Nothing exercises a dialog or a build.
+- [ ] `test_gui_smoke.py` covers the window, the side panels, the atom
+      table, undo, unsaved changes and the background runner. Nothing
+      exercises a build dialog or the 3D view, which needs a GL context.
 - [ ] Level of detail while rotating, for large systems.
-- [ ] Remove `_TooltipColorFixer` (`main_window.py`) once Qlementine ships
-      its fix. Today Qlementine paints the tooltip background dark, but Qt
-      resets the tooltip palette to the system default (black text) after
-      startup, so tooltips are black on dark grey. The filter re-applies
-      the theme colors to each tooltip as it is shown. When Qlementine is
-      fixed, drop the class and its `installEventFilter` line in `main()`,
-      bump the `PySide6-Qlementine` pin, and check that tooltips are still
-      readable.
+- [ ] Packmol builds cannot be cancelled. `run_packmol` starts Packmol with
+      `subprocess.run`, so nothing outside it can stop the process; a
+      cancel button needs it to hand the process out, or to take an event
+      to wait on.
+- [ ] The surface search in `SurfaceDialog.on_search` (pymatgen slab
+      generation) still runs on the GUI thread. `run_in_background`
+      (`logic/build.py`) is the tool for it.
+- [ ] Remove `_TooltipColorFixer` (`main_window.py`) once Qlementine's fix
+      covers the GNOME platform themes. Qlementine paints the tooltip
+      background dark (#404040), but with the `gtk3` or `xdgdesktopportal`
+      Qt platform theme -- the default under GNOME -- the tooltip text
+      stays black, at a 2:1 contrast. Qlementine 1.5.1 ("Fix tooltip
+      foreground color") fixes it only with the `generic` platform theme
+      and offscreen. Re-test with each new release: drop the filter and its
+      `installEventFilter` line in `main()`, then show a tooltip under
+      GNOME with `QT_QPA_PLATFORMTHEME` unset and check the text is light.
 
 ## Housekeeping
 
-- [ ] 43 ruff findings, mostly pre-existing. Several are false positives on
+- [ ] 44 ruff findings (`cemd` and `test`). Several are false positives on
       Qt conventions (`closeEvent` must stay camelCase). Worth triaging so a
       lint gate can be added to CI.
+- [ ] The `cemd` conda environment has pyvista 0.49 and vtk 9.7 instead of
+      the pinned 0.47.2 and 9.6.2, and the GUI fails there as soon as a
+      structure opens (`SetInteractor` in `AtomicPlotter.add_axes`).
+      `environment.yml` should install the pinned versions; `cemd_ui` has
+      them.

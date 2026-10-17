@@ -254,6 +254,7 @@ class LAMMPSReader(BaseReader):
                     topology,
                     "pair_params",
                     target_types=topology.get("atom_types"),
+                    pair_ij=key == "PairIJ Coeffs",
                 )
             elif key == "Bond Coeffs":
                 cls._parse_coeffs(
@@ -550,9 +551,7 @@ class LAMMPSReader(BaseReader):
             except (TypeError, ValueError):
                 return str(raw)
 
-        topology["masses"] = {
-            resolve_type(row[0]): float(row[1]) for row in array
-        }
+        topology["masses"] = {resolve_type(row[0]): float(row[1]) for row in array}
 
     @staticmethod
     def _parse_coeffs(
@@ -560,9 +559,21 @@ class LAMMPSReader(BaseReader):
         topology: dict[str, Any],
         key: str,
         target_types: list[str] = None,
+        pair_ij: bool = False,
     ) -> None:
-        """Converts text coefficients to appropriate Python dataclasses."""
+        """Converts text coefficients to appropriate Python dataclasses.
+
+        Pair parameters are keyed like the rest of the code expects them,
+        ``"A-B"`` with the two types sorted: a ``Pair Coeffs`` line
+        (``i coeffs``) gives the self pair ``"A-A"``, a ``PairIJ Coeffs``
+        line (``i j coeffs``) the pair of its two types.
+        """
         params = {}
+
+        def type_label(type_id: int) -> str | int:
+            if target_types and type_id <= len(target_types):
+                return target_types[type_id - 1]
+            return type_id
 
         for row in array:
             style = None
@@ -575,13 +586,14 @@ class LAMMPSReader(BaseReader):
                 elif "# harmonic" in row_text:
                     style = "harmonic"
 
-            type_id = int(row[0])
-            label = (
-                target_types[type_id - 1]
-                if target_types and type_id <= len(target_types)
-                else type_id
-            )
+            label = type_label(int(row[0]))
             coeffs = [float(x) for x in row[1:]]
+            if key == "pair_params":
+                partner = label
+                if pair_ij:
+                    partner = type_label(int(row[1]))
+                    coeffs = coeffs[1:]
+                label = "-".join(sorted((str(label), str(partner))))
 
             # Reconstruction according to the key and the number of coefficients
             if key == "pair_params":
@@ -826,7 +838,9 @@ class LAMMPSWriter(BaseWriter):
             n = len(system.atom_types)
             actual_entries = len(ff_params.pair)
 
-            all_self = all(k[0] == k[1] for k in ff_params.pair.keys())
+            all_self = all(
+                len(set(k.split("-"))) == 1 for k in map(str, ff_params.pair)
+            )
             is_pair_coeffs = all_self and actual_entries == n
 
             section_name = "Pair Coeffs" if is_pair_coeffs else "PairIJ Coeffs"

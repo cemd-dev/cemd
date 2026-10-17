@@ -51,10 +51,15 @@ class AtomicModel(QtCore.QAbstractTableModel):
             QtCore.Qt.ItemDataRole.DisplayRole,
             QtCore.Qt.ItemDataRole.EditRole,
         ]:
+            atoms = self.system_obj.atoms
             if col == 0:
-                return str(self.system_obj.atoms.index[row])
+                return str(atoms.index[row])
+            # `iat` reads one scalar. `iloc[row]` built a whole Series per
+            # cell, and Qt asks for every visible cell on each scroll step.
             col_name = self.columns_order[col - 1]
-            val = self.system_obj.atoms.iloc[row].get(col_name, "")
+            if col_name not in atoms.columns:
+                return ""
+            val = atoms.iat[row, atoms.columns.get_loc(col_name)]
             # Clean formatting for display
             return f"{val:.4f}" if isinstance(val, float) else str(val)
 
@@ -125,6 +130,10 @@ class AtomTable(QtWidgets.QTableView):  # We change QTableWidget to QTableView
             current_len = len(system_obj.atoms)
 
             if same_obj and last_len == current_len:
+                # The model reads the DataFrame live, but an in-place edit
+                # (centre, orthogonalize, ...) sends no signal: repaint so
+                # the visible rows do not keep showing the old coordinates.
+                self.viewport().update()
                 return
 
         # Clean up the old model

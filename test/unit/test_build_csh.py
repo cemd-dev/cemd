@@ -10,14 +10,21 @@ covered with real (non-mocked) systems.
 
 from __future__ import annotations
 
+import functools
+
+import MDAnalysis as mda
+import numpy as np
 import pandas as pd
 import pytest
 
 from cemd import AtomicSystem
 from cemd.build import AFBuilder, CSHBuilder
 from cemd.build.cement_hydrates._silicate_helpers import (
+    _find_symmetric_bridging_pairs,
+    _get_bridging_silicates_indices,
     calculate_csh_modifiers,
     neutralize_csh_charge,
+    remove_bridging_silicates,
 )
 
 
@@ -340,3 +347,210 @@ def test_neutralize_csh_charge_neutralizes_and_preserves_h2o_si(tmp_path):
     total_charge = 2 * n_ca_out + n_h + 4 * n_si_out - 2 * n_o
     assert total_charge == 0
     assert (n_h / 2) / n_si_out == pytest.approx(ws_ratio)
+
+
+# ---------------------------------------------------------------------------
+# Bridging-silicate detection (local geometry, no z-plane counting)
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=1)
+def _tobermorite_system() -> AtomicSystem:
+    # Reading the CIF (symmetry refinement) is slow: do it once.
+    from cemd.build._structures import STRUCTURES_DIR
+
+    system = AtomicSystem.from_file(STRUCTURES_DIR / "tob11a_merlino.cif")
+    system.orthogonalize()
+    system.replicate([4, 1, 1])
+    return system
+
+
+def _tobermorite_universe():
+    return _tobermorite_system().to_mda()
+
+
+def _buckle(universe, amplitude=0.8, noise=0.1, seed=0):
+    """Undulate the sheets along x and jitter z, like a relaxed C-S-H."""
+    rng = np.random.default_rng(seed)
+    pos = universe.atoms.positions.copy()
+    lx = universe.dimensions[0]
+    pos[:, 2] += amplitude * np.sin(2 * np.pi * pos[:, 0] / lx)
+    pos[:, 2] += rng.normal(0.0, noise, len(pos))
+    universe.atoms.positions = pos
+    return universe
+
+
+def test_bridging_silicates_are_one_third_of_tobermorite():
+    universe = _tobermorite_universe()
+    bridging = _get_bridging_silicates_indices(universe)
+    assert len(bridging) * 3 == len(universe.select_atoms("type Si"))
+
+
+def test_bridging_detection_survives_buckled_sheets():
+    # Regression test: bridging Si used to be the members of the z-planes
+    # whose count differed from the densest one, after forcing 8 planes.
+    # Once a relaxation buckles the sheets, dense and bridging planes merge
+    # and paired Si were reported (and substituted by Al) as bridging.
+    reference = set(_get_bridging_silicates_indices(_tobermorite_universe()))
+    buckled = _buckle(_tobermorite_universe())
+    assert set(_get_bridging_silicates_indices(buckled)) == reference
+
+
+def test_symmetric_pairs_face_each_other_across_each_pore():
+    universe = _tobermorite_universe()
+    pores = _find_symmetric_bridging_pairs(universe)
+    box_z = universe.dimensions[2]
+
+    assert len(pores) == 2
+    assert all(len(pore) == 20 for pore in pores)
+    for pore in pores:
+        for idx1, idx2 in pore:
+            assert idx2 is not None
+            dz = universe.atoms[idx2].position[2] - universe.atoms[idx1].position[2]
+            dz -= box_z * round(dz / box_z)
+            # Across the interlayer, not across the CaO sheet.
+            assert 2.0 < abs(dz) < 4.5
+
+
+def test_unpaired_bridging_silicates_are_kept_as_singles():
+    universe = _tobermorite_universe()
+    pores = _find_symmetric_bridging_pairs(universe)
+    removed = " ".join(str(idx2) for pore in pores for _, idx2 in pore)
+    universe = mda.Merge(universe.select_atoms(f"not index {removed}"))
+    universe.dimensions = _tobermorite_universe().dimensions
+
+    pores = _find_symmetric_bridging_pairs(universe)
+    entries = [entry for pore in pores for entry in pore]
+    assert len(entries) == 40
+    assert all(idx2 is None for _, idx2 in entries)
+
+
+def test_remove_bridging_silicates_handles_singles():
+    universe = _tobermorite_universe()
+    nsi = len(universe.select_atoms("type Si"))
+    # 60 > 40 pairs: the second pass removes the remaining partners.
+    result = remove_bridging_silicates(universe, 60)
+    assert len(result.select_atoms("type Si")) == nsi - 60
+
+
+def test_drifted_monomer_is_not_a_bridging_site():
+    # A paired Si left alone by a hydrolysed dimer can drift toward the
+    # interlayer, at the height of the bridging Si, but with no Si at
+    # Si-O-Si distance it no longer belongs to a chain.
+    universe = _tobermorite_universe()
+    bridging = set(_get_bridging_silicates_indices(universe))
+    si = universe.select_atoms("type Si")
+    monomer = next(idx for idx in si.indices if idx not in bridging)
+    neighbors = universe.select_atoms(f"type Si and around 3.6 index {monomer}")
+    kept = universe.select_atoms(f"not index {' '.join(map(str, neighbors.indices))}")
+    universe = mda.Merge(kept)
+    universe.dimensions = _tobermorite_system().to_mda().dimensions
+    monomer = int(np.where(kept.indices == monomer)[0][0])
+    universe.atoms[monomer].position += [0.0, 0.0, 1.5]
+
+    assert monomer not in set(_get_bridging_silicates_indices(universe))
+
+
+# ---------------------------------------------------------------------------
+# to_cash: Al/Si target, Loewenstein's rule, OH- compensation
+# ---------------------------------------------------------------------------
+
+
+def _al_positions(system):
+    universe = system.to_mda()
+    return universe, universe.select_atoms("type Al")
+
+
+def test_to_cash_al_si_is_the_final_ratio():
+    system = _tobermorite_system().copy()
+    bridging = _get_bridging_silicates_indices(system.to_mda())
+    bridging_xyz = system.to_mda().atoms[bridging].positions
+
+    cash = CSHBuilder.from_system(system).to_cash(al_si=0.1, seed=0)
+
+    universe, al = _al_positions(cash)
+    n_si = len(universe.select_atoms("type Si"))
+    assert len(al) / n_si == pytest.approx(0.1, abs=0.005)
+    # Only bridging sites are substituted.
+    from MDAnalysis.lib.distances import distance_array
+
+    d = distance_array(al.positions, bridging_xyz, box=universe.dimensions)
+    assert (d.min(axis=1) < 1e-3).all()
+
+
+def test_to_cash_never_links_two_al_through_an_oxygen():
+    # In tobermorite 11 A the bridging Si facing each other across the
+    # interlayer share an O (Q3): substituting both would make Al-O-Al.
+    from MDAnalysis.lib.distances import self_distance_array
+
+    system = _tobermorite_system().copy()
+    with pytest.warns(UserWarning, match="bridging sites"):
+        cash = CSHBuilder.from_system(system).to_cash(al_si=1.0, seed=0)
+
+    universe, al = _al_positions(cash)
+    assert len(al) == 40  # one per linked pair of the 80 bridging Si
+    assert self_distance_array(al.positions, box=universe.dimensions).min() > 3.6
+
+
+def test_to_cash_is_reproducible_with_a_seed():
+    def al_xyz(seed):
+        system = _tobermorite_system().copy()
+        cash = CSHBuilder.from_system(system).to_cash(al_si=0.05, seed=seed)
+        return np.sort(_al_positions(cash)[1].positions, axis=0)
+
+    np.testing.assert_allclose(al_xyz(3), al_xyz(3))
+
+
+def test_to_cash_requires_exactly_one_ratio():
+    builder = CSHBuilder.from_system(_tobermorite_system().copy())
+    with pytest.raises(ValueError, match="exactly one"):
+        builder.to_cash()
+    with pytest.raises(ValueError, match="exactly one"):
+        builder.to_cash(as_ratio=0.1, al_si=0.1)
+
+
+def test_to_cash_oh_compensation_needs_hydroxides():
+    builder = CSHBuilder.from_system(_tobermorite_system().copy())
+    with pytest.raises(ValueError, match="hydroxides"):
+        builder.to_cash(al_si=0.05, compensation="OH", seed=0)
+
+
+def test_nearest_hydroxide_skips_silanols_and_water():
+    from cemd.build.cement_hydrates.hydrates import _nearest_hydroxides
+
+    # Al at the origin; the closest O is a silanol (bonded to Si), then a
+    # water molecule, then two free hydroxides at 3 and 6 A.
+    rows = [
+        ("Al", 0.0, 0.0, 0.0),
+        ("Si", -2.6, 0.0, 0.0),
+        ("O", -1.0, 0.0, 0.0),  # silanol O
+        ("H", -1.0, 0.97, 0.0),
+        ("O", 1.5, 1.5, 0.0),  # water
+        ("H", 2.1, 2.2, 0.0),
+        ("H", 0.9, 2.2, 0.0),
+        ("O", 0.0, 0.0, 3.0),  # nearest hydroxide
+        ("H", 0.0, 0.0, 3.97),
+        ("O", 0.0, 0.0, -6.0),  # farther hydroxide
+        ("H", 0.0, 0.0, -6.97),
+    ]
+    atoms = pd.DataFrame(
+        {
+            "type": [r[0] for r in rows],
+            "charge": [0.0] * len(rows),
+            "x": [r[1] + 10 for r in rows],
+            "y": [r[2] + 10 for r in rows],
+            "z": [r[3] + 10 for r in rows],
+        },
+        index=range(1, len(rows) + 1),
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"Al": 26.9815, "Si": 28.085, "O": 15.999, "H": 1.008},
+            "charges": {},
+        }
+    )
+
+    removed = _nearest_hydroxides(system, [1], np.random.default_rng(0))
+    assert sorted(removed) == [8, 9]

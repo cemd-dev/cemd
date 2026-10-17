@@ -16,10 +16,96 @@
 #
 
 import re
+import warnings
 
+import numpy as np
 import pandas as pd
 
 from ...._constants import MASSES_DICT
+
+# ----------------------------------------------------------------------
+# Serial numbers past 99 999
+#
+# A PDB serial number has five columns, so plain decimal stops at 99 999.
+# Writers then disagree. Packmol and VMD switch to hexadecimal ("186A0" is
+# 100 000), which cannot be told from decimal field by field: "19000" is
+# 19 000 or 0x19000. Hybrid-36 (http://cci.lbl.gov/hybrid_36/) goes on in
+# base 36 from "A0000" and is never ambiguous, so `PDBWriter` uses it; the
+# reader recognises both.
+# ----------------------------------------------------------------------
+
+_WIDTH = 5
+_DECIMAL_MAX = 10**_WIDTH
+_BLOCK = 26 * 36 ** (_WIDTH - 1)
+_LETTER_OFFSET = 10 * 36 ** (_WIDTH - 1)
+_DIGITS36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def hy36decode(field: str) -> int:
+    """Read a five-column serial number, decimal or hybrid-36."""
+    text = field.strip()
+    if not text:
+        raise ValueError("empty serial number")
+    if text[0].isupper():
+        return int(text, 36) - _LETTER_OFFSET + _DECIMAL_MAX
+    if text[0].islower():
+        return int(text, 36) - _LETTER_OFFSET + _DECIMAL_MAX + _BLOCK
+    return int(text)
+
+
+def hy36encode(value: int) -> str:
+    """Write `value` in five columns, decimal up to 99 999, then hybrid-36."""
+    if 0 <= value < _DECIMAL_MAX:
+        return f"{value:{_WIDTH}d}"
+    rest = value - _DECIMAL_MAX
+    if not 0 <= rest < 2 * _BLOCK:
+        raise ValueError(f"{value} does not fit in a PDB serial number")
+    upper = rest < _BLOCK
+    rest = (rest if upper else rest - _BLOCK) + _LETTER_OFFSET
+    digits = ""
+    while rest:
+        rest, digit = divmod(rest, 36)
+        digits = _DIGITS36[digit] + digits
+    return digits if upper else digits.lower()
+
+
+class _SerialDecoder:
+    """Decode the serial numbers of one file, in order.
+
+    Decimal until the first field that is not; then hexadecimal or
+    hybrid-36, whichever continues the count, for the rest of the file.
+    """
+
+    def __init__(self) -> None:
+        self.previous = 0
+        self.scheme = None
+
+    def __call__(self, text: str) -> int:
+        if self.scheme == "hex":
+            value = int(text, 16)
+        elif self.scheme is None and text.isdigit():
+            value = int(text)
+        else:
+            value = (
+                self._first_non_decimal(text)
+                if self.scheme is None
+                else (hy36decode(text))
+            )
+        self.previous = value
+        return value
+
+    def _first_non_decimal(self, text: str) -> int:
+        candidates = {}
+        for scheme, decode in (("hy36", hy36decode), ("hex", lambda t: int(t, 16))):
+            try:
+                candidates[scheme] = decode(text)
+            except ValueError:
+                pass
+        if not candidates:
+            raise ValueError(f"unreadable serial number {text!r}")
+        follows = [s for s, v in candidates.items() if v == self.previous + 1]
+        self.scheme = follows[0] if follows else next(iter(candidates))
+        return candidates[self.scheme]
 
 
 class PDBReader:
@@ -30,6 +116,7 @@ class PDBReader:
         atoms_data = []
         bonds_data = []
         box_params = None
+        decode_serial = _SerialDecoder()
 
         with open(path, encoding="utf-8") as f:
             lines = f.readlines()
@@ -45,23 +132,8 @@ class PDBReader:
 
             # Parsing atoms (ATOM / HETATM)
             elif line_type in ("ATOM", "HETATM"):
-                parts = line.split()
-
-                atom_id = int(parts[1])
-                local_name = parts[2]
-
-                # Dynamic extraction of the 3 coordinates (X, Y, Z) via Regex
-                # Search for 3 consecutive floating numbers (ex: -4.280 -4.341 1.315)
-                coords_match = re.findall(r"[-+]?\d*\.\d+|\d+", line)
-
-                # The 3 coordinates are the 3 decimal numbers that appear after the atom identifier
-                floats = [float(val) for val in coords_match if "." in val]
-
-                if len(floats) >= 3:
-                    x, y, z = floats[0], floats[1], floats[2]
-                else:
-                    # Fallback safety if Regex does not find decimal places
-                    x, y, z = float(parts[-5]), float(parts[-4]), float(parts[-3])
+                serial, local_name, x, y, z = cls._parse_atom_line(line)
+                atom_id = decode_serial(serial)
 
                 # The standard PDB format has no charge field: columns
                 # after x/y/z are occupancy and temperature factor (both
@@ -96,33 +168,38 @@ class PDBReader:
 
             # Connectivity analysis (CONECT)
             elif line_type == "CONECT":
-                parts = line.split()
-                source_id = int(parts[1])
-                for target_id_str in parts[2:]:
-                    target_id = int(target_id_str)
+                source_id, *targets = cls._parse_conect_line(line)
+                for target_id in targets:
                     if source_id < target_id:
                         bonds_data.append((source_id, target_id))
 
         # Creation of DataFrames
         df_atoms = pd.DataFrame(atoms_data)
+        if not df_atoms.empty and not df_atoms["id"].is_unique:
+            # Serial numbers that repeat could not be decoded: number the
+            # atoms in file order, and drop CONECT records, which would
+            # point at the wrong atoms.
+            warnings.warn(
+                f"{path}: atom serial numbers repeat; the atoms are numbered "
+                "in file order and CONECT records are ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
+            df_atoms["id"] = range(1, len(df_atoms) + 1)
+            bonds_data = []
         if not df_atoms.empty:
             df_atoms.set_index("id", inplace=True)
 
         df_bonds = None
         if bonds_data:
-            bond_rows = []
-            for b_id, (a1, a2) in enumerate(bonds_data, start=1):
-                t1 = df_atoms.loc[a1, "type"] if a1 in df_atoms.index else "X"
-                t2 = df_atoms.loc[a2, "type"] if a2 in df_atoms.index else "X"
-                bond_rows.append(
-                    {
-                        "id": b_id,
-                        "type": f"{t1}-{t2}",
-                        "atom_1": a1,
-                        "atom_2": a2,
-                    }
-                )
-            df_bonds = pd.DataFrame(bond_rows).set_index("id")
+            pairs = np.asarray(bonds_data, dtype=np.int64)
+            types = df_atoms["type"].astype(str)
+            t1 = pd.Series(pairs[:, 0]).map(types).fillna("X")
+            t2 = pd.Series(pairs[:, 1]).map(types).fillna("X")
+            df_bonds = pd.DataFrame(
+                {"type": t1 + "-" + t2, "atom_1": pairs[:, 0], "atom_2": pairs[:, 1]},
+                index=pd.RangeIndex(1, len(pairs) + 1, name="id"),
+            )
 
         # Configuration of the simulation box
         if box_params:
@@ -156,6 +233,53 @@ class PDBReader:
             "charges": charges_dict,
             "atom_style": "full",
         }
+
+    @staticmethod
+    def _parse_atom_line(line: str) -> tuple[str, str, float, float, float]:
+        """Serial number, atom name and coordinates of an ATOM/HETATM line.
+
+        The serial number is returned as written; `_SerialDecoder` reads
+        it. Read from the standard columns first. Splitting on whitespace broke
+        from 10 000 atoms on, where the five-digit serial fills its columns
+        and meets the record name ("HETATM10001"): every Packmol build that
+        large failed with "invalid literal for int()". Whitespace splitting
+        is kept for files whose columns are shifted.
+        """
+        try:
+            serial = line[6:11].strip()
+            if not serial:
+                raise ValueError("empty serial number")
+            return (
+                serial,
+                line[12:16].strip(),
+                float(line[30:38]),
+                float(line[38:46]),
+                float(line[46:54]),
+            )
+        except ValueError:
+            pass
+
+        parts = line.split()
+        atom_id = parts[1]
+        local_name = parts[2]
+
+        # The 3 coordinates are the first 3 decimal numbers of the line.
+        coords_match = re.findall(r"[-+]?\d*\.\d+|\d+", line)
+        floats = [float(val) for val in coords_match if "." in val]
+        if len(floats) >= 3:
+            x, y, z = floats[0], floats[1], floats[2]
+        else:
+            x, y, z = float(parts[-5]), float(parts[-4]), float(parts[-3])
+        return atom_id, local_name, x, y, z
+
+    @staticmethod
+    def _parse_conect_line(line: str) -> list[int]:
+        """Source atom then bonded atoms of a CONECT line, five columns each."""
+        fields = [line[i : i + 5] for i in range(6, 31, 5)]
+        try:
+            return [hy36decode(f) for f in fields if f.strip()]
+        except ValueError:
+            return [int(part) for part in line.split()[1:]]
 
     @staticmethod
     def _guess_element(atom_type: str) -> str:
@@ -213,42 +337,40 @@ class PDBWriter:
         # every Packmol build) silently replaced their masses.
         elements = dict(system.elements)
 
-        for atom_id, row in atoms_df.iterrows():
-            atom_type = str(row["type"])
-            x, y, z = float(row["x"]), float(row["y"]), float(row["z"])
+        # One pass per column instead of `iterrows`, which built a Series
+        # per atom: writing 24 000 atoms took 1.7 s.
+        types = atoms_df["type"].astype(str).to_numpy()
+        names = [f" {t:<3s}" if len(t) < 4 else f"{t[:4]:<4s}" for t in types]
 
-            # Atom name format on 4 characters
-            if len(atom_type) < 4:
-                formatted_atom_name = f" {atom_type:<3s}"
-            else:
-                formatted_atom_name = f"{atom_type[:4]:<4s}"
+        # Element symbol (ex: C, Ca, Si), upper-cased as the PDB standard
+        # requires, right-justified in columns 77-78.
+        element_of = {}
+        for raw in atoms_df["type"].unique():
+            element = elements.get(raw, "") or PDBReader._guess_element(str(raw))
+            element_of[str(raw)] = element.upper()[:2]
 
-            # Element symbol (ex: C, Ca, Si), upper-cased as the PDB standard
-            # requires, right-justified in columns 77-78.
-            element = elements.get(row["type"], "")
-            if not element:
-                element = PDBReader._guess_element(atom_type)
-            element = element.upper()[:2]
-
-            # Strict Fortran/PDB column layout required by Packmol:
-            # COLS 1-6 : "HETATM"
-            # COLS 7-11 : Atom serial number (%5d)
-            # COLS 13-16 : Atom name (%4s)
-            # COLS 18-20 : Residue name (%3s)
-            # COL 22 : Chain identifier (%1s)
-            # COLS 23-26 : Residue sequence number (%4d)
-            # COLS 31-38, 39-46, 47-54 : X, Y, Z (%8.3f)
-            # COLS 55-60 : Occupancy (%6.2f)
-            # COLS 61-66 : Temp factor (%6.2f)
-            # COLS 77-78 : Element symbol (%2s)
-            line = (
-                f"HETATM{int(atom_id):5d} {formatted_atom_name} "
+        # Strict Fortran/PDB column layout required by Packmol:
+        # COLS 1-6 : "HETATM"
+        # COLS 7-11 : Atom serial number (decimal, then hybrid-36)
+        # COLS 13-16 : Atom name (%4s)
+        # COLS 18-20 : Residue name (%3s)
+        # COL 22 : Chain identifier (%1s)
+        # COLS 23-26 : Residue sequence number (%4d)
+        # COLS 31-38, 39-46, 47-54 : X, Y, Z (%8.3f)
+        # COLS 55-60 : Occupancy (%6.2f)
+        # COLS 61-66 : Temp factor (%6.2f)
+        # COLS 77-78 : Element symbol (%2s)
+        xyz = atoms_df[["x", "y", "z"]].to_numpy(dtype=float)
+        for atom_id, name, atom_type, (x, y, z) in zip(
+            atoms_df.index, names, types, xyz
+        ):
+            lines.append(
+                f"HETATM{hy36encode(int(atom_id))} {name} "
                 f"UNK A   1    "
                 f"{x:8.3f}{y:8.3f}{z:8.3f}"
                 f"  1.00  0.00          "
-                f"{element:>2s}"
+                f"{element_of[atom_type]:>2s}"
             )
-            lines.append(line)
 
         # Connections section (CONECT) - optional
         if (
@@ -257,8 +379,8 @@ class PDBWriter:
             and not system.bonds.empty
         ):
             adj = {}
-            for _, row in system.bonds.iterrows():
-                a1, a2 = int(row["atom_1"]), int(row["atom_2"])
+            pairs = system.bonds[["atom_1", "atom_2"]].to_numpy(dtype=np.int64)
+            for a1, a2 in pairs.tolist():
                 adj.setdefault(a1, []).append(a2)
                 adj.setdefault(a2, []).append(a1)
 
@@ -266,8 +388,8 @@ class PDBWriter:
                 targets = sorted(adj[source_id])
                 for i in range(0, len(targets), 4):
                     chunk = targets[i : i + 4]
-                    targets_str = "".join(f"{t:5d}" for t in chunk)
-                    lines.append(f"CONECT{source_id:5d}{targets_str}")
+                    targets_str = "".join(hy36encode(t) for t in chunk)
+                    lines.append(f"CONECT{hy36encode(source_id)}{targets_str}")
 
         lines.append("END")
 

@@ -101,18 +101,117 @@ def _detect_z_factor(universe: mda.Universe) -> int:
     return multiplier
 
 
-def _get_bridging_silicates_indices(universe: mda.Universe) -> np.ndarray:
-    """Returns indices of bridging silicates using _get_bridging_zplanes."""
+def _classify_bridging_silicates(
+    universe: mda.Universe,
+    pair_cutoff: float = 3.6,
+    dz_tol: float = 1.0,
+    ref_radius_xy: float = 8.0,
+    ref_window_z: float = 3.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Identify bridging silicates from local geometry.
+
+    Paired silicates of a dreierkette are always present (only bridging
+    ones are removed) and sit in pairs at the same height, about 3 Å
+    apart, on the dense CaO sheet. Bridging silicates sit ~2 Å further out
+    in the interlayer. Three local tests follow, independent of plane
+    counts, so they survive a reactive relaxation that buckles the sheets
+    and merges z-planes:
+
+    1. A Si with another Si within ``pair_cutoff`` and ``|dz| <= dz_tol``
+       is paired.
+    2. Every other Si is bridging if the median height of the paired Si
+       around it (within ``ref_radius_xy`` laterally and ``ref_window_z``
+       vertically) is more than ``dz_tol`` away. This rejects paired Si
+       whose partner moved away (tilted or hydrolysed dimer).
+    3. A bridging Si must still belong to a chain: at least one Si within
+       ``pair_cutoff`` (Si-O-Si distance). This rejects monomers left by a
+       hydrolysed dimer that drifted toward the interlayer; a detached
+       monomer is not a bridging site anyway.
+
+    Parameters
+    ----------
+    universe : mda.Universe
+        The MDAnalysis universe containing the structure.
+    pair_cutoff : float, default=3.6
+        Maximum Si-Si distance (Å) between the two Si of a dimer.
+    dz_tol : float, default=1.0
+        Height tolerance (Å) separating paired from bridging Si.
+    ref_radius_xy : float, default=8.0
+        Lateral radius (Å) of the paired-Si neighborhood used in test 2.
+    ref_window_z : float, default=3.0
+        Vertical half-window (Å) of the paired-Si neighborhood used in
+        test 2; it keeps the dense plane across the CaO sheet or across
+        the interlayer out of the median.
+
+    Returns
+    -------
+    si_indices : np.ndarray
+        Universe indices of all Si atoms.
+    is_bridging : np.ndarray
+        Boolean mask over ``si_indices``.
+    offset : np.ndarray
+        Signed height of each Si above its local paired-Si plane (Å),
+        positive when the Si points toward +z; 0 for paired Si.
+    """
+    from MDAnalysis.lib.distances import capped_distance, minimize_vectors
+
+    box = require_box(universe, "Bridging-silicate detection")
     si_sel = universe.select_atoms("type Si")
-    si_indices = si_sel.indices
+    pos = si_sel.positions
+    nsi = len(pos)
 
-    (_, si_indices_per_plane, si_count_per_plane) = _get_silicate_planes(universe)
+    cutoff = max(pair_cutoff, float(np.hypot(ref_radius_xy, ref_window_z)))
+    pairs = capped_distance(pos, pos, cutoff, box=box, return_distances=False)
+    pairs = pairs[pairs[:, 0] != pairs[:, 1]]
+    vec = minimize_vectors(pos[pairs[:, 1]] - pos[pairs[:, 0]], box)
+    dz = vec[:, 2]
+    dxy = np.hypot(vec[:, 0], vec[:, 1])
+    dist = np.linalg.norm(vec, axis=1)
 
-    max_num = max(si_count_per_plane)
-    bridging_groups = [
-        g for g, n in zip(si_indices_per_plane, si_count_per_plane) if n != max_num
-    ]
-    return si_indices[np.concatenate(bridging_groups).flatten()]
+    # Test 1: a same-height partner within dimer distance.
+    close = dist <= pair_cutoff
+    is_paired = np.zeros(nsi, dtype=bool)
+    is_paired[pairs[close & (np.abs(dz) <= dz_tol), 0]] = True
+
+    # Test 3: chain membership.
+    in_chain = np.zeros(nsi, dtype=bool)
+    in_chain[pairs[close, 0]] = True
+
+    # Test 2: height above the local paired-Si plane.
+    offset = np.zeros(nsi)
+    ref = is_paired[pairs[:, 1]] & (dxy <= ref_radius_xy)
+    ref &= np.abs(dz) <= ref_window_z
+    ref &= ~is_paired[pairs[:, 0]]
+    sel = pairs[ref, 0]
+    order = np.argsort(sel, kind="stable")
+    owners, starts = np.unique(sel[order], return_index=True)
+    for owner, chunk in zip(owners, np.split(dz[ref][order], starts[1:])):
+        offset[owner] = -np.median(chunk)
+
+    is_bridging = ~is_paired & in_chain & (np.abs(offset) > dz_tol)
+    return si_sel.indices, is_bridging, offset
+
+
+def _get_bridging_silicates_indices(universe: mda.Universe) -> np.ndarray:
+    """Returns indices of bridging silicates (see _classify_bridging_silicates)."""
+    si_indices, is_bridging, _ = _classify_bridging_silicates(universe)
+    return si_indices[is_bridging]
+
+
+def _cluster_periodic(values: np.ndarray, period: float, tol: float) -> np.ndarray:
+    """Label 1D periodic values, splitting clusters at gaps larger than tol."""
+    order = np.argsort(values)
+    sorted_vals = values[order]
+    gaps = np.diff(sorted_vals) > tol
+    labels_sorted = np.concatenate(([0], np.cumsum(gaps)))
+    # Merge the last cluster into the first one across the periodic seam.
+    if len(values) > 1 and labels_sorted[-1] > 0:
+        if sorted_vals[0] + period - sorted_vals[-1] <= tol:
+            labels_sorted[labels_sorted == labels_sorted[-1]] = 0
+    labels = np.empty_like(labels_sorted)
+    labels[order] = labels_sorted
+    return labels
 
 
 def _get_silicate_planes(
@@ -178,98 +277,70 @@ def find_dense_layer_seam_offset(universe: mda.Universe) -> float | None:
 
 
 def _find_symmetric_bridging_pairs(
-    universe: mda.Universe, planar_distance_cutoff: float | None = 5.0
-) -> list[list[tuple[int, int]]]:
+    universe: mda.Universe,
+    planar_distance_cutoff: float = 5.0,
+    pore_tol: float = 3.0,
+) -> list[list[tuple[int, int | None]]]:
     """
     Identifies bridging silicates and associates them in symmetrical pairs
     across each interlayer pore, grouped by pore.
+
+    Each bridging Si points into the interlayer it borders (sign of its
+    offset above the local paired-Si plane, see
+    :func:`_classify_bridging_silicates`), which gives a pore-center
+    estimate; bridging Si are grouped into pores by clustering these
+    centers, then matched with the nearest Si (in XY) on the opposite face.
 
     Parameters
     ----------
     universe : mda.Universe
         The MDAnalysis universe containing the structure.
-    planar_distance_cutoff : float or None, default=5.0
-        Maximum planar distance (in XY plane) for two Si atoms to be considered
-        a symmetric pair. If None, planar distance is not used and atoms are
-        paired in order of appearance.
+    planar_distance_cutoff : float, default=5.0
+        Maximum planar distance (in XY plane) for two Si atoms on opposite
+        faces of a pore to be considered a symmetric pair.
+    pore_tol : float, default=3.0
+        Gap (Å) between pore-center estimates that separates two pores.
 
     Returns
     -------
-    list[list[tuple[int, int]]]
-        List of pores, each containing a list of (idx1, idx2) pairs of bridging
-        silicates that are symmetrically positioned.
+    list[list[tuple[int, int | None]]]
+        List of pores, each containing ``(idx1, idx2)`` pairs of bridging
+        silicates that face each other; a bridging Si with no partner left
+        is returned as ``(idx1, None)``.
     """
+    from MDAnalysis.lib.distances import minimize_vectors
+
     box = require_box(universe, "Bridging-silicate pairing")
-    box_x, box_y, box_z = box[0], box[1], box[2]
+    si_indices, is_bridging, offset = _classify_bridging_silicates(universe)
+    if not is_bridging.any():
+        return []
 
-    si_sel = universe.select_atoms("type Si")
-    si_indices = si_sel.indices
-    si_pos = si_sel.positions
+    idx = si_indices[is_bridging]
+    pos = universe.atoms[idx].positions
+    side = np.sign(offset[is_bridging])
+    # Bridging Si of facing layers are ~3 Å apart: the pore center lies
+    # ~1.5 Å outward.
+    centers = (pos[:, 2] + 1.5 * side) % box[2]
+    labels = _cluster_periodic(centers, box[2], pore_tol)
 
-    (si_plane_positions, si_indices_per_plane, si_count_per_plane) = (
-        _get_silicate_planes(universe)
-    )
+    pores = []
+    for label in np.unique(labels):
+        members = np.where(labels == label)[0]
+        lower = members[side[members] > 0]
+        upper = list(members[side[members] < 0])
+        current_pore = []
+        for k in lower:
+            best = None
+            if upper:
+                vec = minimize_vectors(pos[upper] - pos[k], box)
+                dxy = np.hypot(vec[:, 0], vec[:, 1])
+                if dxy.min() < planar_distance_cutoff:
+                    best = upper.pop(int(np.argmin(dxy)))
+            current_pore.append((idx[k], None if best is None else idx[best]))
+        current_pore.extend((idx[k], None) for k in upper)
+        pores.append(current_pore)
 
-    max_num = max(si_count_per_plane)
-    nplanes = len(si_plane_positions)
-
-    def _pbc_dist_xy(p, q) -> float:
-        dx = p[0] - q[0]
-        dy = p[1] - q[1]
-        dx -= box_x * round(dx / box_x)
-        dy -= box_y * round(dy / box_y)
-        return (dx * dx + dy * dy) ** 0.5
-
-    bridging_plane_indices = [
-        i for i in range(nplanes) if si_count_per_plane[i] != max_num
-    ]
-
-    n_bridging_planes = len(bridging_plane_indices)
-
-    bridging_pairs_per_pore = []
-    used = set()
-
-    for idx_b in range(n_bridging_planes):
-        i = bridging_plane_indices[idx_b]
-        j = bridging_plane_indices[(idx_b + 1) % n_bridging_planes]
-
-        gap = (si_plane_positions[j] - si_plane_positions[i]) % box_z
-
-        if planar_distance_cutoff is not None and gap > planar_distance_cutoff:
-            continue
-
-        atoms_i = si_indices[np.array(si_indices_per_plane[i])]
-        atoms_j = si_indices[np.array(si_indices_per_plane[j])]
-        xy_i = si_pos[np.array(si_indices_per_plane[i])][:, :2]
-        xy_j = si_pos[np.array(si_indices_per_plane[j])][:, :2]
-
-        current_pore_pairs = []
-
-        for k, idx1 in enumerate(atoms_i):
-            if idx1 in used:
-                continue
-
-            best_l, min_dist = None, float("inf")
-
-            for l_, idx2 in enumerate(atoms_j):
-                if idx2 in used:
-                    continue
-
-                dist = _pbc_dist_xy(xy_i[k], xy_j[l_])
-
-                if dist < min_dist:
-                    min_dist, best_l = dist, l_
-
-            if best_l is not None and min_dist < 5.0:
-                idx2 = atoms_j[best_l]
-                current_pore_pairs.append((idx1, idx2))
-                used.add(idx1)
-                used.add(idx2)
-
-        if current_pore_pairs:
-            bridging_pairs_per_pore.append(current_pore_pairs)
-
-    return bridging_pairs_per_pore
+    return pores
 
 
 def calculate_csh_modifiers(
@@ -330,7 +401,8 @@ def remove_bridging_silicates(
                     idx2remove = np.random.choice(options)
                     options.remove(idx2remove)
                     to_remove.append(idx2remove)
-                    seconds_to_process[pore_idx % n_pores].append(options[0])
+                    if options:
+                        seconds_to_process[pore_idx % n_pores].append(options[0])
                 else:
                     to_remove.append(item)
 
@@ -361,7 +433,11 @@ def remove_bridging_silicates(
 
 
 def substitute_si_by_al(
-    univ: mda.Universe, nal: int, symmetry: bool = True
+    univ: mda.Universe,
+    nal: int,
+    symmetry: bool = True,
+    rng: np.random.Generator | None = None,
+    lowenstein_cutoff: float = 3.6,
 ) -> tuple[mda.Universe, list[int]]:
     """
     Substitutes bridging Si with Al according to a ratio.
@@ -373,17 +449,47 @@ def substitute_si_by_al(
     nal : int
         Number of Al atoms to substitute.
     symmetry : bool, optional
-        If True, substitutes Si by Al in symmetric pairs across interlayers.
+        If True, substitutes Si by Al in symmetric pairs across interlayers,
+        taking pores in turn so that each receives the same number of Al.
         If False, substitutes randomly. Default is True.
+    rng : np.random.Generator, optional
+        Random generator, for reproducible substitutions.
+    lowenstein_cutoff : float, default=3.6
+        A site is skipped when an Al already placed lies within this
+        distance (Å), the Si-O-Si distance: no Al-O-Al link is created
+        (Loewenstein's rule). Facing bridging Si linked across the
+        interlayer can thus not both be substituted.
+
+    Notes
+    -----
+    Within a pore the sites are drawn at random: in index order, the Al
+    would gather in one region of the sheet (a replicated system keeps its
+    replicas as contiguous index blocks).
     """
     if nal <= 0:
         return univ, []
 
+    from MDAnalysis.lib.distances import distance_array
+
+    rng = np.random.default_rng() if rng is None else rng
+    box = require_box(univ, "Si -> Al substitution")
     to_sub = []
 
+    def allowed(idx) -> bool:
+        # Loewenstein's rule: no Al-O-Al, i.e. no Al already placed at
+        # Si-O-Si distance (bridging Si facing each other across the
+        # interlayer are linked through an O in tobermorite 11 A).
+        if not to_sub:
+            return True
+        d = distance_array(
+            univ.atoms[idx].position[None], univ.atoms[to_sub].positions, box=box
+        )
+        return d.min() > lowenstein_cutoff
+
     if symmetry:
-        pores = _find_symmetric_bridging_pairs(univ, planar_distance_cutoff=None)
-        random.shuffle(pores)
+        pores = _find_symmetric_bridging_pairs(univ)
+        pores = [pores[i] for i in rng.permutation(len(pores))]
+        pores = [[pore[i] for i in rng.permutation(len(pore))] for pore in pores]
 
         n_pores = len(pores)
         count = 0
@@ -396,19 +502,18 @@ def substitute_si_by_al(
             current_pore = pores[pore_idx % n_pores]
 
             if current_pore:
-                idx1, idx2 = current_pore.pop(0)
-
-                to_sub.append(idx1)
-                count += 1
-
-                if idx2 is not None and count < nal:
-                    to_sub.append(idx2)
-                    count += 1
+                for idx in current_pore.pop(0):
+                    if idx is not None and count < nal and allowed(idx):
+                        to_sub.append(idx)
+                        count += 1
 
             pore_idx += 1
     else:
-        bridging_indices = _get_bridging_silicates_indices(univ)
-        to_sub = list(np.random.choice(bridging_indices, nal, replace=False))
+        for idx in rng.permutation(_get_bridging_silicates_indices(univ)):
+            if len(to_sub) == nal:
+                break
+            if allowed(idx):
+                to_sub.append(idx)
 
     for idx in to_sub:
         atom = univ.atoms[idx]

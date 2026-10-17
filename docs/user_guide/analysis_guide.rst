@@ -135,7 +135,7 @@ For interfacial systems, compute diffusion as a function of distance from the su
 .. code-block:: python
 
    # Compute MSD profile along z-axis
-   msd_profile_data, std_profile, positions_var = msd_profile(
+   msd_profile_data, std_profile, _ = msd_profile(
        universe,
        atom_type="Ow",
        dt=100.0,

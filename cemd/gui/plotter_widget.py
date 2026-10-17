@@ -25,6 +25,8 @@ import vtk
 from pyvistaqt import QtInteractor
 from scipy.spatial import cKDTree
 
+from .display_settings import BG_CYCLE, DisplaySettings
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -43,18 +45,15 @@ class AtomicPlotter(QtInteractor):
     #: rebuilt whenever the bond settings change.
     MAX_TUBED_BONDS = 8000
 
-    def __init__(self, parent: AtomViewerGUI = None, config: dict[str, Any] = None):
-        super().__init__(parent)
-        self.bg_cycle = ["black", "#1A1A1A", "white", "#B0C4DE"]
-        self.bg_idx = 0
-        self.color_map = {}
-        self.radius_map = {}
-        self.bond_map = {}
-        self.global_scale = 1.0
-        self.global_bond_radius = 0.1
+    bg_cycle = BG_CYCLE
 
-        if config:
-            self.apply_config(config)
+    def __init__(
+        self, parent: AtomViewerGUI = None, settings: DisplaySettings | None = None
+    ):
+        super().__init__(parent)
+        #: Shared with every other tab's plotter, not copied: a change made
+        #: through one is seen by all, with nothing to keep in step.
+        self.settings = settings if settings is not None else DisplaySettings()
 
         self.update_background_style()
         # self.render_window.SetMultiSamples(4)
@@ -64,35 +63,28 @@ class AtomicPlotter(QtInteractor):
 
         self.add_axes()
 
-    def get_current_config_dict(self) -> dict[str, Any]:
-        """Returns the current state of this plotter's settings in dictionary form."""
-        return {
-            "color_map": self.color_map.copy(),
-            "radius_map": self.radius_map.copy(),
-            "bond_map": self.bond_map.copy(),
-            "global_scale": getattr(self, "global_scale", 1.0),
-            "global_bond_radius": getattr(self, "global_bond_radius", 0.1),
-            "bg_color": self.bg_cycle[self.bg_idx]
-            if hasattr(self, "bg_cycle")
-            else "black",
-        }
+    # The drawing code reads these names; they all lead to the shared
+    # settings.
 
-    def apply_config(self, config_dict: dict[str, Any]) -> None:
-        """Applies a config dictionary without reading the disk."""
-        self.color_map = config_dict.get("color_map", self.color_map)
-        self.radius_map = config_dict.get("radius_map", self.radius_map)
-        self.bond_map = config_dict.get("bond_map", self.bond_map)
-        self.global_scale = config_dict.get("global_scale", self.global_scale)
-        self.global_bond_radius = config_dict.get(
-            "global_bond_radius", self.global_bond_radius
-        )
+    @property
+    def color_map(self) -> dict[str, str]:
+        return self.settings.color_map
 
-        new_bg = config_dict.get("bg_color", "black")
-        if new_bg in self.bg_cycle:
-            self.bg_idx = self.bg_cycle.index(new_bg)
+    @property
+    def radius_map(self) -> dict[str, float]:
+        return self.settings.radius_map
 
-        # force the visual refresh if necessary
-        self.update_background_style()
+    @property
+    def bond_map(self) -> dict[str, float]:
+        return self.settings.bond_map
+
+    @property
+    def global_scale(self) -> float:
+        return self.settings.global_scale
+
+    @property
+    def global_bond_radius(self) -> float:
+        return self.settings.global_bond_radius
 
     def hex_to_rgb(self, h: str) -> list[float]:
         """Converts colors from JSON to 3D format [0, 1]"""
@@ -324,12 +316,8 @@ class AtomicPlotter(QtInteractor):
                 ]
             )
 
-            # Determine color based on current background
-            current_bg = self.bg_cycle[self.bg_idx]
-            # If the background is white, we trace the box in black, otherwise in white
-            box_color = (
-                "black" if current_bg.lower() in ["white", "#b0c4de"] else "white"
-            )
+            # Dark edges on a light background, light ones on a dark one.
+            box_color = "black" if self.settings.is_light_background else "white"
 
             mesh = pv.PolyData(pts, faces)
             # box_tubes = mesh.extract_all_edges().tube(radius=0.03)
@@ -345,7 +333,7 @@ class AtomicPlotter(QtInteractor):
                 reset_camera=False,
             )
         except Exception as e:
-            print(f"Erreur draw_box: {e}")
+            print(f"Could not draw the box: {e}")
 
     def update_bonds_only(
         self, df: pd.DataFrame, bond_settings: dict[str, Any]
@@ -361,12 +349,12 @@ class AtomicPlotter(QtInteractor):
 
     def update_background_style(self) -> None:
         """Changes the background and forces the box to change color"""
-        color = self.bg_cycle[self.bg_idx]
-        self.set_background(color)
+        self.set_background(self.settings.bg_color)
 
-        # Definition of contrasting color
-        # use RGB tuples (0,0,0) for black and (1,1,1) for white
-        contrast_color = (0, 0, 0) if color == "white" else (1, 1, 1)
+        # The same rule as the box in `draw_box`. This one used to check
+        # for "white" alone, so on the light blue background the axis
+        # labels turned white while the box was drawn black.
+        contrast_color = (0, 0, 0) if self.settings.is_light_background else (1, 1, 1)
 
         # Axes Update
         if hasattr(self, "axes_widget"):

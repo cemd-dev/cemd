@@ -17,7 +17,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, TypeVar
 
 from PySide6 import QtCore, QtWidgets
 
@@ -46,6 +47,61 @@ if TYPE_CHECKING:
     from ..main_window import AtomViewerGUI
 
 
+T = TypeVar("T")
+
+
+class _Job(QtCore.QThread):
+    """Run one callable off the GUI thread and keep its outcome."""
+
+    def __init__(self, work: Callable[[], T]) -> None:
+        super().__init__()
+        self._work = work
+        self.result = None
+        self.error: BaseException | None = None
+
+    def run(self) -> None:
+        try:
+            self.result = self._work()
+        except BaseException as e:  # handed back to the GUI thread
+            self.error = e
+
+
+def run_in_background(parent: AtomViewerGUI, message: str, work: Callable[[], T]) -> T:
+    """Run `work` on a worker thread and return its result, or raise its error.
+
+    Packmol runs take seconds to minutes. Run on the GUI thread, they froze
+    the window -- no repaint, and the desktop offering to kill a program
+    that was not responding. Here the window keeps drawing behind a
+    progress dialog that is modal to it, so nothing can edit the structure
+    while `work` reads it.
+
+    `work` runs outside the GUI thread: it must not touch a widget, and it
+    must not change a system that is on screen -- the atom table reads its
+    DataFrame on every repaint. Work on a copy and swap it in afterwards.
+    """
+    progress = QtWidgets.QProgressDialog(message, None, 0, 0, parent)
+    progress.setWindowTitle("Working")
+    progress.setWindowModality(QtCore.Qt.WindowModal)
+    progress.setMinimumDuration(0)
+    progress.setAutoClose(False)
+    progress.show()
+
+    job = _Job(work)
+    loop = QtCore.QEventLoop()
+    job.finished.connect(loop.quit)
+    job.start()
+    # The thread may be done before the loop starts; quit() would then be
+    # lost and the loop would wait forever.
+    if not job.isFinished():
+        loop.exec()
+    job.wait()
+    progress.close()
+
+    if job.error is not None:
+        raise job.error
+    return job.result
+
+
 def handle_error(parent: AtomViewerGUI, title: str, error: Exception | str) -> None:
     QtWidgets.QApplication.restoreOverrideCursor()
     parent.setUpdatesEnabled(True)
@@ -56,17 +112,18 @@ def open_make_solution(parent: AtomViewerGUI) -> None:
     dialog = SolutionDialog(parent)
     if dialog.exec_():
         try:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             box, density, solutes, structures = dialog.get_values()
             builder = SolutionBuilder(
                 density=density, counts=solutes, structures=structures
             )
-            new_data = builder.build(box)
+            new_data = run_in_background(
+                parent,
+                "Packing the solution with Packmol...",
+                lambda: builder.build(box),
+            )
             parent.add_structure_tab(new_data, title="Aqueous Solution")
         except Exception as e:
             handle_error(parent, "Solution Error", e)
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
 
 
 def open_make_glass(parent: AtomViewerGUI) -> None:
@@ -75,20 +132,20 @@ def open_make_glass(parent: AtomViewerGUI) -> None:
         box, density, stoich = dialog.get_values()
 
         try:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-            parent.statusBar().showMessage("Generating glass structure with Packmol...")
-
             builder = GlassBuilder(density=density, composition=stoich)
-            new_system = builder.build(box)
+            new_system = run_in_background(
+                parent,
+                "Generating the glass structure with Packmol...",
+                lambda: builder.build(box),
+            )
 
             if new_system:
-                parent.add_structure_tab(new_system, f"Glass_{density}gcm3")
+                # By keyword: the second positional argument is the file
+                # path, so the title used to be taken for a path and lost.
+                parent.add_structure_tab(new_system, title=f"Glass_{density}gcm3")
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(parent, "Error", f"Generation failed: {e}")
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
-            parent.statusBar().showMessage("Ready")
+            handle_error(parent, "Glass Error", e)
 
 
 def open_make_cash(parent: AtomViewerGUI) -> None:
@@ -156,31 +213,33 @@ def open_add_liquid(parent: AtomViewerGUI) -> None:
     dialog = AddLiquidLayerDialog(parent)
     if dialog.exec() == QtWidgets.QDialog.Accepted:
         p = dialog.get_values()
-        print(p)
         try:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-            parent.statusBar().showMessage("Creating interface...")
-
             builder = SolutionBuilder(
                 density=p["density"],
                 counts=p["solutes_dict"],
                 structures=p["structures_dict"],
             )
-            parent.push_undo()
-            active_tab.system.add_liquid_layer(
-                blueprint=builder,
-                thickness=p["thickness"],
-                distance=2.0,
-                vacuum=p["vacuum"],
-                axis=p["axis"],
-            )
+            source = active_tab.system
 
+            def work():
+                system = source.copy()
+                system.add_liquid_layer(
+                    blueprint=builder,
+                    thickness=p["thickness"],
+                    distance=2.0,
+                    vacuum=p["vacuum"],
+                    axis=p["axis"],
+                )
+                return system
+
+            new_system = run_in_background(parent, "Adding the liquid layer...", work)
+
+            parent.push_undo()
+            active_tab.system = new_system
             parent.sync_ui(full_rebuild=True, reset_camera=True)
             parent.statusBar().showMessage("Interface created!", 5000)
         except Exception as e:
             handle_error(parent, "Interface Error", e)
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
 
 
 def open_add_droplet(parent: AtomViewerGUI) -> None:
@@ -192,28 +251,32 @@ def open_add_droplet(parent: AtomViewerGUI) -> None:
     if dialog.exec() == QtWidgets.QDialog.Accepted:
         p = dialog.get_values()
         try:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-            parent.statusBar().showMessage("Adding droplet...")
             builder = SolutionBuilder(
                 density=p["density"],
                 counts=p["solutes_dict"],
                 structures=p["structures_dict"],
             )
-            parent.push_undo()
-            active_tab.system.add_droplet(
-                blueprint=builder,
-                radius=p["radius"],
-                distance=2.0,
-                vacuum=p["vacuum"],
-                axis="z",
-            )
+            source = active_tab.system
 
+            def work():
+                system = source.copy()
+                system.add_droplet(
+                    blueprint=builder,
+                    radius=p["radius"],
+                    distance=2.0,
+                    vacuum=p["vacuum"],
+                    axis="z",
+                )
+                return system
+
+            new_system = run_in_background(parent, "Adding the droplet...", work)
+
+            parent.push_undo()
+            active_tab.system = new_system
             parent.sync_ui(full_rebuild=True, reset_camera=True)
             parent.statusBar().showMessage("Droplet added successfully!", 5000)
         except Exception as e:
-            QtWidgets.QMessageBox.critical(parent, "Droplet Error", str(e))
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
+            handle_error(parent, "Droplet Error", e)
 
 
 def open_add_structure(parent: AtomViewerGUI) -> None:
@@ -254,33 +317,34 @@ def open_split(parent: AtomViewerGUI) -> None:
     if dialog.exec() == QtWidgets.QDialog.Accepted:
         p = dialog.get_values()
         try:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-            parent.statusBar().showMessage("Creating channel...")
-            parent.push_undo()
+            source = active_tab.system
 
-            splitter = Splitter(
-                active_tab.system,
-                coordinate=p["coordinate"],
-                axis=p["axis"],
-                gap_size=p["gap_size"],
-            )
-
-            if p["add_solution"]:
-                blueprint = SolutionBuilder(
-                    density=p["density"],
-                    counts=p["solutes_dict"],
-                    structures=p["structures_dict"],
+            def work():
+                splitter = Splitter(
+                    source.copy(),
+                    coordinate=p["coordinate"],
+                    axis=p["axis"],
+                    gap_size=p["gap_size"],
                 )
-                splitter.add_solution(blueprint, padding=p["tolerance"])
 
-            active_tab.system = splitter.split()
+                if p["add_solution"]:
+                    blueprint = SolutionBuilder(
+                        density=p["density"],
+                        counts=p["solutes_dict"],
+                        structures=p["structures_dict"],
+                    )
+                    splitter.add_solution(blueprint, padding=p["tolerance"])
 
+                return splitter.split()
+
+            new_system = run_in_background(parent, "Creating the channel...", work)
+
+            parent.push_undo()
+            active_tab.system = new_system
             parent.sync_ui(full_rebuild=True, reset_camera=True)
             parent.statusBar().showMessage("Channel created!", 5000)
         except Exception as e:
             handle_error(parent, "Channel Error", e)
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
 
 
 def open_replicate(parent: AtomViewerGUI) -> None:
@@ -325,7 +389,7 @@ def on_protonate(parent: AtomViewerGUI) -> None:
         parent.sync_ui(full_rebuild=True, reset_camera=False)
 
     except Exception as e:
-        print(f"Erreur Protonate: {e}")
+        print(f"Protonation failed: {e}")
     finally:
         parent._is_syncing = False
         active_tab.selected_real_indices = []
@@ -354,6 +418,7 @@ def open_translate_atoms(parent: AtomViewerGUI) -> None:
         try:
             parent.statusBar().showMessage("Translating and wrapping atoms...")
 
+            parent.push_undo()
             active_tab.system.atoms["x"] += dx
             active_tab.system.atoms["y"] += dy
             active_tab.system.atoms["z"] += dz

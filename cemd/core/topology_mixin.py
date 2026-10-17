@@ -48,21 +48,31 @@ class TopologyMixin:
         dictionaries.
         """
 
+        # A row-wise `apply` with one `.loc` lookup per atom cost about
+        # 85 us per atom of the system: 2 s to rename one type in a 24 000
+        # atom water box. A system holds only a handful of distinct type
+        # combinations, so each is made canonical once and mapped back.
+        type_of = self.atoms["type"].astype(str)
+
         for connection_type in ["bond", "angle", "dihedral", "improper"]:
             df = getattr(self, connection_type + "s")
-            if df is None:
+            if df is None or df.empty:
                 continue
 
-            def get_new_type(row, connection_type=connection_type):
-                indices = [row[f"atom_{i + 1}"] for i in range(len(row) - 1)]
-                types = tuple(str(self.atoms.loc[idx, "type"]) for idx in indices)
+            columns = [f"atom_{i + 1}" for i in range(len(df.columns) - 1)]
+            # `.loc` with an array raises KeyError for a missing atom, as
+            # the per-row lookup did.
+            per_atom = [type_of.loc[df[c].to_numpy()].to_numpy() for c in columns]
+            combos = list(zip(*per_atom))
 
+            canonical = {}
+            for types in set(combos):
                 if connection_type == "dihedral":
-                    return "-".join(types)
+                    canonical[types] = "-".join(types)
+                else:
+                    canonical[types] = canonical_ff_type(types, connection_type)
 
-                return canonical_ff_type(types, connection_type)
-
-            df["type"] = df.apply(get_new_type, axis=1)
+            df["type"] = [canonical[types] for types in combos]
             setattr(self, connection_type + "s", df)
 
     def set_types(
@@ -83,13 +93,18 @@ class TopologyMixin:
         mapping = {t: t for t in old_types}
         mapping.update({str(k): str(v) for k, v in new_types.items()})
 
+        # Effective values, read before the rename: `_masses` holds only the
+        # masses set explicitly, an element type falls back on its atomic
+        # mass (an Al made by `set_type2atoms` came out at 1.008 here).
+        old_masses, old_charges = dict(self.masses), dict(self.charges)
+
         self.atoms["type"] = self.atoms["type"].astype(str).replace(mapping)
 
         self._remap_connection_types()
         self._remap_ff_keys(mapping)
 
-        new_masses = {new: self._masses.get(old, 1.008) for old, new in mapping.items()}
-        new_charges = {new: self._charges.get(old, 0.0) for old, new in mapping.items()}
+        new_masses = {new: old_masses.get(old, 1.008) for old, new in mapping.items()}
+        new_charges = {new: old_charges.get(old, 0.0) for old, new in mapping.items()}
 
         self.set_masses(new_masses)
         self.set_charges(new_charges)
@@ -163,12 +178,15 @@ class TopologyMixin:
 
         self.atoms.loc[indices, "type"] = atom_type
 
-        if atom_type not in self.masses:
+        # Test the stored values: the `masses`/`charges` properties list
+        # every current type, the new one included, so the fallbacks below
+        # were never applied.
+        if atom_type not in self._masses:
             fallback_mass = MASSES_DICT.get(atom_type, self.masses.get(old_type, 1.0))
             self.set_masses({atom_type: fallback_mass})
 
-        if atom_type not in self.charges:
-            fallback_charge = self.charges.get(old_type, 0.0)
+        if atom_type not in self._charges:
+            fallback_charge = self._charges.get(old_type, 0.0)
             self.set_charges({atom_type: fallback_charge})
 
         return self
@@ -519,9 +537,12 @@ class TopologyMixin:
 
         atom_type_map = dict(zip(self.atoms.index, self.atoms["type"].astype(str)))
 
+        # Plain Python ints from one array: `iterrows` built a Series per
+        # bond and was three quarters of the time spent here.
+        bond_pairs = self.bonds[["atom_1", "atom_2"]].to_numpy(dtype=int).tolist()
+
         graph = {}
-        for _, row in self.bonds.iterrows():
-            a1, a2 = int(row["atom_1"]), int(row["atom_2"])
+        for a1, a2 in bond_pairs:
             graph.setdefault(a1, set()).add(a2)
             graph.setdefault(a2, set()).add(a1)
 
@@ -577,8 +598,7 @@ class TopologyMixin:
 
         if guess_dihedrals:
             dihedrals_list = []
-            for _, row in self.bonds.iterrows():
-                b, c = int(row["atom_1"]), int(row["atom_2"])
+            for b, c in bond_pairs:
                 neighbors_b = graph[b] - {c}
                 neighbors_c = graph[c] - {b}
 

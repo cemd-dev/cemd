@@ -281,3 +281,353 @@ def test_a_declined_deletion_takes_no_snapshot(window, water_tab, monkeypatch):
     )
     dialog.delete_by_type("Bonds", water_tab.system.bonds["type"].iloc[0])
     assert not getattr(water_tab, "undo_stack", [])
+
+
+# ----------------------------------------------------------------------
+# Atom table and side panels
+#
+# These run without a 3D view: the table, its selection and the panels are
+# plain Qt widgets.
+# ----------------------------------------------------------------------
+
+
+def test_atom_table_shows_the_atoms(qt_app):
+    from conftest import make_water_system
+
+    from cemd.gui.ui.atom_table import AtomTable
+
+    table = AtomTable()
+    table.update_data(make_water_system())
+    model = table.model()
+
+    assert model.rowCount() == 6
+    assert model.index(0, 0).data() == "1"
+    assert model.index(0, 1).data() == "Ow"
+    assert model.index(1, 2).data() == "0.9600"
+
+
+def test_table_selection_follows_the_picked_atoms(qt_app):
+    from types import SimpleNamespace
+
+    from conftest import make_water_system
+
+    from cemd.gui.tabs import StructureTabWidget
+    from cemd.gui.ui.atom_table import AtomTable
+
+    table = AtomTable()
+    table.update_data(make_water_system())
+    # Atom ids 1-3 are a contiguous run, 5 stands alone.
+    tab = SimpleNamespace(table=table, selected_real_indices=[1, 2, 3, 5])
+    StructureTabWidget.sync_table_selection(tab)
+
+    rows = sorted(i.row() for i in table.selectionModel().selectedRows())
+    assert rows == [0, 1, 2, 4]
+
+
+def test_filter_panel_counts_atoms_per_type(qt_app):
+    from conftest import make_water_system
+
+    from cemd.gui.ui.panels import FilterPanel
+
+    panel = FilterPanel()
+    panel.refresh(make_water_system(), {}, {}, 1.0)
+    assert "4 atoms of type Hw" in panel.checkboxes["Hw"].toolTip()
+
+
+def test_a_color_change_refreshes_the_view_once(qt_app):
+    """The color button opens its own dialog; the panel must not add one."""
+    from conftest import make_water_system
+    from PySide6 import QtGui
+
+    from cemd.gui.ui.panels import FilterPanel
+
+    panel = FilterPanel()
+    panel.refresh(make_water_system(), {}, {}, 1.0)
+    emitted = []
+    panel.type_changed.connect(emitted.append)
+
+    panel.color_buttons["Ow"].setColor(QtGui.QColor("#00ff00"))
+    assert len(emitted) == 1
+    assert emitted[0]["colors"]["Ow"] == "#00ff00"
+
+
+def test_slider_moves_refresh_the_view_after_a_burst(qt_app):
+    """Any move applies, not just a drag release, and a burst applies once."""
+    from conftest import make_water_system
+
+    from cemd.gui.ui.panels import FilterPanel
+
+    panel = FilterPanel()
+    panel.refresh(make_water_system(), {}, {}, 1.0)
+    emitted = []
+    panel.type_changed.connect(emitted.append)
+
+    for value in (110, 120, 130):
+        panel.global_scale_slider.setValue(value)
+    assert emitted == []
+
+    panel._emit_timer.timeout.emit()
+    assert len(emitted) == 1
+    assert emitted[0]["global_scale"] == 130
+
+
+# ----------------------------------------------------------------------
+# Long builds off the GUI thread
+# ----------------------------------------------------------------------
+
+
+def test_background_work_returns_its_result_and_keeps_the_gui_alive(qt_app):
+    import time
+
+    from PySide6 import QtCore, QtWidgets
+
+    from cemd.gui.logic.build import run_in_background
+
+    parent = QtWidgets.QWidget()
+    ticks = []
+    timer = QtCore.QTimer()
+    timer.timeout.connect(lambda: ticks.append(1))
+    timer.start(10)
+
+    def work():
+        time.sleep(0.3)
+        return 42
+
+    assert run_in_background(parent, "Working...", work) == 42
+    timer.stop()
+    # The event loop ran while the work slept: the window would repaint.
+    assert len(ticks) >= 5
+
+
+def test_background_work_raises_its_error_in_the_gui_thread(qt_app):
+    from PySide6 import QtWidgets
+
+    from cemd.gui.logic.build import run_in_background
+
+    def work():
+        raise RuntimeError("Packmol failed")
+
+    with pytest.raises(RuntimeError, match="Packmol failed"):
+        run_in_background(QtWidgets.QWidget(), "Working...", work)
+
+
+def test_background_work_that_finishes_at_once_does_not_hang(qt_app):
+    from PySide6 import QtWidgets
+
+    from cemd.gui.logic.build import run_in_background
+
+    parent = QtWidgets.QWidget()
+    for _ in range(20):
+        assert run_in_background(parent, "Working...", lambda: "ok") == "ok"
+
+
+# ----------------------------------------------------------------------
+# Unsaved changes
+# ----------------------------------------------------------------------
+
+
+def _forbid_message_boxes(monkeypatch):
+    from PySide6 import QtWidgets
+
+    def fail(*args, **kwargs):
+        raise AssertionError("no dialog expected")
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", staticmethod(fail))
+
+
+def _answer_message_boxes(monkeypatch, answer):
+    from PySide6 import QtWidgets
+
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "warning",
+        staticmethod(lambda *a, **k: getattr(QtWidgets.QMessageBox, answer)),
+    )
+
+
+def test_an_edit_marks_the_tab_modified(window, water_tab):
+    window.set_tab_modified(water_tab, False)
+    window.push_undo()
+    assert water_tab.modified
+    assert window.tabs.tabToolTip(window.tabs.indexOf(water_tab)) == "Unsaved changes"
+    # The title stays clean: other dialogs list structures by tab title.
+    assert window.tabs.tabText(window.tabs.indexOf(water_tab)) == "water"
+
+
+def test_a_saved_tab_closes_without_asking(window, water_tab, monkeypatch):
+    _forbid_message_boxes(monkeypatch)
+    window.set_tab_modified(water_tab, False)
+    window.request_close_tab(window.tabs.indexOf(water_tab))
+    assert window.tabs.indexOf(water_tab) == -1
+
+
+def test_a_modified_tab_stays_open_on_cancel(window, water_tab, monkeypatch):
+    _answer_message_boxes(monkeypatch, "Cancel")
+    window.set_tab_modified(water_tab, True)
+    window.request_close_tab(window.tabs.indexOf(water_tab))
+    assert window.tabs.indexOf(water_tab) != -1
+
+
+def test_a_modified_tab_closes_on_discard(window, water_tab, monkeypatch):
+    _answer_message_boxes(monkeypatch, "Discard")
+    window.set_tab_modified(water_tab, True)
+    window.request_close_tab(window.tabs.indexOf(water_tab))
+    assert window.tabs.indexOf(water_tab) == -1
+
+
+def test_quitting_with_unsaved_changes_can_be_cancelled(window, water_tab, monkeypatch):
+    from PySide6 import QtGui
+
+    _answer_message_boxes(monkeypatch, "Cancel")
+    monkeypatch.setattr(
+        window, "save_global_to_json", lambda: pytest.fail("must not get this far")
+    )
+    window.set_tab_modified(water_tab, True)
+
+    event = QtGui.QCloseEvent()
+    window.closeEvent(event)
+    assert not event.isAccepted()
+
+
+def test_a_coordinate_typed_in_the_table_reaches_the_system(qt_app):
+    from types import SimpleNamespace
+
+    from conftest import make_water_system
+    from PySide6 import QtCore
+
+    from cemd.gui.tabs import StructureTabWidget
+    from cemd.gui.ui.atom_table import AtomTable
+
+    system = make_water_system()
+    table = AtomTable()
+    table.update_data(system)
+    marked = []
+    tab = SimpleNamespace(
+        table=table,
+        system=system,
+        plotter=SimpleNamespace(color_map={}),
+        _bonds_key="stale",
+        parent_gui=SimpleNamespace(
+            _is_syncing=False,
+            set_tab_modified=lambda t, m: marked.append(m),
+            sync_ui=lambda **k: None,
+        ),
+    )
+
+    model = table.model()
+    cell = model.index(1, 2)  # atom id 2, column x
+    model.setData(cell, "4.5", QtCore.Qt.ItemDataRole.EditRole)
+    StructureTabWidget.on_data_changed(tab, cell)
+
+    assert system.atoms.loc[2, "x"] == 4.5
+    assert tab._bonds_key is None, "the bonds must be searched again"
+    assert marked == [True]
+
+
+# ----------------------------------------------------------------------
+# Display settings: one object shared by every tab
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def user_config_dir(tmp_path, monkeypatch):
+    from cemd.gui import _userdata
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    # A development tree may still hold the config.json earlier versions
+    # wrote into the package, which `load` falls back to.
+    monkeypatch.setattr(
+        _userdata, "legacy_config_file", lambda: tmp_path / "no-legacy.json"
+    )
+    assert tmp_path in _userdata.config_file().parents
+    return tmp_path / "config"
+
+
+def test_saved_preferences_survive_a_session_with_no_structure(
+    qt_app, user_config_dir
+):
+    """Opening and closing the window used to reset the scale sliders' values."""
+    import json
+
+    from cemd.gui import _userdata, display_settings
+    from cemd.gui.main_window import AtomViewerGUI
+
+    saved = {
+        "global_scale": 1.5,
+        "global_bond_radius": 0.25,
+        "bg_color": "white",
+        "bond_map": {"Hw-Ow": 1.1},
+    }
+    _userdata.config_file().write_text(json.dumps(saved))
+
+    window = AtomViewerGUI()
+    assert window.filter_panel.get_scale_value() == 1.5
+    assert window.bond_manager.get_bond_radius() == 0.25
+    window.save_global_to_json()
+
+    reloaded = display_settings.load()
+    assert reloaded.global_scale == 1.5
+    assert reloaded.global_bond_radius == 0.25
+    assert reloaded.bg_color == "white"
+    assert reloaded.bond_map == {"Hw-Ow": 1.1}
+
+
+def test_only_changes_from_the_defaults_are_saved(qt_app, user_config_dir):
+    import json
+
+    from cemd.gui import display_settings
+
+    settings = display_settings.load()
+    some_type, default_color = next(iter(settings.color_map.items()))
+    settings.color_map[some_type] = "#123456"
+
+    path = display_settings.save(settings)
+    written = json.loads(path.read_text())
+    assert written["color_map"] == {some_type: "#123456"}
+    assert default_color != "#123456"
+
+
+def test_a_deleted_bond_rule_stays_deleted():
+    """Rules were merged into the map, so the next panel rebuild revived them."""
+    from cemd.gui.display_settings import DisplaySettings
+
+    settings = DisplaySettings(bond_map={"Hw-Ow": 1.1, "Ca-O": 2.6, "Si-O": 1.8})
+
+    # The water structure's panel now holds a single rule, Ow-Ow.
+    settings.set_bond_rules(["Ow", "Hw"], {"Ow-Ow": 3.0})
+
+    assert settings.bond_map == {"Ow-Ow": 3.0, "Ca-O": 2.6, "Si-O": 1.8}
+    assert settings.bond_rules_for(["Ow", "Hw"]) == {"Ow-Ow": 3.0}
+    assert settings.bond_rules_for(["Ca", "O", "Si"]) == {"Ca-O": 2.6, "Si-O": 1.8}
+
+
+def test_the_background_cycles_and_knows_when_it_is_light():
+    from cemd.gui.display_settings import BG_CYCLE, DisplaySettings
+
+    settings = DisplaySettings()
+    seen = [settings.bg_color] + [settings.next_background() for _ in BG_CYCLE]
+    assert seen[: len(BG_CYCLE)] == list(BG_CYCLE)
+    assert seen[-1] == BG_CYCLE[0]
+
+    settings.bg_color = "#B0C4DE"
+    assert settings.is_light_background
+
+
+def test_bond_panel_changes_reach_the_shared_settings(window, water_tab):
+    water_tab.refresh_tab_view = lambda **kwargs: None
+    window.display.bond_map = {"Hw-Ow": 1.1, "Ca-O": 2.6}
+
+    window.refresh_bonds_view({"Ow-Ow": 3.0, "global_bond_radius": 0.2})
+
+    assert window.display.bond_map == {"Ow-Ow": 3.0, "Ca-O": 2.6}
+    assert window.display.global_bond_radius == 0.2
+
+
+def test_type_panel_changes_reach_the_shared_settings(window, water_tab):
+    window._store_view_settings(
+        {"colors": {"Ow": "#ff0000"}, "radii": {"Ow": 2.0}, "global_scale": 130}
+    )
+    assert window.display.color_map["Ow"] == "#ff0000"
+    assert window.display.radius_map["Ow"] == 2.0
+    assert window.display.global_scale == 1.3

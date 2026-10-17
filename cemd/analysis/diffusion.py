@@ -22,6 +22,7 @@ import MDAnalysis as mda
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
+from MDAnalysis.coordinates.memory import MemoryReader
 from tqdm import tqdm
 
 from .util import require_box
@@ -194,6 +195,65 @@ def msd(
     return dfo
 
 
+_MSD_PAIRS = {"xx": (0, 0), "yy": (1, 1), "zz": (2, 2), "xy": (0, 1), "xz": (0, 2), "yz": (1, 2)}
+
+
+def _block_positions(
+    univ: mda.Universe, sel: mda.AtomGroup, start: int, end: int
+) -> np.ndarray:
+    """Positions of `sel` over the frames [start, end), shape (frames, atoms, 3)."""
+    traj = univ.trajectory
+    if isinstance(traj, MemoryReader):
+        # Straight from the array: timeseries() changes its `stop` from
+        # inclusive to exclusive in MDAnalysis 3.0
+        array = np.transpose(
+            traj.get_array(), [traj.stored_order.index(o) for o in "fac"]
+        )
+        return array[start:end, sel.indices]
+    return np.array([sel.positions for _ in univ.trajectory[start:end]])
+
+
+def _iter_blocks(
+    univ: mda.Universe,
+    sel: mda.AtomGroup,
+    starts: np.ndarray,
+    corrlength: int,
+    box: np.ndarray,
+    axid: int,
+    chunk_bytes: int = 2**28,
+):
+    """Displacements and coordinate of `sel` over each block, chunk by chunk.
+
+    Yields, for each start, the displacement of each atom from the first
+    frame of the block, shape (3, frames, atoms), and its coordinate along
+    `axid` without the periodic wrapping, shape (frames, atoms).
+
+    Blocks overlap when the gap is shorter than the block, so the
+    trajectory is unwrapped once per chunk of frames rather than once per
+    block; a chunk holds about `chunk_bytes` of unwrapped positions.
+    """
+    n_atoms = len(sel)
+    span = max(2 * corrlength, chunk_bytes // (24 * max(n_atoms, 1)))
+    i = 0
+    while i < len(starts):
+        first = starts[i]
+        # Every block that ends within the chunk
+        j = np.searchsorted(starts, first + span - corrlength, side="right")
+        j = max(j, i + 1)
+        last = starts[j - 1] + corrlength
+        pos = _block_positions(univ, sel, first, last)
+        # Frame-to-frame displacements, under the minimum-image convention
+        dd = np.diff(pos, axis=0)
+        dd -= box * (dd / box).round()
+        unwrapped = np.zeros((3, len(pos), n_atoms))
+        unwrapped[:, 1:] = np.cumsum(dd, axis=0, dtype=np.float64).transpose(2, 0, 1)
+        for start in starts[i:j]:
+            k = start - first
+            d = unwrapped[:, k : k + corrlength] - unwrapped[:, k : k + 1]
+            yield d, pos[k, :, axid] + d[axid]
+        i = j
+
+
 def msd_profile(
     univ: mda.Universe,
     atom_type: str,
@@ -203,8 +263,15 @@ def msd_profile(
     corrlength: int = 100,
     gaplength: int = 100,
     delta: float = 1.0,
-) -> tuple[pd.MultiIndex, pd.MultiIndex]:
+    coords_var: bool = False,
+    edges: np.ndarray | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict | None]:
     """Calculate a profile of diffusion coefficients at a liquid/solid interface.
+
+    The MSD is computed over windows of `corrlength` frames, and each atom
+    is binned by its mean coordinate along `axis` during the window. The
+    sums are accumulated block by block, so the memory does not grow with
+    the number of blocks.
 
     Parameters
     ----------
@@ -224,34 +291,45 @@ def msd_profile(
         Number of frames between blocks.
     delta : float
         Size of the spatial binning (Angstrom).
+    edges : array_like, optional
+        Bin edges along `axis` (Angstrom), increasing, possibly uneven.
+        They replace `delta` and the bins it lays from the lowest
+        coordinate, e.g. to align the bins on an interface.
+    coords_var : bool, optional
+        Also return the variation of the coordinate during the measurement,
+        per bin. It keeps every position of every block in memory
+        (blocks x atoms x frames values), which a long trajectory of water
+        cannot afford: off by default.
 
     Returns
     -------
-    pd.MultiIndex
+    pd.DataFrame
         MSD values per bin.
-    pd.MultiIndex
+    pd.DataFrame
         Standard deviation of MSD per bin.
-    dict
-        Coordinate variation during measurement.
+    dict or None
+        Coordinate variation during measurement, if `coords_var`.
     """
 
     sel = univ.select_atoms(f"type {atom_type}")
-    box = require_box(univ, "msd_profile")
+    box = require_box(univ, "msd_profile")[:3]
+
+    if axis not in ("x", "y", "z"):
+        raise ValueError(f"axis must be 'x', 'y' or 'z', not {axis!r}.")
+    axid = "xyz".index(axis)
 
     if nblocks is None:
         nblocks = int((len(univ.trajectory) - corrlength) / gaplength)
 
     if (gaplength * nblocks + corrlength) > len(univ.trajectory):
-        raise Exception(
+        raise ValueError(
             "Gap between correlation block, correlation length, or number of block too large."
         )
 
     if nblocks > 1:
         starts = np.arange(0, nblocks * gaplength, gaplength)
-        ends = starts + corrlength
     else:
         starts = np.array([0])
-        ends = np.array([corrlength])
 
     print(
         f"Compute the profile of the mean-squared displacement on {len(sel)} {atom_type} atoms along the {axis} axis..."
@@ -262,175 +340,77 @@ def msd_profile(
     print(f"Length of blocks: {corrlength} frames / {corrlength * dt * 1e-3} ps")
     print(f"Gap between origins: {gaplength} frames / {gaplength * dt * 1e-3} ps\n")
 
-    if axis == "x":
-        axid = 0
-    if axis == "y":
-        axid = 1
-    if axis == "z":
-        axid = 2
-
-    # if dmin == None:
-    #     dmin = 0
-    # if dmax == None:
-    #     dmax = box[axid]
-
     t = np.arange(0, corrlength, 1) * dt / 1000
 
-    # positions_array = np.array([], dtype=np.float64).reshape(0, corrlength)
-    # avg_pos = np.array([], dtype=np.float64)
-    # std_pos = np.array([], dtype=np.float64)
+    def blocks():
+        return _iter_blocks(univ, sel, starts, corrlength, box, axid)
 
-    msd_per_block = {
-        "xx": [],
-        "yy": [],
-        "zz": [],
-        "xy": [],
-        "xz": [],
-        "yz": [],
-    }
-
-    msd_df_dic = {
-        "xx": [],
-        "yy": [],
-        "zz": [],
-        "xy": [],
-        "xz": [],
-        "yz": [],
-    }
-
-    std_df_dic = {
-        "xx": [],
-        "yy": [],
-        "zz": [],
-        "xy": [],
-        "xz": [],
-        "yz": [],
-    }
-
-    error_df_dic = {
-        "xx": [],
-        "yy": [],
-        "zz": [],
-        "xy": [],
-        "xz": [],
-        "yz": [],
-    }
-
-    for i, (start, end) in enumerate(tqdm(zip(starts, ends), total=len(starts)), 1):
-        # initialize the trajectory
-        univ.trajectory[start]
-
-        # create the selection of atoms
-        sel = univ.select_atoms(f"type {atom_type}")
-
-        # get the reference positions at the start of the block
-        rpos = sel.positions
-        rposbyframe = sel.positions  # to avoid problem due to PBC
-
-        # initialize total dr and msd
-        d = np.zeros(rpos.shape)
-        msd_values = {key: [] for key in msd_per_block.keys()}
-        positions_intra_block = []
-        positions_per_block = []
-
-        for ts in univ.trajectory[start:end]:
-            # collect positions
-            pos = sel.positions
-
-            # calculate the differential displacement w.r.t last frame positions
-            dd = pos - rpos
-
-            # for i in range(3):
-            #     idx = dd[:,i] > 0.5 * box[i]
-            #     dd[idx] -= boxv[i]
-            #     idx = -dd[:,i] > 0.5 * box[i]
-            #     dd[idx] += boxv[i]
-
-            # take PBC into account
-            dd -= box[:3].T * (dd / box[:3].T).round()
-
-            # Add the the differential displacement to the total displacement
-            d += dd
-
-            msd_values["xx"].append(d[:, 0] * d[:, 0])
-            msd_values["yy"].append(d[:, 1] * d[:, 1])
-            msd_values["zz"].append(d[:, 2] * d[:, 2])
-            msd_values["xy"].append(d[:, 0] * d[:, 1])
-            msd_values["xz"].append(d[:, 0] * d[:, 2])
-            msd_values["yz"].append(d[:, 1] * d[:, 2])
-
-            positions_intra_block.append((rposbyframe + dd)[:, axid])
-
-            # save last frame position
-            rpos = pos
-            rposbyframe += dd
-
-        for key, values in msd_values.items():
-            msd_per_block[key].append(np.array(values).T)
-            # msd_dic[key].extend(np.array(values).T)
-        # positions_array = np.append(positions_array, np.array(positions_intra_block).T, axis=0)
-        positions_per_block.append(np.array(positions_intra_block).T)
-
-    msd_dic = {
-        key: np.concatenate(blocks, axis=0)  # shape (n_atoms_total, corrlength)
-        for key, blocks in msd_per_block.items()
-    }
-
-    positions_array = np.concatenate(positions_per_block, axis=0)
-    avg_pos = np.mean(positions_array, axis=1)
-    drange = np.arange(np.min(positions_array), np.max(positions_array), delta)
+    if edges is not None:
+        drange = np.asarray(edges, dtype=float)
+        if drange.ndim != 1 or len(drange) < 2 or np.any(np.diff(drange) <= 0):
+            raise ValueError("edges must be at least two increasing values.")
+    else:
+        # Pass 1: extent of the unwrapped coordinate, which sets the bins
+        cmin, cmax = np.inf, -np.inf
+        for _, coord in tqdm(blocks(), total=len(starts), desc="extent"):
+            cmin, cmax = min(cmin, coord.min()), max(cmax, coord.max())
+        drange = np.arange(cmin, cmax, delta)
     binned_pos = (drange[:-1] + drange[1:]) / 2
+    nbins = len(binned_pos)
 
-    # Dictionnary with variation in position during the measurement of MSD
-    column_groups = {i: [] for i in range(len(drange))}
-    for col_index, avg in enumerate(avg_pos):
-        bin_index = np.digitize(avg, drange) - 1
-        if bin_index == len(drange):
-            bin_index -= 1
-        column_groups[bin_index].append(col_index)
+    # Pass 2: per bin and per time, sum and sum of squares of each MSD
+    # component over the atoms whose mean coordinate falls in the bin
+    sums = np.zeros((2, len(_MSD_PAIRS), corrlength, nbins))
+    counts = np.zeros(nbins)
+    positions_per_block = []
+    prods = np.empty((2 * len(_MSD_PAIRS), corrlength, len(sel)))
+    for d, coord in tqdm(blocks(), total=len(starts), desc="MSD"):
+        coord = np.ascontiguousarray(coord.T)  # (atoms, frames)
+        avg = coord.mean(axis=1)
+        # Bin i holds drange[i] < avg <= drange[i + 1]
+        ibin = np.searchsorted(drange, avg, side="left") - 1
+        inside = np.flatnonzero((ibin >= 0) & (ibin < nbins))
+        onehot = np.zeros((len(avg), nbins))
+        onehot[inside, ibin[inside]] = 1.0
+        counts += onehot.sum(axis=0)
 
-    coords_var_dict = {
-        j: positions_array[column_groups[i], :].flatten()
-        - np.median(positions_array[column_groups[i], :].flatten())
-        for i, j in enumerate(np.round(binned_pos, 2))
-    }
+        for k, (a, b) in enumerate(_MSD_PAIRS.values()):
+            np.multiply(d[a], d[b], out=prods[k])
+        np.multiply(prods[:6], prods[:6], out=prods[6:])
+        sums += (prods.reshape(-1, len(avg)) @ onehot).reshape(sums.shape)
+        if coords_var:
+            positions_per_block.append(coord)
 
-    def remove_empty_arrays(input_dict):
-        keys_to_remove = [key for key, value in input_dict.items() if value.size == 0]
-        for key in keys_to_remove:
-            del input_dict[key]
-        return input_dict
+    # Bins no atom visited are dropped
+    keep = counts > 0
+    n = counts[keep]
+    mean = sums[0][..., keep] / n
+    std = np.sqrt(np.clip(sums[1][..., keep] / n - mean**2, 0, None))
+    columns = np.round(binned_pos[keep], 2)
 
-    coords_var_dict = remove_empty_arrays(coords_var_dict)
-
-    # create the histogram for MSD
-    for key, values in msd_dic.items():
-        binned_msd = np.array(
-            [
-                np.mean(values[np.where((avg_pos > low) & (avg_pos <= high))], axis=0)
-                for low, high in zip(drange[:-1], drange[1:])
-            ]
-        )
-        binned_std_msd = np.array(
-            [
-                np.std(values[np.where((avg_pos > low) & (avg_pos <= high))], axis=0)
-                for low, high in zip(drange[:-1], drange[1:])
-            ]
-        )
-
-        binned_pos_final = binned_pos[~np.isnan(binned_msd).any(axis=1)]
-        binned_msd = binned_msd[~np.isnan(binned_msd).any(axis=1)]
-        binned_std_msd = binned_std_msd[~np.isnan(binned_std_msd).any(axis=1)]
-
-        msd_df_dic[key] = pd.DataFrame(
-            binned_msd.T, index=t, columns=np.round(binned_pos_final, 2)
-        )
-        std_df_dic[key] = pd.DataFrame(
-            binned_std_msd.T, index=t, columns=np.round(binned_pos_final, 2)
-        )
-
+    msd_df_dic, std_df_dic = {}, {}
+    for k, key in enumerate(_MSD_PAIRS):
+        msd_df_dic[key] = pd.DataFrame(mean[k], index=t, columns=columns)
+        std_df_dic[key] = pd.DataFrame(std[k], index=t, columns=columns)
         msd_df_dic[key].index.name = "time"
         std_df_dic[key].index.name = "time"
+
+    coords_var_dict = None
+    if coords_var:
+        positions_array = np.concatenate(positions_per_block, axis=0)
+        avg_pos = np.mean(positions_array, axis=1)
+        column_groups = {i: [] for i in range(len(drange))}
+        for col_index, avg in enumerate(avg_pos):
+            bin_index = np.digitize(avg, drange) - 1
+            if bin_index == len(drange):
+                bin_index -= 1
+            column_groups[bin_index].append(col_index)
+        coords_var_dict = {
+            j: positions_array[column_groups[i], :].flatten()
+            - np.median(positions_array[column_groups[i], :].flatten())
+            for i, j in enumerate(np.round(binned_pos, 2))
+        }
+        coords_var_dict = {k: v for k, v in coords_var_dict.items() if v.size}
 
     return pd.concat(msd_df_dic, axis=1), pd.concat(std_df_dic, axis=1), coords_var_dict
 

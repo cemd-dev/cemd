@@ -95,9 +95,9 @@ def test_pmg_reader_reindex_preserves_crystal(monkeypatch, angles, perm):
     def signed_volume(pos):
         return np.linalg.det(pos[1:4] - pos[0])
 
-    assert signed_volume(topology["atoms"][["x", "y", "z"]].to_numpy()) == pytest.approx(
-        signed_volume(original.cart_coords)
-    )
+    assert signed_volume(
+        topology["atoms"][["x", "y", "z"]].to_numpy()
+    ) == pytest.approx(signed_volume(original.cart_coords))
 
 
 def test_from_file_sdf():
@@ -183,6 +183,36 @@ def test_write_and_reread_lammps_data_roundtrip(tmp_path):
     )
 
 
+def test_lammps_data_roundtrip_keeps_pair_ij_coefficients(tmp_path):
+    # Regression test: a "PairIJ Coeffs" line (`i j eps sigma`) was parsed
+    # like a "Pair Coeffs" one (`i eps sigma`), under the bare type as key
+    # instead of "A-B": the parameters came back wrong (3 numbers read as
+    # Buckingham) and a re-write emitted an empty PairIJ section.
+    from cemd.forcefield.models import LJParams
+
+    system = make_water_system()
+    system.set_pair_params("Ow", "Ow", LJParams(epsilon=0.155, sigma=3.166))
+    system.set_pair_params("Hw", "Hw", LJParams(epsilon=0.0, sigma=0.0))
+    system.set_pair_params("Hw", "Ow", LJParams(epsilon=0.01, sigma=1.5))
+    path = tmp_path / "water.data"
+    system.write(path)
+
+    reloaded = AtomicSystem.from_file(path)
+    pairs = reloaded._ff_params.pair
+    assert set(pairs) == {"Ow-Ow", "Hw-Hw", "Hw-Ow"}
+    assert pairs["Hw-Ow"].epsilon == pytest.approx(0.01)
+    assert pairs["Hw-Ow"].sigma == pytest.approx(1.5)
+
+    rewritten = tmp_path / "again.data"
+    reloaded.write(rewritten)
+
+    def pair_section(p):
+        text = Path(p).read_text()
+        return text.split("PairIJ Coeffs")[1].split("Bond Coeffs")[0]
+
+    assert pair_section(rewritten) == pair_section(path)
+
+
 def test_write_and_reread_pdb_roundtrip(tmp_path):
     system = make_water_system()
     path = tmp_path / "water.pdb"
@@ -243,6 +273,94 @@ def test_pdb_element_column_is_written_upper_case(tmp_path):
         if line.startswith(("ATOM", "HETATM"))
     }
     assert written == {"C", "CA", "O"}
+
+
+def _water_molecules(n_mol: int) -> AtomicSystem:
+    """`n_mol` bonded water molecules on a grid, numbered from 1."""
+    import pandas as pd
+
+    grid = np.stack(np.meshgrid(*[np.arange(50)] * 3), -1).reshape(-1, 3)[:n_mol]
+    xyz = np.repeat(grid * 3.1, 3, axis=0)
+    xyz[1::3] += [0.96, 0, 0]
+    xyz[2::3] += [-0.24, 0.93, 0]
+    ids = np.arange(1, 3 * n_mol + 1)
+    oxygens = ids[0::3]
+    return AtomicSystem(
+        {
+            "atoms": pd.DataFrame(
+                {
+                    "type": np.tile(["Ow", "Hw", "Hw"], n_mol),
+                    "charge": np.tile([-0.8, 0.4, 0.4], n_mol),
+                    "x": xyz[:, 0],
+                    "y": xyz[:, 1],
+                    "z": xyz[:, 2],
+                },
+                index=ids,
+            ),
+            "bonds": pd.DataFrame(
+                {
+                    "type": "Hw-Ow",
+                    "atom_1": np.concatenate([oxygens, oxygens]),
+                    "atom_2": np.concatenate([oxygens + 1, oxygens + 2]),
+                },
+                index=np.arange(1, 2 * n_mol + 1),
+            ),
+            "box": [160.0, 160.0, 160.0, 90.0, 90.0, 90.0],
+            "masses": {"Ow": 15.9994, "Hw": 1.008},
+            "charges": {"Ow": -0.8, "Hw": 0.4},
+        }
+    )
+
+
+@pytest.mark.parametrize("n_mol", [3400, 34000], ids=["10200-atoms", "102000-atoms"])
+def test_pdb_roundtrip_past_the_five_digit_serials(tmp_path, n_mol):
+    """From 10 000 atoms the serial meets the record name ("HETATM10001").
+
+    The reader split lines on whitespace and failed there, which broke every
+    Packmol build of that size. Past 99 999 the serials are hybrid-36.
+    """
+    system = _water_molecules(n_mol)
+    path = tmp_path / "water.pdb"
+    system.write(path)
+
+    back = AtomicSystem.from_file(path)
+    assert (back.atoms.index == system.atoms.index).all()
+    assert (back.atoms["type"].astype(str) == system.atoms["type"]).all()
+    assert np.allclose(
+        back.atoms[["x", "y", "z"]], system.atoms[["x", "y", "z"]], atol=1e-3
+    )
+    assert back.num_bonds == system.num_bonds
+
+
+def test_pdb_reads_packmol_hexadecimal_serials(tmp_path):
+    """Packmol writes serials past 99 999 in hexadecimal ("186A0")."""
+    lines = []
+    for atom_id in (99998, 99999, 100000, 102400):
+        serial = f"{atom_id:5d}" if atom_id < 100000 else f"{atom_id:5X}"
+        lines.append(
+            f"HETATM{serial}  Ow  UNK A   1       1.000   2.000   3.000"
+            "  1.00  0.00           O"
+        )
+    path = tmp_path / "packmol.pdb"
+    path.write_text("\n".join(lines) + "\nEND\n")
+
+    # 102400 is "19000" in hexadecimal: all digits, but not 19 000.
+    assert list(AtomicSystem.from_file(path).atoms.index) == [
+        99998,
+        99999,
+        100000,
+        102400,
+    ]
+
+
+def test_hybrid36_serials_round_trip():
+    from cemd.core._io.formats.pdb import hy36decode, hy36encode
+
+    for value in (1, 99999, 100000, 100001, 1_000_000, 43_770_015):
+        field = hy36encode(value)
+        assert len(field) == 5
+        assert hy36decode(field) == value
+    assert hy36encode(100000) == "A0000"
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import tempfile
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -396,15 +397,64 @@ class CSHBuilder(BaseBuilder):
     # ------------------------------------------------------------------
 
     def to_cash(
-        self, as_ratio: float, supercell_factor: int = 1
-    ) -> tuple[AtomicSystem, float, dict | None, dict | None]:
-        """Convert C-S-H to C-A-S-H by substituting Si with Al."""
+        self,
+        as_ratio: float | None = None,
+        supercell_factor: int = 1,
+        *,
+        al_si: float | None = None,
+        compensation: str | None = None,
+        seed: int | None = None,
+    ) -> AtomicSystem:
+        """
+        Convert C-S-H to C-A-S-H by substituting bridging Si with Al.
+
+        Al only enters the bridging tetrahedra of the dreierkette chains
+        (Richardson 1999), so the Al content is capped by the number of
+        bridging sites; above it, every bridging site is substituted and a
+        warning is issued. Pores are filled in turn, each receiving the same
+        number of Al, at random sites within a pore.
+
+        Parameters
+        ----------
+        as_ratio : float, optional
+            Number of Al as a fraction of the initial number of Si.
+        supercell_factor : int, default=1
+            Unused, kept for backward compatibility.
+        al_si : float, optional
+            Target Al/Si ratio of the final C-A-S-H (Si counted after the
+            substitution). Exactly one of ``as_ratio`` and ``al_si`` must
+            be given.
+        compensation : {None, "OH"}, default=None
+            Charge compensation of the Si4+ -> Al3+ substitution. ``"OH"``
+            removes, for each Al, the nearest hydroxide ion (an O bonded to
+            exactly one H and to no Si/Al, e.g. interlayer Ca-OH), as in
+            Duque-Redondo et al., Comput. Mater. Sci. 190 (2021) 110312: the
+            Ca and the molecular water are unchanged, so Ca/(Si+Al) keeps
+            its C-S-H value. ``None`` leaves the charge uncompensated.
+        seed : int, optional
+            Seed of the random site selection.
+
+        Returns
+        -------
+        AtomicSystem
+            The C-A-S-H structure.
+
+        Examples
+        --------
+        >>> builder = CSHBuilder.from_system(system)
+        >>> cash = builder.to_cash(al_si=0.12, compensation="OH", seed=1)
+        """
         if self._system is None:
             raise RuntimeError(
                 "No system available. Build one first or use from_system()."
             )
+        if (as_ratio is None) == (al_si is None):
+            raise ValueError("Give exactly one of as_ratio and al_si.")
+        if compensation not in (None, "OH"):
+            raise ValueError(f"Unknown compensation: {compensation!r}")
 
         system = self._system
+        rng = np.random.default_rng(seed)
 
         universe = system.to_mda()
         si_sel = universe.select_atoms("type Si")
@@ -413,7 +463,10 @@ class CSHBuilder(BaseBuilder):
             raise ValueError("No silicon atoms found in the system.")
 
         nsi = len(si_sel)
-        nal_target = round(as_ratio * nsi)
+        if al_si is not None:
+            nal_target = round(al_si * nsi / (1.0 + al_si))
+        else:
+            nal_target = round(as_ratio * nsi)
 
         # `substitute_si_by_al`'s 3rd positional parameter is `symmetry`
         # (bool), not a supercell factor -- passing `supercell_factor`
@@ -421,10 +474,18 @@ class CSHBuilder(BaseBuilder):
         # regardless of its actual value. There is currently no
         # supercell-aware substitution logic to forward it to.
         universe, substituted_ids = substitute_si_by_al(
-            universe, nal_target, symmetry=True
+            universe, nal_target, symmetry=True, rng=rng
         )
+        if 0 < len(substituted_ids) < nal_target:
+            warnings.warn(
+                f"Only {len(substituted_ids)} bridging sites for {nal_target} "
+                "Al requested: every bridging Si was substituted.",
+                UserWarning,
+            )
 
         system.set_type2atoms(substituted_ids, "Al")
+        if compensation == "OH" and substituted_ids:
+            system.remove_atoms(_nearest_hydroxides(system, substituted_ids, rng))
         system.keep_connection_types(
             bond_types=["Hsi-Osih", "Ha-Oah", "Hh-Oh", "Hw-Ow"],
             angle_types=["Hw-Ow-Hw"],
@@ -433,6 +494,75 @@ class CSHBuilder(BaseBuilder):
         self._system = system
         self._update_analysis()
         return system
+
+
+def _nearest_hydroxides(
+    system: AtomicSystem,
+    al_ids: Sequence[int],
+    rng: np.random.Generator,
+    oh_cutoff: float = 1.2,
+    framework_cutoff: float = 2.0,
+) -> list[int]:
+    """
+    Ids of the O and H of one hydroxide ion per Al, the nearest to it.
+
+    A hydroxide is an O with exactly one H within ``oh_cutoff`` and no Si
+    or Al within ``framework_cutoff`` (which excludes silanols and
+    aluminols). The Al are served in random order, each taking the nearest
+    hydroxide not taken yet.
+    """
+    from MDAnalysis.lib.distances import capped_distance, distance_array
+
+    universe = system.to_mda()
+    box = universe.dimensions
+    elements = system.elements
+
+    def by_element(*symbols):
+        types = [str(t) for t, el in elements.items() if el in symbols]
+        if not types:
+            return universe.atoms[[]]
+        return universe.select_atoms("type " + " ".join(types))
+
+    oxygens, hydrogens = by_element("O"), by_element("H")
+    framework = by_element("Si", "Al")
+
+    pairs = capped_distance(
+        oxygens.positions,
+        hydrogens.positions,
+        oh_cutoff,
+        box=box,
+        return_distances=False,
+    )
+    n_h = np.bincount(pairs[:, 0], minlength=len(oxygens))
+    hydrogen_of = dict(zip(pairs[:, 0], pairs[:, 1]))
+    bonded = capped_distance(
+        oxygens.positions,
+        framework.positions,
+        framework_cutoff,
+        box=box,
+        return_distances=False,
+    )
+    in_framework = np.zeros(len(oxygens), dtype=bool)
+    in_framework[bonded[:, 0]] = True
+    candidates = np.where((n_h == 1) & ~in_framework)[0]
+
+    if len(candidates) < len(al_ids):
+        raise ValueError(
+            f"{len(al_ids)} hydroxides needed to compensate the Al, "
+            f"only {len(candidates)} found."
+        )
+
+    al = universe.atoms[np.isin(universe.atoms.ids, al_ids)]
+    dist = distance_array(al.positions, oxygens.positions[candidates], box=box)
+    taken = np.zeros(len(candidates), dtype=bool)
+    removed = []
+    for k in rng.permutation(len(al)):
+        row = np.where(taken, np.inf, dist[k])
+        j = int(np.argmin(row))
+        taken[j] = True
+        o = candidates[j]
+        removed += [int(oxygens[o].id), int(hydrogens[hydrogen_of[o]].id)]
+    return removed
 
 
 @dataclass

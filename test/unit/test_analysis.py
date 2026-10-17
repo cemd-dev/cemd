@@ -258,6 +258,87 @@ def test_diffusion_of_an_isotropic_walk_has_no_preferred_axis():
     assert np.abs(cross).max() < 0.1 * diagonal.mean()
 
 
+def test_msd_profile_recovers_the_walk_through_the_periodic_boundaries():
+    universe, step = random_walk_universe()
+    # Wrap the walkers in a box they cross many times along x and y
+    box = 10.0
+    wrapped = universe.trajectory.coordinate_array.copy()
+    wrapped[:, :, :2] %= box
+    universe.load_new(wrapped, format=MemoryReader)
+    for ts in universe.trajectory:
+        ts.dimensions = [box, box, 200.0, 90.0, 90.0, 90.0]
+
+    profile, _, _ = msd_profile(
+        universe, "Ow", 1000.0, corrlength=40, gaplength=10, delta=2.0
+    )
+
+    lag = 30
+    expected = lag * step**2
+    for key in ("xx", "yy", "zz"):
+        assert profile[key].iloc[lag].median() == pytest.approx(expected, rel=0.10)
+
+
+def test_msd_profile_averages_over_every_block():
+    """The released version kept the MSD of the first block only, binned by
+    the positions of the last: frozen at first, the walkers here came out
+    with no displacement at all."""
+    universe, step = random_walk_universe()
+    # The walkers stand still for the first half of the trajectory
+    positions = universe.trajectory.coordinate_array.copy()
+    n_frames = len(positions)
+    positions[: n_frames // 2] = positions[n_frames // 2]
+    universe.load_new(positions, format=MemoryReader)
+    for ts in universe.trajectory:
+        ts.dimensions = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+
+    corrlength, gaplength = 40, 10
+    profile, _, _ = msd_profile(
+        universe, "Ow", 1000.0, corrlength=corrlength, gaplength=gaplength, delta=2.0
+    )
+
+    # Steps of the walk taken within the first `lag` frames of each block
+    lag = 30
+    starts = np.arange(0, n_frames - corrlength, gaplength)
+    moving = [
+        np.count_nonzero(np.arange(s + 1, s + lag + 1) > n_frames // 2)
+        for s in starts
+    ]
+    expected = np.mean(moving) * step**2
+    assert profile["xx"].iloc[lag].median() == pytest.approx(expected, rel=0.15)
+
+
+def test_msd_profile_does_not_depend_on_how_the_trajectory_is_chunked(monkeypatch):
+    import cemd.analysis.diffusion as diffusion
+
+    universe, _ = random_walk_universe(n_frames=300)
+    kwargs = dict(corrlength=40, gaplength=7, delta=2.0)
+    whole = msd_profile(universe, "Ow", 1000.0, **kwargs)
+    # The smallest chunks the iterator allows: two blocks long
+    monkeypatch.setattr(diffusion._iter_blocks, "__defaults__", (1,))
+    chunked = msd_profile(universe, "Ow", 1000.0, **kwargs)
+
+    for a, b in zip(whole[:2], chunked[:2]):
+        np.testing.assert_allclose(a.to_numpy(), b.to_numpy(), rtol=1e-12)
+
+
+def test_msd_profile_bins_on_the_edges_given():
+    universe, step = random_walk_universe()
+    # Uneven bins, the outer ones beyond any walker; the walkers spread
+    # a few A around the centre of the box at 100 A
+    edges = [0.0, 97.0, 99.5, 100.0, 103.0, 200.0]
+    profile, _, _ = msd_profile(
+        universe, "Ow", 1000.0, corrlength=40, gaplength=10, edges=edges
+    )
+
+    midpoints = np.round((np.array(edges[:-1]) + np.array(edges[1:])) / 2, 2)
+    assert set(profile["xx"].columns) <= set(midpoints)
+    assert {98.25, 99.75, 101.5} <= set(profile["xx"].columns)
+    lag = 30
+    assert profile["xx"].iloc[lag].median() == pytest.approx(lag * step**2, rel=0.10)
+    with pytest.raises(ValueError):
+        msd_profile(universe, "Ow", 1000.0, corrlength=40, edges=[1.0, 0.0])
+
+
 def test_density_map_takes_a_slab_centred_on_the_interface():
     # Regression test: the selection was `prop z < interface + eps`, the
     # whole half-cell below the plane rather than a slab around it. On a

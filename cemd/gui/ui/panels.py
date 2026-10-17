@@ -149,6 +149,14 @@ class FilterPanel(BaseManagerPanel):
         self.radius_spinboxes = {}
         self.color_buttons = {}
 
+        # Spinbox steps and slider moves arrive in bursts. Each one used to
+        # refresh the whole 3D view; the timer folds a burst into a single
+        # refresh once the user pauses.
+        self._emit_timer = QtCore.QTimer(self)
+        self._emit_timer.setSingleShot(True)
+        self._emit_timer.setInterval(60)
+        self._emit_timer.timeout.connect(self._emit_everything)
+
         # ---GLOBAL SCALING CONTROL (Slider) ---
         self.scale_container = QtWidgets.QWidget()
         scale_layout = QtWidgets.QHBoxLayout(self.scale_container)
@@ -163,8 +171,11 @@ class FilterPanel(BaseManagerPanel):
         self.global_scale_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.global_scale_slider.setRange(10, 300)  # From 0.1x to 3.0x
         self.global_scale_slider.setValue(100)  # 1.0x by default
+        # valueChanged rather than sliderReleased: a click on the groove,
+        # the mouse wheel and the arrow keys move the slider without any
+        # release, and used to leave the view out of step with it.
         self.global_scale_slider.valueChanged.connect(self._on_slider_move_only)
-        self.global_scale_slider.sliderReleased.connect(self._emit_everything)
+        self.global_scale_slider.valueChanged.connect(self._schedule_emit)
 
         # Value label (to see the number)
         self.lbl_scale_val = QtWidgets.QLabel("x1.0")
@@ -180,9 +191,10 @@ class FilterPanel(BaseManagerPanel):
 
         # Action button inherited from BaseManagerPanel
         self.btn_reset_vdw = self.add_action_button("Reset")
+        self.btn_reset_vdw.clicked.connect(self.reset_to_config)
 
     def _on_slider_move_only(self, value):
-        """Updates the text AND starts rendering in real time"""
+        """Updates the text next to the slider."""
         scale_float = value / 100.0
         self.lbl_scale_val.setText(f"x{scale_float:.1f}")
 
@@ -219,7 +231,6 @@ class FilterPanel(BaseManagerPanel):
         self.checkboxes = {}
         self.radius_spinboxes = {}
         self.color_buttons = {}
-        main_win = self.window()
 
         # ---NEW: Calculation of the number of atoms by type ---
         # We count the occurrences in the atoms DataFrame
@@ -249,14 +260,14 @@ class FilterPanel(BaseManagerPanel):
             self.checkboxes[atype_str] = cb
 
             # The number (Paste right after) ---
-            n_atoms = counts.get(atype, 0)
+            n_atoms = counts.get(atype_str, 0)
             count_label = QtWidgets.QLabel(f"[{n_atoms}]")
             count_label.setSizePolicy(
                 QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred
             )
 
             # Tooltip on both for added comfort
-            tip = f"Total pour {atype_str}: {n_atoms} atomes"
+            tip = f"{n_atoms} atoms of type {atype_str}"
             cb.setToolTip(tip)
             count_label.setToolTip(tip)
 
@@ -266,9 +277,9 @@ class FilterPanel(BaseManagerPanel):
             color_btn.setColorMode(ColorMode.RGB)
             current_color = color_map.get(atype_str, "#808080")
             color_btn.setColor(QtGui.QColor(current_color))
-            color_btn.clicked.connect(
-                lambda _, t=atype_str, b=color_btn: self.pick_color(t, b, main_win)
-            )
+            # The button opens its own color dialog when clicked; connecting
+            # a second picker to `clicked` showed the dialog twice.
+            color_btn.colorChanged.connect(self._emit_everything)
             self.color_buttons[atype_str] = color_btn
 
             # Spinbox (VdW Radius) ---
@@ -278,7 +289,7 @@ class FilterPanel(BaseManagerPanel):
             sp.setSuffix(" Å")
             sp.setValue(radius_map.get(atype_str, 1.0))
             sp.setFixedWidth(70)
-            sp.valueChanged.connect(self._emit_everything)
+            sp.valueChanged.connect(self._schedule_emit)
             self.radius_spinboxes[atype_str] = sp
 
             row_layout.addWidget(cb)
@@ -289,39 +300,11 @@ class FilterPanel(BaseManagerPanel):
 
             self.list_layout.addWidget(row_widget)
 
-        # Reconnecting the Reset button
-        try:
-            self.btn_reset_vdw.clicked.disconnect()
-        except TypeError:
-            pass
-        self.btn_reset_vdw.clicked.connect(self.reset_to_config)
-
         self.global_scale_slider.blockSignals(True)
         # We multiply by 100 because the slider uses integers (1.0 -> 100)
         self.global_scale_slider.setValue(int(global_scale * 100))
         self.lbl_scale_val.setText(f"x{global_scale:.1f}")
         self.global_scale_slider.blockSignals(False)
-
-    def pick_color(self, atype_str, btn, main_win):
-        """Opens the color picker initialized to the current color"""
-
-        current_config = main_win.global_config
-        color_map = current_config.get("color_map", {})
-
-        current_hex = color_map.get(atype_str, "#ffffff")
-
-        color = QtWidgets.QColorDialog.getColor(
-            QtGui.QColor(current_hex), main_win, f"Select color for {atype_str}"
-        )
-
-        if color.isValid():
-            new_hex = color.name()
-
-            color_map[atype_str] = new_hex
-
-            active_tab = main_win.tabs.currentWidget()
-            if active_tab:
-                active_tab.refresh_tab_view(full_rebuild=False)
 
     def get_settings(self):
         """Returns the settings: real radii, visibility AND scale factor"""
@@ -360,7 +343,7 @@ class FilterPanel(BaseManagerPanel):
                     default_radii = data.get("radius_map", {})
                     default_scale = data.get("global_scale", 1.0)
             except Exception as e:
-                print(f"Erreur lors du reset (lecture JSON): {e}")
+                print(f"Could not read the default configuration: {e}")
 
         # Block the signals to avoid refreshing the plotter at each iteration
         self.blockSignals(True)
@@ -376,8 +359,13 @@ class FilterPanel(BaseManagerPanel):
         self.blockSignals(False)
         self._emit_everything()
 
+    def _schedule_emit(self, *args):
+        """Refresh the view once the current burst of changes is over."""
+        self._emit_timer.start()
+
     def _emit_everything(self, *args):
         """Sends the complete dictionary to the Plotter"""
+        self._emit_timer.stop()
         settings = self.get_settings()
         self.type_changed.emit(settings)
 
@@ -403,11 +391,16 @@ class BondManagerPanel(BaseManagerPanel):
         self.bond_radius_slider.setRange(1, 50)  # From 0.01 to 0.5
         self.bond_radius_slider.setValue(10)  # 0.1 by default
         self.bond_radius_slider.valueChanged.connect(self._on_slider_move)
-        # We emit the final signal when we release to avoid rowing
-        self.bond_radius_slider.sliderReleased.connect(self.emit_changes)
+        # Same reasoning as the atom scale slider: follow every move, not
+        # only a drag release, and fold a burst into one rebuild.
+        self._emit_timer = QtCore.QTimer(self)
+        self._emit_timer.setSingleShot(True)
+        self._emit_timer.setInterval(60)
+        self._emit_timer.timeout.connect(self.emit_changes)
+        self.bond_radius_slider.valueChanged.connect(self._emit_timer.start)
 
-        self.lbl_radius_val = QtWidgets.QLabel("0.10x")
-        self.lbl_radius_val.setFixedWidth(35)
+        self.lbl_radius_val = QtWidgets.QLabel("x0.10")
+        self.lbl_radius_val.setFixedWidth(40)
 
         scale_layout.addWidget(lbl_title)
         scale_layout.addWidget(self.bond_radius_slider)
@@ -429,6 +422,12 @@ class BondManagerPanel(BaseManagerPanel):
         """Returns the real value of the radius (ex: 0.15)"""
         return self.bond_radius_slider.value() / 100.0
 
+    def set_bond_radius(self, value):
+        """Show `value` on the slider without asking for a redraw."""
+        with QtCore.QSignalBlocker(self.bond_radius_slider):
+            self.bond_radius_slider.setValue(int(round(value * 100)))
+        self.lbl_radius_val.setText(f"x{value:.2f}")
+
     def refresh(self, system, bond_map):
         if system is not None and hasattr(system, "atom_types"):
             self.available_types = [str(t) for t in system.atom_types]
@@ -443,8 +442,6 @@ class BondManagerPanel(BaseManagerPanel):
 
     def add_pair_row(self, t1=None, t2=None, dist_val=1.5):
         """Adds a linking rule line"""
-        if not self.available_types:
-            return
         if not self.available_types:
             return
 
@@ -495,7 +492,7 @@ class BondManagerPanel(BaseManagerPanel):
         # Connections
         c1.currentIndexChanged.connect(self.emit_changes)
         c2.currentIndexChanged.connect(self.emit_changes)
-        dist.valueChanged.connect(self.emit_changes)
+        dist.valueChanged.connect(self._emit_timer.start)
         btn_del.clicked.connect(lambda: self.remove_pair_row(rule))
 
     def remove_pair_row(self, rule):
@@ -538,6 +535,7 @@ class BondManagerPanel(BaseManagerPanel):
                     self.add_pair_row(t1, t2, dist_value)
 
     def emit_changes(self, *args):
+        self._emit_timer.stop()
         # We do not transmit if the panel is emptying (signals blocked)
         if not getattr(self, "_is_refreshing", False):
             self.bond_settings_changed.emit(self.get_settings())

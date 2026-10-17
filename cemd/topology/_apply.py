@@ -17,8 +17,11 @@
 
 from __future__ import annotations
 
+import re
 from itertools import combinations
 from typing import TYPE_CHECKING
+
+import numpy as np
 
 from .rules import DihedralRule, TopologyRule
 
@@ -35,6 +38,15 @@ def _update_topo(univ, attr, new_entries):
     if hasattr(univ, attr):
         univ.del_TopologyAttr(attr)
     univ.add_TopologyAttr(attr, combined)
+
+
+#: Selection keywords whose result for one atom depends on other atoms.
+#: A neighbor selection using one of them goes through the per-center
+#: path, which evaluates it against the whole universe every time.
+_NON_LOCAL = re.compile(
+    r"\b(around|sphzone|sphlayer|cyzone|cylayer|isolayer|point|bonded|byres|"
+    r"same|global|group|fullgroup)\b"
+)
 
 
 def apply_single_rule_to_universe(
@@ -55,6 +67,170 @@ def apply_single_rule_to_universe(
     mda.Universe
         The modified universe.
     """
+    if any(_NON_LOCAL.search(c.selection) for c in rule.neighbors):
+        return _apply_rule_per_center(universe, rule)
+    return _apply_rule_with_neighbor_lists(universe, rule)
+
+
+def _type_names(selection: str) -> set[str] | None:
+    """The types of a plain "type A B ..." selection, else None."""
+    match = re.fullmatch(r"\s*type\s+(.+?)\s*", selection)
+    if match is None:
+        return None
+    names = match.group(1).split()
+    if any(n in ("and", "or", "not") or set(n) & set("*?[]()") for n in names):
+        return None
+    return set(names)
+
+
+def _periodic_box(universe: mda.Universe):
+    """The box `around` would use: the dimensions, if they are all set."""
+    box = universe.dimensions
+    if box is None or not np.all(box > 0):
+        return None
+    return box
+
+
+def _apply_rule_with_neighbor_lists(
+    universe: mda.Universe, rule: TopologyRule
+) -> mda.Universe:
+    """The per-center rule, with every neighbor search done up front.
+
+    Selecting "around <cutoff> index <c>" for each center searched the
+    whole system once per center: 70 s for the ClayFF rules on 24 000
+    atoms, four times longer at each doubling. Here one `capped_distance`
+    per criterion -- the search `around` itself runs, same cutoff, same
+    periodic box -- lists every center's neighbors at once.
+
+    Rules rename atoms as they go, and a later center sees the new names:
+    a hydrogen already renamed "Hw" no longer counts as "type H". Each
+    criterion therefore keeps a membership mask over all atoms, updated
+    for the atoms each match renames. That is exact for selections where
+    an atom's membership depends on that atom alone, which is why the
+    non-local keywords go through `_apply_rule_per_center` instead.
+    """
+    from MDAnalysis.lib.distances import capped_distance
+
+    center_atoms = universe.select_atoms(rule.center)
+    atoms = universe.atoms
+    centers = center_atoms.indices
+    box = _periodic_box(universe)
+
+    criteria = []
+    for criterion in rule.neighbors:
+        member = np.zeros(len(atoms), dtype=bool)
+        member[universe.select_atoms(criterion.selection).indices] = True
+
+        if len(centers):
+            pairs = capped_distance(
+                center_atoms.positions,
+                atoms.positions,
+                max_cutoff=criterion.cutoff,
+                box=box,
+                return_distances=False,
+            )
+        else:
+            pairs = np.empty((0, 2), dtype=np.int64)
+        # Grouped by center, each group in index order as a selection is.
+        pairs = pairs[np.lexsort((pairs[:, 1], pairs[:, 0]))]
+        bounds = np.searchsorted(pairs[:, 0], np.arange(len(centers) + 1))
+        criteria.append(
+            (criterion, member, pairs[:, 1], bounds, _type_names(criterion.selection))
+        )
+
+    # Writing a type through MDAnalysis rewrites the whole type array: one
+    # rename per match made the loop quadratic again (11 s of 15 on 60 000
+    # atoms). When every criterion only tests types, the renames go into a
+    # local array, written back once. A selection on anything else has to
+    # see the universe up to date, so it keeps renaming in place.
+    batch = all(type_names is not None for *_, type_names in criteria)
+    types = atoms.types.copy() if batch else None
+    renamed_any = False
+
+    new_bonds = []
+    new_angles = []
+    new_impropers = []
+
+    for row, c in enumerate(centers.tolist()):
+        matched_neighbors = []
+        neighbor_type_tasks = []
+        is_valid = True
+
+        for criterion, member, neighbors, bounds, _ in criteria:
+            candidates = neighbors[bounds[row] : bounds[row + 1]]
+            found = candidates[(candidates != c) & member[candidates]]
+
+            if criterion.exact_match:
+                if len(found) != criterion.count:
+                    is_valid = False
+                    break
+            else:
+                if len(found) < criterion.count:
+                    is_valid = False
+                    break
+
+            matched_neighbors.extend(found.tolist())
+
+            if criterion.new_type is not None:
+                neighbor_type_tasks.append((found, criterion.new_type))
+
+        if not is_valid:
+            continue
+
+        renamed = []
+        if rule.new_type is not None:
+            if batch:
+                types[c] = rule.new_type
+            else:
+                atoms[c].type = rule.new_type
+            renamed.append(c)
+        for found, new_type in neighbor_type_tasks:
+            if batch:
+                types[found] = new_type
+            else:
+                atoms[found].types = new_type
+            renamed.extend(found.tolist())
+
+        if renamed:
+            renamed_any = True
+            renamed = np.unique(renamed)
+            if batch:
+                current_types = types[renamed]
+            else:
+                current = atoms[renamed]
+                current_types = current.types
+            for criterion, member, _, _, type_names in criteria:
+                if type_names is not None:
+                    member[renamed] = np.isin(current_types, list(type_names))
+                else:
+                    member[renamed] = False
+                    member[current.select_atoms(criterion.selection).indices] = True
+
+        if rule.bonds:
+            for n in matched_neighbors:
+                new_bonds.append(tuple(sorted((c, n))))
+
+        if rule.angles and len(matched_neighbors) >= 2:
+            for n1, n2 in combinations(matched_neighbors, 2):
+                new_angles.append((n1, c, n2))
+
+        if rule.impropers and len(matched_neighbors) >= 3:
+            for n1, n2, n3 in combinations(matched_neighbors, 3):
+                new_impropers.append((c, n1, n2, n3))
+
+    if batch and renamed_any:
+        atoms.types = types
+
+    _update_topo(universe, "bonds", new_bonds)
+    _update_topo(universe, "angles", new_angles)
+    _update_topo(universe, "impropers", new_impropers)
+
+    return universe
+
+
+def _apply_rule_per_center(universe: mda.Universe, rule: TopologyRule) -> mda.Universe:
+    """The rule evaluated with one selection per center: slow, but exact
+    for any selection string."""
     center_atoms = universe.select_atoms(rule.center)
 
     new_bonds = []
@@ -184,13 +360,18 @@ def apply_single_dihedral_rule_to_universe(
     idx_jk = {(sel_j.indices[j], sel_k.indices[k]) for j, k in pairs_jk}
     idx_kl = {(sel_k.indices[k], sel_l.indices[l_]) for k, l_ in pairs_kl}
 
+    # Indexed by the shared atom: matching every i-j pair against every
+    # j-k pair and every k-l pair was cubic in the number of pairs.
+    k_of_j = {}
+    for j, k in idx_jk:
+        k_of_j.setdefault(j, []).append(k)
+    l_of_k = {}
+    for k, l_ in idx_kl:
+        l_of_k.setdefault(k, []).append(l_)
+
     for i, j in idx_ij:
-        for j2, k in idx_jk:
-            if j != j2:
-                continue
-            for k2, l_ in idx_kl:
-                if k != k2:
-                    continue
+        for k in k_of_j.get(j, ()):
+            for l_ in l_of_k.get(k, ()):
                 if i == l_:
                     continue
 

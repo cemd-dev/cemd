@@ -156,3 +156,99 @@ def test_dihedral_rule_no_matches_is_a_noop():
 
     assert result is system
     assert system.num_dihedrals == 0
+
+
+# ---------------------------------------------------------------------------
+# Neighbor lists vs one selection per center
+# ---------------------------------------------------------------------------
+
+
+def _random_mix(n_atoms: int, seed: int) -> AtomicSystem:
+    """A dense random mix, where centers share neighbors and renames chain."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    types = rng.choice(["Si", "Al", "O", "O", "O", "H", "H", "C", "S", "Ca"], n_atoms)
+    xyz = rng.uniform(0, 14.0, (n_atoms, 3))
+    masses = {
+        "Si": 28.09,
+        "Al": 26.98,
+        "O": 16.0,
+        "H": 1.008,
+        "C": 12.01,
+        "S": 32.06,
+        "Ca": 40.08,
+    }
+    return AtomicSystem(
+        {
+            "atoms": pd.DataFrame(
+                {
+                    "type": types,
+                    "charge": 0.0,
+                    "x": xyz[:, 0],
+                    "y": xyz[:, 1],
+                    "z": xyz[:, 2],
+                },
+                index=range(1, n_atoms + 1),
+            ),
+            "box": [14.0, 14.0, 14.0, 90.0, 90.0, 90.0],
+            "masses": masses,
+            "charges": dict.fromkeys(masses, 0.0),
+        }
+    )
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_neighbor_lists_match_one_selection_per_center(seed):
+    """The fast path must type and connect exactly as the per-center one.
+
+    The rules rename atoms as they go and later centers see the new names,
+    so this compares the whole sequence, not each rule on a fresh system.
+    The extra rules cover inexact counts, impropers, a selection that is
+    not a plain type list, and a neighbor renamed by a rule.
+    """
+    from cemd.topology import _apply
+
+    extra = [
+        TopologyRule(
+            "type Ca",
+            NeighborCriterion("type O Ob Osi Oh Ow", 3.0, 2, exact_match=False),
+            new_type="Cx",
+            bonds=True,
+            impropers=True,
+        ),
+        TopologyRule(
+            "type C",
+            NeighborCriterion("name * and (type O or type Oc)", 1.6, 3),
+            angles=True,
+            impropers=True,
+        ),
+        TopologyRule(
+            "type S",
+            NeighborCriterion("type O*", 1.8, 1, "Oq", exact_match=False),
+            bonds=True,
+        ),
+    ]
+
+    system = _random_mix(800, seed)
+    reference, fast = system.to_mda(), system.to_mda()
+    for rule in CSHFF_RULES + extra:
+        _apply._apply_rule_per_center(reference, rule)
+        _apply._apply_rule_with_neighbor_lists(fast, rule)
+
+    def state(universe):
+        def indices(attr):
+            if not hasattr(universe, attr):
+                return []
+            return sorted(map(tuple, getattr(universe, attr).indices.tolist()))
+
+        return (
+            list(universe.atoms.types),
+            indices("bonds"),
+            indices("angles"),
+            indices("impropers"),
+        )
+
+    expected = state(reference)
+    assert expected[1], "the mix should produce bonds"
+    assert state(fast) == expected

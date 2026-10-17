@@ -45,6 +45,11 @@ class StructureTabWidget(QtWidgets.QWidget):
         self.parent_gui = parent_gui
         self.df_visible = pd.DataFrame()
         self.selected_real_indices = []
+        #: What the bonds on screen were drawn from; see `refresh_tab_view`.
+        self._bonds_key = None
+        #: True while the structure has changes that are not saved. The
+        #: main window sets it; see `AtomViewerGUI.set_tab_modified`.
+        self.modified = False
 
         self.setup_ui()
 
@@ -54,7 +59,7 @@ class StructureTabWidget(QtWidgets.QWidget):
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
 
         # move the creation of the plotter and the table here
-        self.plotter = AtomicPlotter(self, config=self.parent_gui.global_config)
+        self.plotter = AtomicPlotter(self, settings=self.parent_gui.display)
         self.plotter.enable_point_picking(
             callback=None, show_point=False, left_clicking=True
         )
@@ -204,23 +209,18 @@ class StructureTabWidget(QtWidgets.QWidget):
 
         global_scale = self.parent_gui.filter_panel.get_scale_value()
 
-        # Collect all positions at once
-        positions = []
-        point_sizes = []
-
-        for idx in self.selected_real_indices:
-            atom = self.system.atoms.loc[idx]
-            atype = str(atom["type"])
-            positions.append([atom["x"], atom["y"], atom["z"]])
-            base_radius = self.plotter.radius_map.get(atype, 1.5)
-            point_sizes.append(base_radius * 20 * global_scale)
+        selected = self.system.atoms.loc[self.selected_real_indices]
 
         # A single mesh for all selected atoms
-        mesh = pv.PolyData(np.array(positions))
+        mesh = pv.PolyData(selected[["x", "y", "z"]].to_numpy(dtype=float))
 
         # PyVista does not support different point_sizes per point
         # We take the maximum size as a compromise
-        selection_size = max(point_sizes)
+        base_radius = max(
+            self.plotter.radius_map.get(str(atype), 1.5)
+            for atype in selected["type"].unique()
+        )
+        selection_size = base_radius * 20 * global_scale
 
         self.plotter.add_mesh(
             mesh,
@@ -249,17 +249,20 @@ class StructureTabWidget(QtWidgets.QWidget):
             sel_model.blockSignals(False)
             return
 
-        selection = QtCore.QItemSelection()
-        first_index = None
-        index_array = model.system_obj.atoms.index
+        rows = np.flatnonzero(model.system_obj.atoms.index.isin(list(selected_set)))
 
-        for row, real_id in enumerate(index_array):
-            if real_id in selected_set:  # ← O(1) instead of O(n)
-                left = model.index(row, 0)
-                right = model.index(row, model.columnCount() - 1)
-                selection.select(left, right)
-                if first_index is None:
-                    first_index = left
+        # One selection range per run of consecutive rows, not one per row:
+        # selecting a whole molecule or a half of the system then costs a
+        # handful of ranges instead of tens of thousands.
+        selection = QtCore.QItemSelection()
+        last_col = model.columnCount() - 1
+        breaks = np.flatnonzero(np.diff(rows) != 1) + 1
+        for run in np.split(rows, breaks):
+            if len(run):
+                selection.select(
+                    model.index(int(run[0]), 0), model.index(int(run[-1]), last_col)
+                )
+        first_index = model.index(int(rows[0]), 0) if len(rows) else None
 
         sel_model.select(selection, QtCore.QItemSelectionModel.SelectionFlag.Select)
 
@@ -284,9 +287,14 @@ class StructureTabWidget(QtWidgets.QWidget):
         indices_to_remove = [model.system_obj.atoms.index[s.row()] for s in selection]
 
         # Delete action in Data object
+        self.parent_gui.push_undo()
         self.system.remove_atoms(indices_to_remove)
 
-        # THE FIX: call the function that really exists!
+        # The deleted ids would otherwise linger: Protonate stayed enabled
+        # and the next highlight looked up atoms that no longer exist.
+        self.selected_real_indices = []
+        self.parent_gui.update_protonate_state()
+
         # put full_rebuild=True because the number of atoms has changed,
         # you must therefore update the FilterPanel counters if necessary.
         self.parent_gui.sync_ui(full_rebuild=True)
@@ -303,9 +311,7 @@ class StructureTabWidget(QtWidgets.QWidget):
             if self.selected_real_indices:
                 self.delete_selected()
             else:
-                self.parent_gui.statusBar().showMessage(
-                    "Aucun atome sélectionné.", 2000
-                )
+                self.parent_gui.statusBar().showMessage("No atom selected.", 2000)
         else:
             # Very important for other keys (Escape, etc.) to work
             super().keyPressEvent(event)
@@ -330,12 +336,19 @@ class StructureTabWidget(QtWidgets.QWidget):
             model = self.table.model()
 
             # Retrieving the real ID via column 0 (hidden or not)
-            real_idx = model.index(row, 0).data(QtCore.Qt.ItemDataRole.DisplayRole)
+            # From the index itself, not the ID column: that column displays
+            # the id as text, and `.loc["5"]` on the integer index raised a
+            # KeyError -- swallowed below, so an edited coordinate or type
+            # never reached the 3D view.
+            real_idx = model.system_obj.atoms.index[row]
 
             cols_map = {1: "type", 2: "x", 3: "y", 4: "z", 5: "charge"}
             col_name = cols_map.get(col)
             if not col_name:
                 return
+
+            # setData has already written the new value into the system.
+            self.parent_gui.set_tab_modified(self, True)
 
             # ---UPDATE LOGIC ---
             if col_name in ["x", "y", "z"]:
@@ -349,6 +362,8 @@ class StructureTabWidget(QtWidgets.QWidget):
                 )
                 position["xyz".index(col_name)] = float(new_val)
                 self.system.set_atom_position(real_idx, position)
+                # The atom moved: its bonds must be searched again.
+                self._bonds_key = None
                 QtCore.QTimer.singleShot(
                     10, lambda: self.parent_gui.sync_ui(full_rebuild=False)
                 )
@@ -371,7 +386,7 @@ class StructureTabWidget(QtWidgets.QWidget):
             # call sync_ui which contains the single call to update_info
 
         except Exception as e:
-            print(f"Erreur d'édition dans l'onglet : {e}")
+            print(f"Error while editing the table: {e}")
 
     def refresh_tab_view(
         self,
@@ -399,34 +414,15 @@ class StructureTabWidget(QtWidgets.QWidget):
                 self.on_table_selection_changed
             )
 
-        # --- PLOTTER SETTINGS UPDATE ---
-        f_panel = self.parent_gui.filter_panel
-        f_settings = f_panel.get_settings()
-
-        self.plotter.global_scale = f_settings.get("global_scale", 100) / 100.0
-        if "radii" in f_settings:
-            self.plotter.radius_map.update(f_settings["radii"])
-        if "colors" in f_settings:
-            self.plotter.color_map.update(f_settings["colors"])
-
-        b_panel = self.parent_gui.bond_manager
-        bond_settings = b_panel.get_settings()
-        if bond_settings:
-            self.plotter.global_bond_radius = b_panel.get_bond_radius()
-            self.plotter.bond_map.update(
-                {k: v for k, v in bond_settings.items() if k != "global_bond_radius"}
-            )
-
-        # Sync global config
-        self.parent_gui.global_config = self.plotter.get_current_config_dict()
-        self.plotter.color_map.update(
-            self.parent_gui._config_cache.get("color_map", {})
-        )
-        self.plotter.radius_map.update(
-            self.parent_gui._config_cache.get("radius_map", {})
-        )
+        # The plotter reads colors, radii and the scale from the shared
+        # settings, which the panels have already updated. Only the bond
+        # rules are narrowed to this structure's types.
+        settings = self.plotter.settings
+        bond_settings = settings.bond_rules_for(self.system.atom_types)
+        bond_settings["global_bond_radius"] = settings.global_bond_radius
 
         # Visible atoms filter
+        f_panel = self.parent_gui.filter_panel
         sel_types = [str(t) for t, cb in f_panel.checkboxes.items() if cb.isChecked()]
         if not sel_types:
             sel_types = self.system.atoms["type"].astype(str).unique().tolist()
@@ -440,6 +436,7 @@ class StructureTabWidget(QtWidgets.QWidget):
             # rebuild never creates cannot be shown again later by simply
             # toggling its checkbox back on.
             self.plotter.clear()
+            self._bonds_key = None
             self.plotter.draw_atoms(self.system.atoms)
             self.plotter.draw_box(self.system)
         else:
@@ -448,8 +445,20 @@ class StructureTabWidget(QtWidgets.QWidget):
 
         self.plotter.update_atom_visibility(set(sel_types))
 
-        if refresh_bonds and not self.df_visible.empty:
+        # Bonds depend on the visible types, the bond rules and the type
+        # colors, not on atom radii or the scale slider. Rebuilding them
+        # costs a neighbour search plus the tube geometry, so a light
+        # refresh skips it when none of those changed. A full rebuild has
+        # just cleared the scene and must always redraw.
+        bonds_key = (
+            frozenset(sel_types),
+            tuple(sorted(bond_settings.items())),
+            tuple(sorted((t, self.plotter.color_map.get(t)) for t in sel_types)),
+        )
+        bonds_stale = full_rebuild or bonds_key != self._bonds_key
+        if refresh_bonds and bonds_stale and not self.df_visible.empty:
             self.plotter.update_bonds_only(self.df_visible, bond_settings)
+            self._bonds_key = bonds_key
 
         if reset_camera:
             self.plotter.reset_camera()

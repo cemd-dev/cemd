@@ -20,6 +20,33 @@ def test_set_types_renames_atoms_and_bonds():
     assert set(system.angle_types) == {"H-O-H"}
 
 
+def test_set_types_renames_every_connection_kind():
+    """Dihedrals keep their chain order; the other kinds are made canonical."""
+    from cemd import AtomicSystem
+    from cemd.core._format import canonical_ff_type
+
+    from conftest import DATA_DIR
+
+    system = AtomicSystem.from_file(DATA_DIR / "caffeine.lt")
+    # Prefixes that reverse the alphabetical order of the types, so that
+    # the canonical orientation of many connections flips.
+    types = sorted(str(t) for t in system.atom_types)
+    system.set_types({t: f"{chr(ord('z') - i)}{t}" for i, t in enumerate(types)})
+
+    atom_type = system.atoms["type"].astype(str)
+    for kind in ("bond", "angle", "dihedral", "improper"):
+        table = getattr(system, kind + "s")
+        assert table is not None and len(table), kind
+        for _, row in table.iterrows():
+            names = tuple(atom_type[row[c]] for c in table.columns if c != "type")
+            expected = (
+                "-".join(names)
+                if kind == "dihedral"
+                else canonical_ff_type(names, kind)
+            )
+            assert row["type"] == expected, kind
+
+
 def test_set_types_warns_on_unknown_type(water_system):
     with pytest.warns(UserWarning, match="not currently in the system"):
         water_system.set_types({"Zz": "Q"})
@@ -49,6 +76,23 @@ def test_set_type2atoms_changes_subset(water_system):
     assert types[0] == "Ow"
     assert types[1] == "Hnew"
     assert "Hnew" in water_system.masses
+
+
+def test_set_type2atoms_new_element_type_keeps_its_mass_through_renames(
+    water_system,
+):
+    # Regression test: `set_type2atoms` tested the new type against the
+    # `masses` property, which already lists it (falling back on the
+    # atomic mass), so nothing was stored; the next `set_types` then gave
+    # it 1.008. A C-S-H turned C-A-S-H was written with Al at 1.008.
+    water_system.set_type2atoms([1], "Al")
+    water_system.set_types({"Hw": "H"})
+    assert water_system.masses["Al"] == pytest.approx(26.9815, abs=1e-3)
+
+
+def test_set_type2atoms_new_type_takes_the_charge_of_the_old_one(water_system):
+    water_system.set_type2atoms([2], "Hnew")
+    assert water_system.charges["Hnew"] == pytest.approx(0.4)
 
 
 def test_set_type2atoms_type_mismatch_raises(water_system):
