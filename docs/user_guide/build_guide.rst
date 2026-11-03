@@ -226,6 +226,12 @@ structure along a chosen crystallographic plane and adds a vacuum layer.
    print(f"Generated {len(surfaces)} surfaces")
    print(f"Broken bonds: {broken_bonds}")
 
+Cut the slab before editing the system. A crystal whose atoms have been
+moved, added or removed since it was read, or a slab, is refused with a
+``ValueError``: it is no longer the bulk the Miller indices refer to.
+Typing (:meth:`~cemd.core.atomic_system.AtomicSystem.set_topology`) moves
+nothing and is accepted.
+
 Understanding the Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -360,31 +366,50 @@ nearby:
 Repairing what the cut breaks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When a cut through the framework is unavoidable, ``repair=True`` caps the
-atoms it leaves under-coordinated: an exposed oxygen is protonated into a
-hydroxyl, and an exposed cation gets a hydroxyl group back in the
-direction its partner used to occupy.
+When a cut through the framework is unavoidable, ``repair=True`` rebuilds
+what it breaks, whether the bond is explicit in the topology or only a
+contact of ``bonds_dict`` (the Si-O of ClayFF and CSHFF):
+
+* a hydrogen always goes to the side of its O, so no O-H is cut;
+* every other severed bond to an O is hydrolysed. The atom that loses its
+  O gets an OH back where the O was, and the O gets an H: a bridging
+  Si-O-Si gives two silanols, a non-bridging Si-O...Ca a silanol and a
+  Ca-OH, and Si-OH + H2O a silanol and a water;
+* a severed bond without an O (C-C, Si-Si...) has no such repair, and
+  the split refuses it with a ``ValueError`` before anything moves. Move
+  the cut, or use ``keep_molecules=True``.
+
+Set on the splitter, ``repair`` also applies to the counts and the scans,
+which then report the bonds the repair will rebuild.
 
 .. code-block:: python
 
-   splitter = Splitter(csh_system, coordinate=7.5, axis="z", gap_size=20.0)
-   result = splitter.split(repair=True)
+   splitter = Splitter(csh_system, coordinate=12.2, axis="z", gap_size=20.0,
+                       repair=True)
+   result = splitter.split()
 
    print(splitter.repair_report)
 
 .. code-block:: none
 
-   {'broken': 66, 'capped': 192, 'skipped': 3}
+   {'broken': 319, 'capped': 957, 'crowded': 2, 'retyped': 306, 'untyped': 2,
+    'bonds_added': 637, 'angles_added': 29, 'charge_change': -48.27}
 
-``skipped`` counts caps that would have landed on top of an existing atom
-— a bridging oxygen that loses *both* its cations would otherwise have
-each of them restore a copy of it at the same site; those atoms are left
-under-coordinated rather than duplicated.
+The caps go along the broken bond, tilted away when another atom sits too
+close; ``crowded`` counts those that found no clear spot. Each atom added,
+and each atom whose covalent environment changed (an ``Ob`` that took an
+H, the H of an ``Osih`` turned water), takes the type and charge of an
+atom of the system in the same environment: ``Osih``/``Hsi`` for a
+silanol, ``Oh``/``Hh`` for a Ca-OH, ``Ow``/``Hw`` for a water under CSHFF.
+``untyped`` counts the atoms with no such model, typed by their element
+(``O``, ``H``) and, if new, uncharged: type them before assigning the
+force field. Explicit bonds and angles are added wherever the system
+already has them between the same types; Si-O stays implicit.
 
 .. note::
 
-   The added atoms are placed collinearly with the broken contact and
-   carry a zero charge: this is a starting geometry to be relaxed. Re-run
-   :meth:`~cemd.core.atomic_system.AtomicSystem.set_topology` and
-   :meth:`~cemd.core.atomic_system.AtomicSystem.set_ff_from_database`
-   afterwards so the new atoms get proper types and charges.
+   The charges copied from the system do not add up to zero in general
+   (``charge_change``): call
+   :meth:`~cemd.core.atomic_system.AtomicSystem.neutralize_charge`
+   afterwards, as after
+   :meth:`~cemd.core.atomic_system.AtomicSystem.set_ff_from_database`.

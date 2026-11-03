@@ -26,13 +26,14 @@ import pandas as pd
 
 from .._constants import MASSES_DICT
 from ..topology._apply import (
+    apply_layer_rule_to_universe,
     apply_single_dihedral_rule_to_universe,
     apply_single_rule_to_universe,
 )
 from ._format import canonical_ff_type
 
 if TYPE_CHECKING:
-    from ..topology.rules import DihedralRule, TopologyRule
+    from ..topology.rules import DihedralRule, LayerRule, TopologyRule
     from .atomic_system import AtomicSystem
 
 
@@ -447,21 +448,22 @@ class TopologyMixin:
 
     def set_topology(
         self,
-        r: str | TopologyRule | DihedralRule | list[TopologyRule | DihedralRule],
+        r: str | TopologyRule | DihedralRule | LayerRule | list,
     ) -> AtomicSystem:
         """
         Apply a predefined style or custom rule(s) to the system.
 
         Parameters
         ----------
-        r : str | TopologyRule | DihedralRule | list[TopologyRule | DihedralRule]
+        r : str | TopologyRule | DihedralRule | LayerRule | list
             -str: Name of predefined rule set (e.g., 'clayff', 'cshff')
             -TopologyRule: Single topology rule
             -DihedralRule: Single dihedral rule
+            -LayerRule: Single retyping by position relative to the layers
             - list[TopologyRule | DihedralRule]: Mixed list of rules
         """
         from ..topology.predefined import CLAYFF_RULES, CSHFF_RULES
-        from ..topology.rules import DihedralRule, TopologyRule
+        from ..topology.rules import DihedralRule, LayerRule, TopologyRule
         from .atomic_system import AtomicSystem
 
         if isinstance(r, str):
@@ -477,24 +479,18 @@ class TopologyMixin:
         universe = self.to_mda()
         actions = {}
 
-        if isinstance(r, TopologyRule):
-            universe = apply_single_rule_to_universe(universe, r)
-        elif isinstance(r, DihedralRule):
-            universe = apply_single_dihedral_rule_to_universe(universe, r)
-        elif isinstance(r, list):
-            for rule in r:
-                if isinstance(rule, TopologyRule):
-                    universe = apply_single_rule_to_universe(universe, rule)
-                elif isinstance(rule, DihedralRule):
-                    universe = apply_single_dihedral_rule_to_universe(universe, rule)
-                else:
-                    raise TypeError(
-                        f"Expected TopologyRule or DihedralRule, got {type(rule)}"
-                    )
-        else:
-            raise TypeError(
-                f"Expected str, TopologyRule, or DihedralRule, got {type(r)}"
-            )
+        appliers = {
+            TopologyRule: apply_single_rule_to_universe,
+            DihedralRule: apply_single_dihedral_rule_to_universe,
+            LayerRule: apply_layer_rule_to_universe,
+        }
+        for rule in r if isinstance(r, list) else [r]:
+            apply = appliers.get(type(rule))
+            if apply is None:
+                raise TypeError(
+                    f"Expected TopologyRule, DihedralRule or LayerRule, got {type(rule)}"
+                )
+            universe = apply(universe, rule)
 
         new_lmp_data = AtomicSystem.from_mda(universe)
         self._replace_internals(new_lmp_data)

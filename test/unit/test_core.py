@@ -10,7 +10,6 @@ from cemd import AtomicSystem
 
 from conftest import DATA_DIR, make_water_system
 
-
 # ---------------------------------------------------------------------------
 # Construction / copy / repr
 # ---------------------------------------------------------------------------

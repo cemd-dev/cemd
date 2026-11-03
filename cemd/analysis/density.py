@@ -23,7 +23,7 @@ import pandas as pd
 from scipy import integrate
 from tqdm import tqdm
 
-from .util import require_box
+from .util import frames, require_box
 
 _AXIS_MAP = {
     "x": {"axid": 0, "axida": 1, "axidb": 2},
@@ -43,7 +43,8 @@ def density_profile(
     atom_types: list[str | int],
     axis: str = "z",
     start: int = 0,
-    end: int = -1,
+    stop: int | None = None,
+    step: int = 1,
     bin_size: float = 0.1,
 ) -> pd.DataFrame:
     """Create a DataFrame with the average density of atoms of given types along a given axis.
@@ -58,8 +59,10 @@ def density_profile(
         Axis along which to calculate the density ('x', 'y', or 'z').
     start : int
         Starting frame index.
-    end : int
-        Ending frame index.
+    stop : int, optional
+        Frame index to stop before. If None, runs to the last frame.
+    step : int
+        Step size (stride) over the frames.
     bin_size : float
         Size of bins for the histogram (in Angstroms).
 
@@ -82,10 +85,8 @@ def density_profile(
     if atom_types == "all":
         atom_types = np.unique(universe.atoms.types)
 
-    stop = None if end == -1 else end
-    nframes = len(range(len(universe.trajectory))[start:stop])
-    if nframes == 0:
-        raise ValueError("The trajectory slice [start:end] contains no frame.")
+    trajectory = frames(universe, start, stop, step, "density_profile")
+    nframes = len(trajectory)
 
     # One pass over the trajectory, all types together. The frames are read
     # one after the other on purpose: they used to be counted by dask worker
@@ -94,7 +95,7 @@ def density_profile(
     # calls did not return the same profile.
     selections = [universe.select_atoms(f"type {t}") for t in atom_types]
     atom_count = np.zeros((len(selections), len(pos)))
-    for _ in tqdm(universe.trajectory[start:stop], desc="1D atomic density"):
+    for _ in tqdm(trajectory, desc="1D atomic density"):
         for i, sel in enumerate(selections):
             coords = sel.positions[:, axid] % box[axid]
             atom_count[i] += np.histogram(coords, bins=bins)[0]
@@ -111,7 +112,8 @@ def density_map(
     axis: str = "z",
     eps: float = 3.0,
     start: int = 0,
-    end: int = -1,
+    stop: int | None = None,
+    step: int = 1,
     bin_size: float = 0.1,
 ) -> pd.DataFrame:
     """Create a 2D density map of atoms within a specified distance of an interface.
@@ -131,8 +133,10 @@ def density_map(
         eps`` and ``interface_coordinate + eps`` are counted.
     start : int
         Starting trajectory frame.
-    end : int
-        Ending trajectory frame.
+    stop : int, optional
+        Frame index to stop before. If None, runs to the last frame.
+    step : int
+        Step size (stride) over the frames.
     bin_size : float
         Size of bins for the histogram in Angstroms.
 
@@ -176,12 +180,13 @@ def density_map(
     slab_depth = min(upper, float(box[axid])) - max(lower, 0.0)
     column_vol = bin_size * bin_size * slab_depth
 
-    nframes = len(univ.trajectory[start:end])
+    trajectory = frames(univ, start, stop, step, "density_map")
+    nframes = len(trajectory)
 
     # Accumulate one 2D histogram per frame rather than keeping every
     # position until the end, which costs n_atoms * n_frames * 16 bytes.
     hist = np.zeros((len(bins_a) - 1, len(bins_b) - 1))
-    for _ in tqdm(univ.trajectory[start:end], desc="2D atomic density"):
+    for _ in tqdm(trajectory, desc="2D atomic density"):
         posi = sel.positions[:, axida] % box[axida]
         posj = sel.positions[:, axidb] % box[axidb]
         hist += np.histogram2d(posi, posj, bins=(bins_a, bins_b))[0]

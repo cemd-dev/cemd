@@ -109,7 +109,7 @@ def test_write_dcd_round_trips_a_selection_and_a_frame_slice(tmp_path, capsys):
     universe = random_universe(types=["A", "B"] * 25)
     out = tmp_path / "sub.dcd"
 
-    write_dcd(universe, str(out), selection="type B", start=2, end=10, step=3)
+    write_dcd(universe, str(out), selection="type B", start=2, stop=10, step=3)
 
     selection = universe.select_atoms("type B")
     written = mda.Merge(selection)
@@ -123,7 +123,7 @@ def test_write_dcd_round_trips_a_selection_and_a_frame_slice(tmp_path, capsys):
         assert written.atoms.positions == pytest.approx(selection.positions, abs=1e-4)
 
 
-def test_write_dcd_without_an_end_writes_to_the_last_frame(tmp_path):
+def test_write_dcd_without_a_stop_writes_to_the_last_frame(tmp_path):
     universe = random_universe(n_frames=12)
     out = tmp_path / "tail.dcd"
 
@@ -192,7 +192,7 @@ def test_minmax_position_averages_the_extremes_frame_by_frame(capsys):
         lows.append(b.positions[:, 1].min())
         highs.append(b.positions[:, 1].max())
 
-    low, high = minmax_position(universe, ["B"], axis="y", start=0, end=8)
+    low, high = minmax_position(universe, ["B"], axis="y", start=0, stop=8)
     assert low == pytest.approx(np.mean(lows))
     assert high == pytest.approx(np.mean(highs))
 
@@ -205,13 +205,13 @@ def test_minmax_position_takes_several_types_and_each_axis(capsys):
         expected = np.mean(
             [ab.positions[:, column].min() for _ in universe.trajectory[0:5]]
         )
-        low, _ = minmax_position(universe, ["A", "B"], axis=axis, start=0, end=5)
+        low, _ = minmax_position(universe, ["A", "B"], axis=axis, start=0, stop=5)
         assert low == pytest.approx(expected)
 
 
 def test_minmax_position_refuses_an_unknown_axis(capsys):
     with pytest.raises(ValueError):
-        minmax_position(random_universe(), ["A"], axis="w", start=0, end=3)
+        minmax_position(random_universe(), ["A"], axis="w", start=0, stop=3)
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ def solution_head(tmp_path_factory):
     """The first 30 frames of traj_solution, as a small DCD of its own."""
     source = mda.Universe(str(SOLUTION / "solution.data"), str(SOLUTION / "traj.dcd"))
     head = tmp_path_factory.mktemp("head") / "head.dcd"
-    write_dcd(source, str(head), start=0, end=30)
+    write_dcd(source, str(head), start=0, stop=30)
     return str(SOLUTION / "solution.data"), str(head)
 
 
@@ -376,7 +376,7 @@ def test_write_dcd_reproduces_the_reference_frames_exactly(tmp_path):
     source = mda.Universe(topology, str(SOLUTION / "traj.dcd"))
     out = tmp_path / "sub.dcd"
 
-    write_dcd(source, str(out), selection=f"type {OW}", start=100, end=110, step=2)
+    write_dcd(source, str(out), selection=f"type {OW}", start=100, stop=110, step=2)
 
     water = source.select_atoms(f"type {OW}")
     written = mda.Merge(water)
@@ -394,7 +394,7 @@ def test_minmax_position_on_the_reference_matches_numpy(solution_head, capsys):
     oxygens = universe.select_atoms(f"type {OW}")
     zs = [oxygens.positions[:, 2] for _ in universe.trajectory[0:20]]
 
-    low, high = minmax_position(universe, [OW], axis="z", start=0, end=20)
+    low, high = minmax_position(universe, [OW], axis="z", start=0, stop=20)
 
     assert low == pytest.approx(np.mean([z.min() for z in zs]))
     assert high == pytest.approx(np.mean([z.max() for z in zs]))

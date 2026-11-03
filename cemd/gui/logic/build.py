@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar
 
@@ -24,8 +25,10 @@ from PySide6 import QtCore, QtWidgets
 
 from cemd.build import (
     GlassBuilder,
+    PackmolCancelledError,
     SolutionBuilder,
     Splitter,
+    cancel_packmol_on,
 )
 from cemd.gui.ui.build import (
     AddDropletDialog,
@@ -53,20 +56,50 @@ T = TypeVar("T")
 class _Job(QtCore.QThread):
     """Run one callable off the GUI thread and keep its outcome."""
 
-    def __init__(self, work: Callable[[], T]) -> None:
+    def __init__(self, work: Callable[[], T], cancel: threading.Event) -> None:
         super().__init__()
         self._work = work
+        self._cancel = cancel
         self.result = None
         self.error: BaseException | None = None
 
     def run(self) -> None:
         try:
-            self.result = self._work()
+            with cancel_packmol_on(self._cancel):
+                self.result = self._work()
         except BaseException as e:  # handed back to the GUI thread
             self.error = e
 
 
-def run_in_background(parent: AtomViewerGUI, message: str, work: Callable[[], T]) -> T:
+class _ProgressDialog(QtWidgets.QProgressDialog):
+    """A progress dialog that stays up until the work is done.
+
+    Escape and the title-bar button closed it while the work still ran,
+    which gave back the window it holds modal. They now do nothing,
+    unless the dialog is `closable` -- then they cancel, like its button.
+    """
+
+    def __init__(self, *args, closable: bool) -> None:
+        super().__init__(*args)
+        self.closable = closable
+
+    def reject(self) -> None:
+        if self.closable:
+            super().reject()
+
+    def closeEvent(self, event) -> None:
+        if self.closable:
+            super().closeEvent(event)
+        else:
+            event.ignore()
+
+
+def run_in_background(
+    parent: QtWidgets.QWidget,
+    message: str,
+    work: Callable[[], T],
+    cancellable: bool = False,
+) -> T:
     """Run `work` on a worker thread and return its result, or raise its error.
 
     Packmol runs take seconds to minutes. Run on the GUI thread, they froze
@@ -78,15 +111,35 @@ def run_in_background(parent: AtomViewerGUI, message: str, work: Callable[[], T]
     `work` runs outside the GUI thread: it must not touch a widget, and it
     must not change a system that is on screen -- the atom table reads its
     DataFrame on every repaint. Work on a copy and swap it in afterwards.
+
+    With `cancellable`, the dialog gets a Cancel button that kills the
+    Packmol run in progress, and the call raises `PackmolCancelledError`
+    (`handle_error` takes it quietly). Only Packmol listens: work that
+    runs no Packmol is not cancellable, and should not offer the button.
     """
-    progress = QtWidgets.QProgressDialog(message, None, 0, 0, parent)
+    cancel_text = "Cancel" if cancellable else None
+    progress = _ProgressDialog(message, cancel_text, 0, 0, parent, closable=cancellable)
     progress.setWindowTitle("Working")
     progress.setWindowModality(QtCore.Qt.WindowModal)
     progress.setMinimumDuration(0)
     progress.setAutoClose(False)
+    progress.setAutoReset(False)
+
+    cancel = threading.Event()
+    if cancellable:
+
+        def on_cancel() -> None:
+            cancel.set()
+            # QProgressDialog hides itself on cancel; keep it up, modal,
+            # until the worker has noticed and returned.
+            progress.setLabelText("Cancelling...")
+            progress.setCancelButton(None)
+            progress.show()
+
+        progress.canceled.connect(on_cancel)
     progress.show()
 
-    job = _Job(work)
+    job = _Job(work, cancel)
     loop = QtCore.QEventLoop()
     job.finished.connect(loop.quit)
     job.start()
@@ -95,6 +148,10 @@ def run_in_background(parent: AtomViewerGUI, message: str, work: Callable[[], T]
     if not job.isFinished():
         loop.exec()
     job.wait()
+    if cancellable:
+        # close() emits canceled too, which would bring the dialog back.
+        progress.canceled.disconnect(on_cancel)
+    progress.closable = True
     progress.close()
 
     if job.error is not None:
@@ -105,6 +162,10 @@ def run_in_background(parent: AtomViewerGUI, message: str, work: Callable[[], T]
 def handle_error(parent: AtomViewerGUI, title: str, error: Exception | str) -> None:
     QtWidgets.QApplication.restoreOverrideCursor()
     parent.setUpdatesEnabled(True)
+    if isinstance(error, PackmolCancelledError):
+        # The user asked for it: nothing to report.
+        parent.statusBar().showMessage("Cancelled.", 5000)
+        return
     QtWidgets.QMessageBox.critical(parent, title, f"An error occurred:\n{error}")
 
 
@@ -120,6 +181,7 @@ def open_make_solution(parent: AtomViewerGUI) -> None:
                 parent,
                 "Packing the solution with Packmol...",
                 lambda: builder.build(box),
+                cancellable=True,
             )
             parent.add_structure_tab(new_data, title="Aqueous Solution")
         except Exception as e:
@@ -137,6 +199,7 @@ def open_make_glass(parent: AtomViewerGUI) -> None:
                 parent,
                 "Generating the glass structure with Packmol...",
                 lambda: builder.build(box),
+                cancellable=True,
             )
 
             if new_system:
@@ -232,7 +295,9 @@ def open_add_liquid(parent: AtomViewerGUI) -> None:
                 )
                 return system
 
-            new_system = run_in_background(parent, "Adding the liquid layer...", work)
+            new_system = run_in_background(
+                parent, "Adding the liquid layer...", work, cancellable=True
+            )
 
             parent.push_undo()
             active_tab.system = new_system
@@ -269,7 +334,9 @@ def open_add_droplet(parent: AtomViewerGUI) -> None:
                 )
                 return system
 
-            new_system = run_in_background(parent, "Adding the droplet...", work)
+            new_system = run_in_background(
+                parent, "Adding the droplet...", work, cancellable=True
+            )
 
             parent.push_undo()
             active_tab.system = new_system
@@ -308,6 +375,29 @@ def open_add_structure(parent: AtomViewerGUI) -> None:
             QtWidgets.QApplication.restoreOverrideCursor()
 
 
+def _repair_summary(report: dict) -> str:
+    """What `Splitter.repair_report` says, for a message box."""
+    lines = [
+        f"{report['broken']} bonds hydrolysed: {report['capped']} atoms added, "
+        f"{report['retyped']} retyped.",
+        f"Explicit topology: {report['bonds_added']} bonds and "
+        f"{report['angles_added']} angles added.",
+        f"Total charge changed by {report['charge_change']:+.3f} e: neutralize "
+        "the system before running it.",
+    ]
+    if report["crowded"]:
+        lines.append(
+            f"{report['crowded']} caps found no spot clear of other atoms: "
+            "check them before relaxing."
+        )
+    if report["untyped"]:
+        lines.append(
+            f"{report['untyped']} atoms have no model in the system and are "
+            "typed by element (O, H): type them before assigning the force field."
+        )
+    return "\n\n".join(lines)
+
+
 def open_split(parent: AtomViewerGUI) -> None:
     active_tab = parent.tabs.currentWidget()
     if not active_tab or not hasattr(active_tab, "system"):
@@ -325,6 +415,8 @@ def open_split(parent: AtomViewerGUI) -> None:
                     coordinate=p["coordinate"],
                     axis=p["axis"],
                     gap_size=p["gap_size"],
+                    keep_molecules=p["keep_molecules"],
+                    repair=p["repair"],
                 )
 
                 if p["add_solution"]:
@@ -335,14 +427,20 @@ def open_split(parent: AtomViewerGUI) -> None:
                     )
                     splitter.add_solution(blueprint, padding=p["tolerance"])
 
-                return splitter.split()
+                return splitter.split(), splitter.repair_report
 
-            new_system = run_in_background(parent, "Creating the channel...", work)
+            new_system, report = run_in_background(
+                parent, "Creating the channel...", work, cancellable=True
+            )
 
             parent.push_undo()
             active_tab.system = new_system
             parent.sync_ui(full_rebuild=True, reset_camera=True)
             parent.statusBar().showMessage("Channel created!", 5000)
+            if report is not None and report["broken"]:
+                QtWidgets.QMessageBox.information(
+                    parent, "Bonds repaired", _repair_summary(report)
+                )
         except Exception as e:
             handle_error(parent, "Channel Error", e)
 

@@ -18,16 +18,21 @@
 from __future__ import annotations
 
 import io
-import os
-import subprocess
+import threading
 from fractions import Fraction
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from rdkit import Chem, RDLogger
 from rdkit.Chem import Draw, rdMolDescriptors
 
-from ...build import CSHBuilder, SurfaceBuilder
+from ...build import (
+    CSHBuilder,
+    PackmolCancelledError,
+    SurfaceBuilder,
+    cancel_packmol_on,
+)
 from ...build.solution import _concentration2count
 from ...core.atomic_system import AtomicSystem
 from .base_dialog import BaseBuilderDialog
@@ -495,9 +500,6 @@ class AddStructureDialog(BaseBuilderDialog):
         self.available_structures.clear()
 
         mol_icon = get_icon("mol")
-        search_icon = self.style().standardIcon(
-            QtWidgets.QStyle.StandardPixmap.SP_FileDialogContentsView
-        )
 
         if self.struct_combo.count() > 0:
             self.struct_combo.insertSeparator(self.struct_combo.count())
@@ -850,15 +852,26 @@ class SurfaceDialog(BaseBuilderDialog):
         layout.addWidget(self.button_box)
 
     def on_search(self):
-        try:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-            miller = [self.h.value(), self.k.value(), self.l.value()]
+        # Imported here: logic.build imports this module.
+        from ..logic.build import run_in_background
 
+        try:
+            miller = [self.h.value(), self.k.value(), self.l.value()]
+            min_slab_size = self.slab_size.value()
+            min_vacuum_size = self.vac_size.value()
+
+            # pymatgen's slab enumeration takes seconds on large or
+            # high-index cells; off the GUI thread, the window keeps
+            # repainting. SurfaceBuilder works on a copy of the structure.
             builder = SurfaceBuilder(self.data_in)
-            self.all_slabs, shifts, dipoles, broken = builder.build(
-                miller_indices=miller,
-                min_slab_size=self.slab_size.value(),
-                min_vacuum_size=self.vac_size.value(),
+            self.all_slabs, shifts, dipoles, broken = run_in_background(
+                self,
+                "Generating the surface candidates...",
+                lambda: builder.build(
+                    miller_indices=miller,
+                    min_slab_size=min_slab_size,
+                    min_vacuum_size=min_vacuum_size,
+                ),
             )
 
             self.table.setRowCount(len(self.all_slabs))
@@ -892,8 +905,6 @@ class SurfaceDialog(BaseBuilderDialog):
             QtWidgets.QMessageBox.critical(
                 self, "Error", f"Slab generation failed:\n{str(e)}"
             )
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
 
     def validate_selection(self):
         """Recovers systems checked by the user."""
@@ -1084,6 +1095,24 @@ class CASHBuilderDialog(BaseBuilderDialog):
         else:
             self.show_warning("Warning", "Please build a structure first.")
 
+    def reject(self):
+        """Stop a build in progress before closing.
+
+        Closing used to leave Packmol running in the background, its
+        result delivered to a dialog that was gone.
+        """
+        worker = getattr(self, "worker", None)
+        if worker is not None and worker.isRunning():
+            worker.cancel()
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            try:
+                # Packmol dies at once; the Python side of the build ends
+                # at its next Packmol call or when it returns.
+                worker.wait()
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
+        super().reject()
+
     def set_status(self, message: str):
         """Updates the status bar text."""
         self.status_bar.showMessage(message)
@@ -1102,11 +1131,53 @@ class CASHBuilderDialog(BaseBuilderDialog):
 
 
 class SplitterDialog(BaseBuilderDialog):
+    """Split options, with a live preview of the cut.
+
+    When a structure is open, the dialog shows it in a view of its own --
+    the main view cannot be rotated while a modal dialog is up -- with the
+    cut plane and, in red, the bonds it would sever, counted as the
+    coordinate moves. "Plane, repaired" hydrolyses them instead (see
+    `Splitter`), and the preview counts the ones it will rebuild, warning
+    about any it cannot. With "Keep molecules whole", no bond is severed:
+    the atoms whose unit or coordination shell drags them across the plane
+    are haloed in orange instead. A scan of every cut position, plotted
+    below the slider, opens on the one that breaks the fewest bonds, then
+    the fewest ionic contacts.
+    """
+
+    #: Cut modes, in the order of the combo box: (label, Splitter options)
+    CUT_MODES = (
+        ("Plane", {"keep_molecules": False, "repair": False}),
+        ("Plane, repaired", {"keep_molecules": False, "repair": True}),
+        ("Keep molecules whole", {"keep_molecules": True, "repair": False}),
+    )
+
+    #: Most cut positions scanned when the axis is set; the step grows on
+    #: thick systems to stay under it.
+    MAX_SCAN_POSITIONS = 400
+
+    #: Delay (ms) before the preview follows the coordinate, so that a
+    #: dragged slider does not queue one redraw per pixel.
+    PREVIEW_DELAY = 40
+
     def __init__(self, parent_gui=None) -> None:
         super().__init__(parent_gui, "Split structure", 500)
         self.resize(500, 500)
         self.parent_gui = parent_gui
+
+        tab = parent_gui.tabs.currentWidget() if hasattr(parent_gui, "tabs") else None
+        system = getattr(tab, "system", None)
+        #: The structure previewed, or None: no preview without one.
+        self.system = system if system is not None and len(system.atoms) > 1 else None
+        self.splitter = None
+        self.scan = None
+        self.best = None
+        self.view = None
+
         self.setup_ui()
+        if self.system is not None:
+            self.resize(1050, 650)
+            self._rescan()
 
     def setup_ui(self) -> None:
         layout = self.main_layout
@@ -1125,6 +1196,7 @@ class SplitterDialog(BaseBuilderDialog):
 
         self.coord = QtWidgets.QDoubleSpinBox()
         self.coord.setRange(-5000, 5000)
+        self.coord.setSingleStep(0.25)
         self.coord.setSuffix(" Å")
 
         self.gap = QtWidgets.QDoubleSpinBox()
@@ -1132,10 +1204,25 @@ class SplitterDialog(BaseBuilderDialog):
         self.gap.setValue(30.0)
         self.gap.setSuffix(" Å")
 
+        self.cut_mode = QtWidgets.QComboBox()
+        self.cut_mode.addItems([label for label, _ in self.CUT_MODES])
+        self.cut_mode.setToolTip(
+            "Plane: cut along the plane; the bonds it crosses stay broken.\n"
+            "Plane, repaired: hydrolyse each broken bond to an O (Si-O-Si\n"
+            "gives two Si-OH, Si-O...Ca a Si-OH and a Ca-OH); hydrogens stay\n"
+            "with their O. Caps are typed and charged like the system.\n"
+            "Keep molecules whole: move every covalent unit as a whole, and\n"
+            "each isolated cation with most of its shell; no bond breaks."
+        )
+
         self.add_sol = QtWidgets.QCheckBox("Fill the gap with a liquid solution")
 
         geo_lay.addRow("Split axis:", self.axis)
-        geo_lay.addRow("Split coordinate:", self.coord)
+        geo_lay.addRow("Cut:", self.cut_mode)
+        if self.system is None:
+            geo_lay.addRow("Split coordinate:", self.coord)
+        else:
+            self._setup_preview_controls(geo_lay)
         geo_lay.addRow("Gap width:", self.gap)
         geo_lay.addRow("", self.add_sol)
 
@@ -1165,7 +1252,13 @@ class SplitterDialog(BaseBuilderDialog):
         sol_lay.addWidget(self.ion_widget)
         self.tabs.addTab(sol_w, "Solution")
 
-        layout.addWidget(self.tabs)
+        if self.system is None:
+            layout.addWidget(self.tabs)
+        else:
+            content = QtWidgets.QHBoxLayout()
+            content.addWidget(self._create_view(), 3)
+            content.addWidget(self.tabs, 2)
+            layout.addLayout(content)
 
         # Dialog Buttons
         self.button_box = self.create_dialog_buttons("Apply Transformation")
@@ -1174,6 +1267,206 @@ class SplitterDialog(BaseBuilderDialog):
         # Activation logic
         self.add_sol.toggled.connect(self._toggle_solution_tab)
         self._toggle_solution_tab(False)
+
+    # ------------------------------------------------------------------
+    # Cut preview
+    # ------------------------------------------------------------------
+
+    def _setup_preview_controls(self, form: QtWidgets.QFormLayout) -> None:
+        """Slider, severed-bond count and scan plot, under the coordinate."""
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+
+        self.btn_best = QtWidgets.QPushButton("Best")
+        self.btn_best.setToolTip("Move to the cut that breaks the fewest bonds")
+        self.btn_best.setAutoDefault(False)
+        self.btn_best.clicked.connect(
+            lambda: self.best is not None and self.coord.setValue(self.best)
+        )
+        coord_row = QtWidgets.QHBoxLayout()
+        coord_row.addWidget(self.coord, 1)
+        coord_row.addWidget(self.btn_best)
+        form.addRow("Split coordinate:", coord_row)
+
+        # Hundredths of an Å: a QSlider holds integers.
+        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        form.addRow("", self.slider)
+
+        self.severed = QtWidgets.QLabel()
+        form.addRow("Severs:", self.severed)
+
+        self.figure = Figure(figsize=(4, 2), tight_layout=True)
+        self.ax = self.figure.add_subplot()
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        self.canvas.setMinimumHeight(170)
+        self.canvas.mpl_connect("button_press_event", self._on_plot_click)
+        form.addRow(self.canvas)
+
+        self._preview_timer = QtCore.QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(self.PREVIEW_DELAY)
+        self._preview_timer.timeout.connect(self.update_preview)
+
+        self.axis.currentIndexChanged.connect(self._rescan)
+        self.cut_mode.currentIndexChanged.connect(self._rescan)
+        self.coord.valueChanged.connect(self._on_coord_changed)
+        self.slider.valueChanged.connect(lambda v: self.coord.setValue(v / 100))
+
+    def _create_view(self) -> QtWidgets.QWidget:
+        """The structure in a 3D view of the dialog's own."""
+        from ..plotter_widget import AtomicPlotter
+
+        settings = self.parent_gui.display
+        self.view = AtomicPlotter(self, settings=settings)
+        self.view.setMinimumSize(500, 450)
+        atoms = self.system.atoms
+        self.view.draw_atoms(atoms)
+        self.view.draw_box(self.system)
+        bond_settings = settings.bond_rules_for(self.system.atom_types)
+        bond_settings["global_bond_radius"] = settings.global_bond_radius
+        self.view.update_bonds_only(atoms, bond_settings)
+        return self.view
+
+    def _face_the_cut(self) -> None:
+        """Look at the cut from the side, tilted a little.
+
+        Seen from above, a dense solid hides the plane; side on, the plane
+        is a line through the structure with the shifted atoms around it.
+        """
+        # The split axis runs up the screen.
+        views = {0: self.view.view_xy, 1: self.view.view_yz, 2: self.view.view_xz}
+        views[self.axis.currentIndex()](render=False)
+        self.view.reset_camera(render=False)
+        self.view.camera.elevation = 10
+        self.view.camera.zoom(0.9)
+
+    def _rescan(self) -> None:
+        """Scan the cut positions along the axis, and move to the best one."""
+        from ...build import Splitter
+
+        # Imported here: logic.build imports this module.
+        from ..logic.build import run_in_background
+
+        splitter = Splitter(
+            self.system,
+            axis=self.axis.currentIndex(),
+            **self.CUT_MODES[self.cut_mode.currentIndex()][1],
+        )
+        positions = self.system.atoms[["x", "y", "z"]].to_numpy(dtype=float)
+        projections = positions @ splitter._unit_norm
+        start, stop = float(projections.min()), float(projections.max())
+        step = max(0.25, (stop - start) / self.MAX_SCAN_POSITIONS)
+
+        try:
+            # The neighbour search and the scan take seconds on large
+            # systems. The Splitter only reads the system, which the
+            # modal progress dialog keeps from being edited meanwhile.
+            scan = run_in_background(
+                self.parent_gui,
+                "Scanning the cut positions...",
+                lambda: splitter.scan_broken_bonds(start, stop, step),
+            )
+        except Exception as e:
+            self.show_warning("Cut preview", f"Could not scan the cuts:\n{e}")
+            return
+
+        self.splitter, self.scan = splitter, scan
+        self.best = splitter.best_in_scan(scan)
+        self._face_the_cut()
+
+        # Past the atoms, a cut either moves nothing or moves everything.
+        for widget, low, high in (
+            (self.coord, start, stop),
+            (self.slider, round(start * 100), round(stop * 100)),
+        ):
+            widget.blockSignals(True)
+            widget.setRange(low, high)
+            widget.blockSignals(False)
+        self._plot_scan()
+
+        if self.coord.value() == self.best:
+            self.update_preview()
+        else:
+            self.coord.setValue(self.best)
+
+    def _plot_scan(self) -> None:
+        ax = self.ax
+        ax.clear()
+        ax.plot(self.scan["coordinate"], self.scan["n_broken"], label="bonds")
+        ax.plot(
+            self.scan["coordinate"], self.scan["n_ionic"], "--", label="ionic contacts"
+        )
+        ax.axvline(self.best, color="tab:green", linestyle=":", linewidth=1)
+        self._cursor = ax.axvline(self.coord.value(), color="tab:red", linewidth=1)
+        ax.set_xlabel("Cut coordinate (Å)", fontsize=8)
+        ax.set_ylabel("Severed", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=7, loc="upper right")
+        self.canvas.draw_idle()
+
+    def _on_plot_click(self, event) -> None:
+        if event.inaxes is self.ax and event.xdata is not None:
+            self.coord.setValue(event.xdata)
+
+    def _on_coord_changed(self, value: float) -> None:
+        self.slider.blockSignals(True)
+        self.slider.setValue(round(value * 100))
+        self.slider.blockSignals(False)
+        self._preview_timer.start()
+
+    def update_preview(self) -> None:
+        """Count, and draw, what a cut at the current coordinate severs."""
+        if self.splitter is None:
+            return
+        from MDAnalysis.lib.distances import minimize_vectors
+
+        coordinate = self.coord.value()
+        cut = self.splitter.describe_cut(coordinate)
+        pairs, n_ionic = cut["broken"], cut["n_ionic"]
+        verb = " to rebuild" if self.splitter.repair else ""
+        text = (
+            f"<b>{len(pairs)}</b> bond{'s' * (len(pairs) != 1)}{verb} · "
+            f"{n_ionic} ionic contact{'s' * (n_ionic != 1)}"
+        )
+        if self.splitter.repair and cut["unrepairable"]:
+            text += (
+                f"<br><span style='color:#dc2626'>{len(cut['unrepairable'])} "
+                "without an O: cannot be repaired</span>"
+            )
+
+        xyz = self.system.atoms[["x", "y", "z"]]
+        shifted = None
+        if self.splitter.keep_molecules:
+            # The atoms on the other side of the plane from where they go.
+            positions = xyz.to_numpy(dtype=np.float64)
+            plane_side = positions @ self.splitter._unit_norm >= coordinate
+            shifted = positions[cut["moves"] != plane_side]
+            text += f" · {len(shifted)} atoms off the plane"
+        self.severed.setText(text)
+
+        segments = None
+        if pairs:
+            ids = np.asarray(pairs)
+            start = xyz.loc[ids[:, 0]].to_numpy(dtype=np.float64)
+            end = xyz.loc[ids[:, 1]].to_numpy(dtype=np.float64)
+            # Across the periodic boundary, the bond goes to the nearest image.
+            bond = minimize_vectors(
+                end - start, np.asarray(self.system.box, dtype=np.float64)
+            )
+            segments = np.stack([start, start + bond], axis=1)
+
+        self.view.draw_cut_preview(
+            self.system, self.splitter._unit_norm, coordinate, segments, shifted
+        )
+        self._cursor.set_xdata([coordinate, coordinate])
+        self.canvas.draw_idle()
+
+    def done(self, result: int) -> None:
+        if self.view is not None:
+            self._preview_timer.stop()
+            self.view.close()
+            self.view = None
+        super().done(result)
 
     def _toggle_solution_tab(self, enabled: bool) -> None:
         """Activates or deactivates the Solution tab based on the checkbox."""
@@ -1204,6 +1497,7 @@ class SplitterDialog(BaseBuilderDialog):
             "axis": self.axis.currentIndex(),
             "coordinate": self.coord.value(),
             "gap_size": self.gap.value(),
+            **self.CUT_MODES[self.cut_mode.currentIndex()][1],
             "tolerance": self.tol.value() if self.add_sol.isChecked() else 0,
             "add_solution": self.add_sol.isChecked(),
             "density": self.dens.value(),
@@ -1526,6 +1820,12 @@ class TaskWorker(QtCore.QThread):
         super().__init__()
         self.func = func
         self.kwargs = kwargs
+        # Set by `cancel`: kills the Packmol run in progress, after which
+        # the worker ends without emitting `finished` or `error`.
+        self.cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self.cancel_event.set()
 
     def run(self) -> None:
         try:
@@ -1534,7 +1834,10 @@ class TaskWorker(QtCore.QThread):
                 self.progress_changed.emit(percent)
                 self.status_msg.emit(msg)
 
-            result = self.func(**self.kwargs, _progress_callback=update_ui)
+            with cancel_packmol_on(self.cancel_event):
+                result = self.func(**self.kwargs, _progress_callback=update_ui)
             self.finished.emit(result)
+        except PackmolCancelledError:
+            pass
         except Exception as e:
             self.error.emit(str(e))

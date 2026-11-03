@@ -8,6 +8,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Lint only: `ruff format` is not enforced yet.
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check --output-format=github cemd test
+
   pytest:
     runs-on: ubuntu-latest
     steps:
@@ -49,3 +65,11 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pytest -q --cov=cemd --cov-report=term:skip-covered
+
+      # The 3D view needs a GL context, which the offscreen platform above
+      # cannot give, so its tests skip there. They run here on their own,
+      # on a virtual X server with Mesa's software GL.
+      - name: Run the 3D view tests
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a env QT_QPA_PLATFORM=xcb pytest -q test/unit/test_gui_view.py

@@ -26,7 +26,7 @@ from MDAnalysis.lib.distances import capped_distance
 from tqdm import tqdm
 
 from ..core.atomic_system import AtomicSystem
-from .util import require_box
+from .util import frames, require_box
 
 # __all__ = ['compute_rdf']
 
@@ -52,8 +52,13 @@ def compute_rdf(
         Maximum distance for the RDF calculation (in Angstroms).
     dr : float, optional
         Bin width for the histogram (in Angstroms).
-    skip : int, optional
-        Number of frames to skip during trajectory analysis (only for mda.Universe).
+    start : int, optional
+        Starting frame index (only for mda.Universe).
+    stop : int, optional
+        Frame index to stop before; None runs to the last frame (only for
+        mda.Universe).
+    step : int, optional
+        Step size (stride) over the frames (only for mda.Universe).
 
     Returns
     -------
@@ -90,7 +95,9 @@ def _(
     type2: str,
     cutoff: float = 10.0,
     dr: float = 0.1,
-    skip: int = 1,
+    start: int = 0,
+    stop: int | None = None,
+    step: int = 1,
 ) -> tuple[pd.DataFrame, float]:
     bins = np.arange(0, cutoff + dr, dr)
 
@@ -101,7 +108,7 @@ def _(
     nframes = 0
     volumes = []
 
-    for ts in tqdm(source.trajectory[::skip], desc="RDF"):
+    for ts in tqdm(frames(source, start, stop, step, "compute_rdf"), desc="RDF"):
         nframes += 1
         box = require_box(ts, "compute_rdf")
         volumes.append(ts.volume)

@@ -46,6 +46,96 @@ from ....forcefield.models import (
 from .base import BaseReader, BaseWriter
 
 
+def _format_column(values: pd.Series, formatter: Any) -> list[str] | None:
+    """Strings of one column as ``DataFrame.to_string`` writes them, before
+    padding, or None for a column outside the cases reproduced here."""
+    if values.isna().any():
+        return None
+
+    if formatter is not None:
+        return [formatter(v) for v in values.tolist()]
+
+    dtype = values.dtype
+    if isinstance(dtype, np.dtype) and dtype.kind in "iu":
+        return [f"{v: d}" for v in values.tolist()]
+
+    if isinstance(dtype, np.dtype) and dtype.kind == "f":
+        array = values.to_numpy()
+        if not np.isfinite(array).all():
+            return None
+        magnitude = np.abs(array)
+        # A single value below 1e-6 (rounding noise around 0 is enough) puts
+        # the whole column in scientific notation, untrimmed
+        if ((magnitude < 1e-6) & (magnitude > 0)).any():
+            return [f"{v: .6e}" for v in array.tolist()]
+        strings = [f"{v: .6f}" for v in array.tolist()]
+        # Trailing zeros are trimmed by the same count from every value, down
+        # to one decimal
+        trim = 0
+        while trim < 5 and all(s[-1 - trim] == "0" for s in strings):
+            trim += 1
+        if trim:
+            strings = [s[:-trim] for s in strings]
+        # So does a value above 1e6 once the column is wider than 12
+        if (magnitude > 1e6).any() and max(map(len, strings)) > 12:
+            return [f"{v: .6e}" for v in array.tolist()]
+        return strings
+
+    if pd.api.types.is_string_dtype(dtype):
+        strings = values.tolist()
+        # Longer strings are truncated to display.max_colwidth (50) with "..."
+        if not all(
+            isinstance(s, str) and len(s) < 50 and not any(c in s for c in "\t\r\n")
+            for s in strings
+        ):
+            return None
+        return [" " + s for s in strings]
+
+    return None
+
+
+def _frame_to_string(df: pd.DataFrame, formatters: dict | None = None) -> str:
+    """``df.to_string(header=False, index_names=False, formatters=formatters)``.
+
+    The same text, byte for byte, without the column-width pass that made
+    ``to_string`` most of the time spent writing a data file. Frames outside
+    the cases reproduced here (NaN, values pandas writes in scientific
+    notation, other dtypes, display options changed) go through
+    ``to_string`` itself.
+    """
+
+    def fallback() -> str:
+        return df.to_string(header=False, index_names=False, formatters=formatters)
+
+    if (
+        df.empty
+        or not isinstance(df.index.dtype, np.dtype)
+        or df.index.dtype.kind not in "iu"
+        or df.columns.has_duplicates
+        or pd.get_option("display.precision") != 6
+        or pd.get_option("display.chop_threshold") is not None
+        or pd.get_option("display.max_colwidth") != 50
+        or pd.get_option("display.unicode.east_asian_width")
+    ):
+        return fallback()
+
+    formatters = formatters or {}
+    columns = []
+    for name in df.columns:
+        strings = _format_column(df[name], formatters.get(name))
+        if strings is None:
+            return fallback()
+        columns.append(strings)
+
+    index = [str(i) for i in df.index.tolist()]
+    # The index is left-justified, the columns right-justified, one space apart
+    template = " ".join(
+        [f"{{:<{max(map(len, index))}}}"]
+        + [f"{{:>{max(map(len, strings))}}}" for strings in columns]
+    )
+    return "\n".join(template.format(*row) for row in zip(index, *columns))
+
+
 class LAMMPSReader(BaseReader):
     """Read LAMMPS data files."""
 
@@ -1011,11 +1101,11 @@ class LAMMPSWriter(BaseWriter):
 
         if atom_style == "full":
             df.insert(0, "molecule", np.ones(len(df), dtype=int))
-        # to_string rounds floats to 6 digits by default: with thousands of
+        # The default format rounds floats to 6 digits by default: with thousands of
         # atoms sharing the same fractional charge (e.g. after
         # neutralize_charge), the rounding error adds up to ~1e-3 e
         formatters = {"charge": lambda q: f"{q:.10f}"} if "charge" in df else None
-        f.write(df.to_string(header=False, index_names=False, formatters=formatters))
+        f.write(_frame_to_string(df, formatters))
         f.write("\n")
 
     @staticmethod
@@ -1025,7 +1115,7 @@ class LAMMPSWriter(BaseWriter):
             return
         velocities_sorted = system.velocities.sort_index()
         f.write("\n Velocities\n\n")
-        f.write(velocities_sorted.to_string(header=False, index_names=False))
+        f.write(_frame_to_string(velocities_sorted))
         f.write("\n")
 
     @staticmethod
@@ -1037,5 +1127,5 @@ class LAMMPSWriter(BaseWriter):
         df_sorted = df.sort_index().copy()
 
         f.write(f"\n {name.capitalize()}\n\n")
-        f.write(df_sorted.to_string(header=False, index_names=False))
+        f.write(_frame_to_string(df_sorted))
         f.write("\n")

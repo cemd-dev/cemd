@@ -45,6 +45,17 @@ class AtomicPlotter(QtInteractor):
     #: rebuilt whenever the bond settings change.
     MAX_TUBED_BONDS = 8000
 
+    #: Atoms drawn while the view is rotated, panned or zoomed. Each point
+    #: sprite costs on every frame -- 500 000 atoms take ~140 ms a frame on
+    #: an integrated GPU, 50 000 ~30 ms -- so a larger system is drawn from
+    #: a subset of its atoms, and without its bonds, while it moves, and
+    #: whole again once it stops.
+    LOD_ATOM_BUDGET = 100_000
+
+    #: Types with no more atoms than this are drawn whole even while the
+    #: view moves, so that ions and other minor species do not blink out.
+    LOD_KEEP_TYPES_UP_TO = 1000
+
     bg_cycle = BG_CYCLE
 
     def __init__(
@@ -62,6 +73,11 @@ class AtomicPlotter(QtInteractor):
         self.enable_eye_dome_lighting()
 
         self.add_axes()
+
+        #: The actors hidden for the moving view, to show again once it
+        #: stops; see `_on_render_start`.
+        self._hidden_while_moving: list = []
+        self.render_window.AddObserver("StartEvent", self._on_render_start)
 
     # The drawing code reads these names; they all lead to the shared
     # settings.
@@ -128,19 +144,79 @@ class AtomicPlotter(QtInteractor):
     def draw_atoms(self, df: pd.DataFrame) -> None:
         """Group atoms by type and render them as point-based spheres."""
         for actor in list(self.renderer.actors.keys()):
-            if actor.startswith("atoms_") or actor.startswith("atom_single_"):
+            if actor.startswith(("atoms_", "atom_single_", "lod_atoms_")):
                 self.remove_actor(actor)
 
         if df is None or df.empty:
             return
 
+        # Every stride-th atom of each type makes the moving view.
+        stride = -(-len(df) // self.LOD_ATOM_BUDGET)
+
         for atype, group_df in df.groupby("type"):
-            mesh = pv.PolyData(group_df[["x", "y", "z"]].values)
+            xyz = group_df[["x", "y", "z"]].values
+            mesh = pv.PolyData(xyz)
             self._add_atom_mesh(mesh, atype, self.global_scale, name=f"atoms_{atype}")
 
+            if stride > 1 and len(xyz) > self.LOD_KEEP_TYPES_UP_TO:
+                lod_actor = self._add_atom_mesh(
+                    pv.PolyData(xyz[::stride]),
+                    atype,
+                    self.global_scale,
+                    name=f"lod_atoms_{atype}",
+                    pickable=False,
+                )
+                lod_actor.visibility = False
+
+    def _on_render_start(self, render_window: Any, event: str) -> None:
+        """Swap in the light scene while the view moves, the full one after.
+
+        VTK's interactor styles raise the render window's desired update
+        rate for the length of a rotation, pan or zoom, and set it back to
+        the still rate for the frame drawn when it ends. Read at the start
+        of each render, that rate says which scene the frame needs, whatever
+        the interactor style.
+        """
+        interactor = render_window.GetInteractor()
+        if interactor is None:
+            return
+        moving = render_window.GetDesiredUpdateRate() > interactor.GetStillUpdateRate()
+
+        if not moving:
+            # An actor removed since (a redraw) is gone from the scene, and
+            # showing it again does nothing.
+            for actor in self._hidden_while_moving:
+                actor.visibility = True
+            self._hidden_while_moving = []
+            for name, actor in self.renderer.actors.items():
+                if name.startswith("lod_atoms_"):
+                    actor.visibility = False
+            return
+
+        if self._hidden_while_moving:
+            return
+        actors = self.renderer.actors
+        for name, actor in actors.items():
+            if not name.startswith("lod_atoms_"):
+                continue
+            full = actors.get(name[len("lod_") :])
+            if full is not None and full.visibility:
+                full.visibility = False
+                actor.visibility = True
+                self._hidden_while_moving.append(full)
+        bonds = actors.get("bonds")
+        if self._hidden_while_moving and bonds is not None and bonds.visibility:
+            bonds.visibility = False
+            self._hidden_while_moving.append(bonds)
+
     def _add_atom_mesh(
-        self, mesh: pv.PolyData, atype: str | int, scale: float, name: str
-    ) -> None:
+        self,
+        mesh: pv.PolyData,
+        atype: str | int,
+        scale: float,
+        name: str,
+        pickable: bool = True,
+    ) -> pv.Actor:
         """Helper to style and add an atom mesh to the renderer."""
         atype_str = str(atype).strip()
 
@@ -159,13 +235,13 @@ class AtomicPlotter(QtInteractor):
 
         # use color=color_hex directly.
         # PyVista accepts names 'white', 'red' or HEX codes '#FFFFFF'
-        self.add_mesh(
+        return self.add_mesh(
             mesh,
             color=color_hex,
             render_points_as_spheres=True,
             point_size=display_size,
             name=name,
-            pickable=True,
+            pickable=pickable,
             reset_camera=False,
             lighting=True,
             style="points",
@@ -283,27 +359,31 @@ class AtomicPlotter(QtInteractor):
                 render_lines_as_tubes=True,
             )
 
+    @staticmethod
+    def _box_corners(system: AtomicSystem) -> np.ndarray:
+        """The eight corners of the cell, in VTK hexahedron order."""
+        v = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [1, 0, 1],
+                [1, 1, 1],
+                [0, 1, 1],
+            ]
+        )
+        return (v @ np.array(system._box_vectors)) + np.array(
+            [system._box_lmp[0][0], system._box_lmp[1][0], system._box_lmp[2][0]]
+        )
+
     def draw_box(self, system: AtomicSystem) -> None:
         """Draws the simulation box with thickness and adaptive color"""
         if system is None or not hasattr(system, "_box_vectors"):
             return
         try:
-            v = np.array(
-                [
-                    [0, 0, 0],
-                    [1, 0, 0],
-                    [1, 1, 0],
-                    [0, 1, 0],
-                    [0, 0, 1],
-                    [1, 0, 1],
-                    [1, 1, 1],
-                    [0, 1, 1],
-                ]
-            )
-
-            pts = (v @ np.array(system._box_vectors)) + np.array(
-                [system._box_lmp[0][0], system._box_lmp[1][0], system._box_lmp[2][0]]
-            )
+            pts = self._box_corners(system)
 
             faces = np.hstack(
                 [
@@ -334,6 +414,113 @@ class AtomicPlotter(QtInteractor):
             )
         except Exception as e:
             print(f"Could not draw the box: {e}")
+
+    def draw_cut_preview(
+        self,
+        system: AtomicSystem,
+        normal: np.ndarray,
+        coordinate: float,
+        broken: np.ndarray | None = None,
+        shifted: np.ndarray | None = None,
+    ) -> None:
+        """Show a split plane and the bonds it would sever.
+
+        The plane is the set of points whose projection on the unit vector
+        `normal` equals `coordinate` (the convention of `Splitter`),
+        clipped to the cell. `broken` holds one (start, end) segment per
+        severed bond, shape (n, 2, 3). `shifted` holds the positions of
+        the atoms a cut that follows the molecules puts on the other side
+        of the plane, haloed in orange.
+        """
+        self.clear_cut_preview()
+
+        corners = self._box_corners(system)
+        cell = pv.UnstructuredGrid(
+            {pv.CellType.HEXAHEDRON: np.arange(8)[None]}, corners
+        )
+        normal = np.asarray(normal, dtype=float)
+        # A plane lying on a face of the cell slices nothing: the best cut
+        # often sits right on the periodic boundary, so nudge it inside.
+        projections = corners @ normal
+        low, high = projections.min(), projections.max()
+        tolerance = 1e-6 * (high - low)
+        plane = None
+        if low - tolerance <= coordinate <= high + tolerance:
+            coordinate = np.clip(coordinate, low + tolerance, high - tolerance)
+            plane = cell.slice(normal=normal, origin=coordinate * normal)
+        if plane is not None and plane.n_points:
+            self.add_mesh(
+                plane,
+                color="#3b82f6",
+                opacity=0.35,
+                show_edges=True,
+                edge_color="#3b82f6",
+                name="cut_plane",
+                pickable=False,
+                reset_camera=False,
+            )
+
+        if shifted is not None and len(shifted):
+            self.add_mesh(
+                pv.PolyData(np.asarray(shifted, dtype=float)),
+                color="orange",
+                style="points",
+                render_points_as_spheres=True,
+                point_size=1.5 * 20 * self.global_scale,
+                opacity=0.6,
+                name="cut_shifted",
+                pickable=False,
+                reset_camera=False,
+            )
+
+        if broken is not None and len(broken):
+            n_bonds = len(broken)
+            mesh = pv.PolyData(np.asarray(broken, dtype=float).reshape(-1, 3))
+            offsets = np.arange(n_bonds) * 2
+            mesh.lines = np.column_stack(
+                [np.full(n_bonds, 2), offsets, offsets + 1]
+            ).ravel()
+            # Well thicker than the regular bonds, and the atoms at both
+            # ends haloed like a selection: the atom spheres hide a tube
+            # of bond thickness.
+            radius = max(0.25, 2.5 * self.global_bond_radius)
+            self.add_mesh(
+                mesh.copy(),
+                color="red",
+                style="points",
+                render_points_as_spheres=True,
+                point_size=1.5 * 20 * self.global_scale,
+                opacity=0.6,
+                name="cut_atoms",
+                pickable=False,
+                reset_camera=False,
+            )
+            if n_bonds <= self.MAX_TUBED_BONDS:
+                self.add_mesh(
+                    mesh.tube(radius=radius, n_sides=self.BOND_TUBE_SIDES),
+                    color="red",
+                    name="cut_bonds",
+                    pickable=False,
+                    reset_camera=False,
+                )
+            else:
+                self.add_mesh(
+                    mesh,
+                    color="red",
+                    name="cut_bonds",
+                    pickable=False,
+                    reset_camera=False,
+                    line_width=max(2, int(radius * 30)),
+                    render_lines_as_tubes=True,
+                )
+
+        self.render()
+
+    def clear_cut_preview(self) -> None:
+        """Remove what `draw_cut_preview` drew."""
+        for name in ("cut_plane", "cut_bonds", "cut_atoms", "cut_shifted"):
+            if name in self.renderer.actors:
+                self.remove_actor(name)
 
     def update_bonds_only(
         self, df: pd.DataFrame, bond_settings: dict[str, Any]
@@ -383,11 +570,12 @@ class AtomicPlotter(QtInteractor):
 
     def update_atom_sizes(self) -> None:
         """Only updates the point_size of existing atom actors."""
-        for atype, actor_name in [(k, f"atoms_{k}") for k in self.radius_map]:
-            if actor_name in self.renderer.actors:
-                actor = self.renderer.actors[actor_name]
-                base_radius = self.radius_map.get(str(atype), 1.5)
-                actor.prop.point_size = base_radius * 10 * self.global_scale
+        for atype in self.radius_map:
+            for actor_name in (f"atoms_{atype}", f"lod_atoms_{atype}"):
+                if actor_name in self.renderer.actors:
+                    actor = self.renderer.actors[actor_name]
+                    base_radius = self.radius_map.get(str(atype), 1.5)
+                    actor.prop.point_size = base_radius * 10 * self.global_scale
 
     def update_atom_visibility(self, visible_types: set[str]) -> None:
         """Show/hide whole per-type atom actors without rebuilding geometry."""
@@ -398,8 +586,9 @@ class AtomicPlotter(QtInteractor):
 
     def update_atom_colors(self) -> None:
         """Only updates the colors of existing atom actors."""
-        for atype, actor_name in [(k, f"atoms_{k}") for k in self.color_map]:
-            if actor_name in self.renderer.actors:
-                actor = self.renderer.actors[actor_name]
-                color_hex = self.color_map.get(str(atype), "gray")
-                actor.prop.color = color_hex
+        for atype in self.color_map:
+            for actor_name in (f"atoms_{atype}", f"lod_atoms_{atype}"):
+                if actor_name in self.renderer.actors:
+                    actor = self.renderer.actors[actor_name]
+                    color_hex = self.color_map.get(str(atype), "gray")
+                    actor.prop.color = color_hex

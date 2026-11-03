@@ -222,7 +222,6 @@ class FilterPanel(BaseManagerPanel):
         previous_visibility = {k: cb.isChecked() for k, cb in self.checkboxes.items()}
 
         # Clean up the legacy layout
-        count_removed = 0
         while self.list_layout.count():
             item = self.list_layout.takeAt(0)
             if item.widget():

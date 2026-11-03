@@ -16,12 +16,13 @@
 #
 
 from .predefined import CLAYFF_RULES, CSHFF_RULES
-from .rules import DihedralRule, NeighborCriterion, TopologyRule
+from .rules import DihedralRule, LayerRule, NeighborCriterion, TopologyRule
 
 __all__ = [
     "TopologyRule",
     "NeighborCriterion",
     "DihedralRule",
+    "LayerRule",
     "CLAYFF_RULES",
     "CSHFF_RULES",
 ]

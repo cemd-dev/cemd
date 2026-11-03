@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from cemd import AtomicSystem
-from cemd.build import Splitter, SolutionBuilder
+from cemd.build import SolutionBuilder, Splitter
 
 from conftest import requires_packmol
 
@@ -313,6 +313,28 @@ def test_scan_broken_bonds_separates_layers_from_interlayer():
     assert ((best > 2.0) & (best < 12.0)).any()
 
 
+@pytest.mark.parametrize("keep_molecules", [False, True])
+@pytest.mark.parametrize("coordinate", [1.0, 5.0, 13.0])
+def test_describe_cut_matches_the_separate_queries(keep_molecules, coordinate):
+    splitter = Splitter(_make_layered_system(), axis="z", keep_molecules=keep_molecules)
+
+    cut = splitter.describe_cut(coordinate)
+
+    np.testing.assert_array_equal(cut["moves"], splitter.side_mask(coordinate))
+    assert cut["broken"] == splitter.find_broken_bonds(coordinate)
+    assert cut["n_ionic"] == splitter.count_broken_ionic(coordinate)
+
+
+@pytest.mark.parametrize("keep_molecules", [False, True])
+def test_best_in_scan_is_best_coordinate_without_a_second_scan(keep_molecules):
+    splitter = Splitter(_make_layered_system(), axis="z", keep_molecules=keep_molecules)
+    scan = splitter.scan_broken_bonds(step=0.25)
+    columns = list(scan.columns)
+
+    assert splitter.best_in_scan(scan) == splitter.best_coordinate(step=0.25)
+    assert list(scan.columns) == columns  # the caller's table is left alone
+
+
 def test_scan_broken_bonds_rejects_non_positive_step():
     splitter = Splitter(_make_layered_system(), coordinate=1.0, axis="z")
     with pytest.raises(ValueError, match="step must be positive"):
@@ -457,7 +479,17 @@ def test_repair_reports_what_it_did():
     splitter = Splitter(system, coordinate=1.0, axis="z", gap_size=10.0)
     splitter.split(repair=True)
 
-    assert splitter.repair_report == {"broken": 1, "capped": 3, "skipped": 0}
+    assert splitter.repair_report == {
+        "broken": 1,
+        "capped": 3,
+        "crowded": 0,
+        "retyped": 0,
+        # Nothing in this system to copy a silanol or an Si-OH from
+        "untyped": 4,
+        "bonds_added": 0,
+        "angles_added": 0,
+        "charge_change": 0.0,
+    }
 
 
 def test_repair_resets_a_specifically_typed_dangling_oxygen_to_generic():
@@ -525,13 +557,17 @@ def test_repair_does_not_stack_atoms_on_a_shared_bridging_oxygen():
     result = splitter.split(repair=True)
 
     assert splitter.repair_report["broken"] == 2
-    assert splitter.repair_report["skipped"] >= 1
+    # Each Si gets its own OH, the second tilted off the spot of the
+    # first; the O, alone on its side, takes an H for each Si: a water.
+    assert splitter.repair_report["crowded"] == 0
+    assert result.num_atoms == 9
+    assert result.get_count("H") == 4
 
     # No two atoms may end up sitting on top of each other.
     positions = result.atoms[["x", "y", "z"]].to_numpy(dtype=float)
     for i in range(len(positions)):
         for j in range(i + 1, len(positions)):
-            assert np.linalg.norm(positions[i] - positions[j]) > 0.5
+            assert np.linalg.norm(positions[i] - positions[j]) > 0.9
 
 
 # ---------------------------------------------------------------------------
@@ -727,3 +763,98 @@ def test_stretched_si_o_bond_counts_as_a_bond():
         }
     )
     assert Splitter(system, coordinate=5.0, axis="z").count_broken_bonds() == 1
+
+
+def _make_typed_silicate() -> AtomicSystem:
+    """Two silanols on a Si, one O-H explicitly bonded, plus a bridging
+    O to a second Si above: a CSHFF-like typing to copy from.
+
+    Si1 (z=0) carries Osih-Hsi (sideways) and the bridging Ob (z=1.6),
+    shared with Si2 (z=3.2). A cut at z=2.4 severs Ob-Si2.
+    """
+    atoms = pd.DataFrame(
+        {
+            "type": ["Si", "Osih", "Hsi", "Ob", "Si", "Osih", "Hsi"],
+            "charge": [2.1, -1.272, 0.425, -1.412, 2.1, -1.272, 0.425],
+            "x": [0.0, 1.6, 2.6, 0.0, 0.0, -1.6, -2.6],
+            "y": [0.0] * 7,
+            "z": [0.0, 0.0, 0.0, 1.6, 3.2, 3.2, 3.2],
+        },
+        index=range(1, 8),
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [30.0, 30.0, 30.0, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "Osih": 15.999, "Hsi": 1.008, "Ob": 15.999},
+            "charges": {},
+        }
+    )
+    system.add_bond([2, 3])
+    system.add_bond([6, 7])
+    return system
+
+
+def test_repair_types_and_charges_the_caps_like_the_system():
+    system = _make_typed_silicate()
+    charge = system.atoms["charge"].sum()
+    splitter = Splitter(system, coordinate=2.4, axis="z", gap_size=10.0, repair=True)
+    assert splitter.count_broken_bonds() == 1
+
+    result = splitter.split()
+    report = splitter.repair_report
+
+    # Si-O-Si + H2O -> 2 Si-OH: both sides are silanols, typed as such
+    assert report["broken"] == 1 and report["capped"] == 3
+    assert report["untyped"] == 0 and report["retyped"] == 1  # the Ob
+    counts = result.atoms["type"].value_counts()
+    assert counts["Osih"] == 4 and counts["Hsi"] == 4 and "Ob" not in counts
+    assert result.atoms.loc[result.atoms["type"] == "Hsi", "charge"].eq(0.425).all()
+    assert report["charge_change"] == pytest.approx(
+        result.atoms["charge"].sum() - charge
+    )
+    # Osih-Hsi is explicit in this system: the two new ones are too
+    assert report["bonds_added"] == 2
+    assert len(result.bonds) == 4
+
+
+def test_repair_keeps_each_hydrogen_with_its_oxygen():
+    system = _make_typed_silicate()
+    # Between Osih (x=1.6) and its Hsi (x=2.6), along x
+    plane = Splitter(_make_typed_silicate(), coordinate=2.1, axis="x")
+    assert plane.count_broken_bonds() == 1
+
+    splitter = Splitter(system, coordinate=2.1, axis="x", repair=True)
+    assert splitter.count_broken_bonds() == 0
+    result = splitter.split()
+    assert splitter.repair_report["capped"] == 0
+    assert result.num_atoms == 7
+
+
+def test_repair_refuses_a_bond_without_oxygen():
+    atoms = pd.DataFrame(
+        {
+            "type": ["C", "C"],
+            "charge": [0.0, 0.0],
+            "x": [0.0, 0.0],
+            "y": [0.0, 0.0],
+            "z": [0.0, 1.5],
+        },
+        index=[1, 2],
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"C": 12.011},
+            "charges": {},
+        }
+    )
+    system.add_bond([1, 2])
+    splitter = Splitter(system, coordinate=0.75, axis="z", repair=True)
+
+    assert splitter.describe_cut()["unrepairable"] == [(1, 2)]
+    with pytest.raises(ValueError, match="keep_molecules"):
+        splitter.split()
+    # Refused before anything moved
+    assert system.atoms["z"].tolist() == [0.0, 1.5]

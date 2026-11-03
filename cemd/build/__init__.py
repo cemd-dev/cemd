@@ -1,4 +1,5 @@
 # from .base import BaseBuilder
+from ._packmol import PackmolCancelledError, cancel_packmol_on
 from .cement_hydrates import AFBuilder, CSHBuilder
 from .glass import GlassBuilder
 from .interface import _add_droplet, _add_liquid_layer, _add_structure, _add_vacuum
@@ -13,6 +14,8 @@ __all__ = [
     "Splitter",
     "CSHBuilder",
     "AFBuilder",
+    "PackmolCancelledError",
+    "cancel_packmol_on",
     "_add_liquid_layer",
     "_add_droplet",
     "_add_structure",

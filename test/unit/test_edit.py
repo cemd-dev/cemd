@@ -7,7 +7,6 @@ import pytest
 
 from conftest import make_water_system
 
-
 # ---------------------------------------------------------------------------
 # add_atom(s)
 # ---------------------------------------------------------------------------
@@ -147,6 +146,25 @@ def test_replicate_shifts_topology_indices():
     assert system.bonds[["atom_1", "atom_2"]].to_numpy().max() <= system.num_atoms
 
 
+@pytest.mark.parametrize("factors", [(2, 1, 1), (3, 2, 1)])
+def test_replicate_links_boundary_bonds_to_neighbour_copy(factors):
+    # A water molecule split across the x and y faces: every bond and angle must stay
+    # short (minimum image) in the replicated box, and so link to the neighbouring copy.
+    system = make_water_system()
+    system.set_atom_position(1, [29.8, 29.8, 5.0])
+    system.set_atom_position(2, [0.75, 29.8, 5.0])
+    system.set_atom_position(3, [29.5, 0.7, 5.0])
+    system.replicate(list(factors))
+    box = np.asarray(system.box[:3])
+    pos = system.atoms[["x", "y", "z"]]
+    for name, cols in [("bonds", ["atom_1", "atom_2"]), ("angles", ["atom_1", "atom_3"])]:
+        df = getattr(system, name)
+        d = pos.loc[df[cols[0]]].to_numpy() - pos.loc[df[cols[1]]].to_numpy()
+        d -= box * np.rint(d / box)
+        assert np.linalg.norm(d, axis=1).max() < 2.0
+        assert len(set(map(tuple, df[cols].to_numpy()))) == len(df)
+
+
 def test_replicate_drops_velocities():
     system = make_water_system()
     import pandas as pd
@@ -183,8 +201,9 @@ def test_wrap_empty_system_is_noop(empty_atoms_system):
 
 
 def test_unskew_reduces_large_tilt():
-    from cemd import AtomicSystem
     import pandas as pd
+
+    from cemd import AtomicSystem
 
     atoms = pd.DataFrame(
         {"type": ["X"], "charge": [0.0], "x": [1.0], "y": [1.0], "z": [1.0]},
@@ -284,3 +303,105 @@ def test_protonate_atoms_batch():
     n0 = system.num_atoms
     system.protonate_atoms([1, 4])  # both Ow atoms, by real atom id
     assert system.num_atoms == n0 + 2
+
+
+# ---------------------------------------------------------------------------
+# substitute_atoms
+# ---------------------------------------------------------------------------
+
+
+def make_tetrahedral_sheet(n: int = 6, spacing: float = 3.2):
+    """A periodic square net of Si, with an O halfway along every Si-Si edge.
+
+    Each Si shares an oxygen with its four neighbours, so Loewenstein's rule
+    allows at most half of them to become Al (a checkerboard), and the
+    periodic edges are as much bridges as the interior ones.
+    """
+    import pandas as pd
+
+    from cemd import AtomicSystem
+
+    rows = []
+    for i in range(n):
+        for j in range(n):
+            x, y = i * spacing, j * spacing
+            rows.append(("Si", x, y))
+            rows.append(("O", x + spacing / 2, y))
+            rows.append(("O", x, y + spacing / 2))
+    atoms = pd.DataFrame(
+        {
+            "type": [r[0] for r in rows],
+            "charge": [0.0] * len(rows),
+            "x": [r[1] for r in rows],
+            "y": [r[2] for r in rows],
+            "z": [5.0] * len(rows),
+        },
+        index=range(1, len(rows) + 1),
+    )
+    box = [n * spacing, n * spacing, 10.0, 90.0, 90.0, 90.0]
+    return AtomicSystem(
+        {"atoms": atoms, "box": box, "masses": {"Si": 28.0855, "O": 15.9994}, "charges": {}}
+    )
+
+
+def _shared_oxygen_pairs(system, ids, cutoff=2.0):
+    """Number of pairs among `ids` bonded to a common oxygen."""
+    from MDAnalysis.lib.distances import capped_distance
+
+    oxygens = system.atoms[system.atoms["type"] == "O"][["x", "y", "z"]].to_numpy()
+    pos = system.atoms.loc[ids, ["x", "y", "z"]].to_numpy()
+    pairs = capped_distance(pos, oxygens, cutoff, box=system.box, return_distances=False)
+    per_oxygen = np.bincount(pairs[:, 1], minlength=len(oxygens))
+    return int((per_oxygen > 1).sum())
+
+
+def test_substitute_atoms_obeys_loewenstein_up_to_the_checkerboard():
+    system = make_tetrahedral_sheet()
+    ids = system.substitute_atoms("Si", "Al", fraction=0.5, seed=0)
+    assert len(ids) == 18
+    assert (system.atoms.loc[ids, "type"] == "Al").all()
+    assert _shared_oxygen_pairs(system, ids) == 0
+
+
+def test_substitute_atoms_refuses_more_than_loewenstein_allows():
+    system = make_tetrahedral_sheet()
+    with pytest.raises(ValueError, match="without two sharing"):
+        system.substitute_atoms("Si", "Al", count=19, seed=0, max_attempts=20)
+    assert (system.atoms["type"] != "Al").all()
+
+
+def test_substitute_atoms_without_the_rule_can_pair_neighbours():
+    system = make_tetrahedral_sheet()
+    ids = system.substitute_atoms("Si", "Al", count=30, avoid_adjacent=False, seed=0)
+    assert _shared_oxygen_pairs(system, ids) > 0
+
+
+def test_substitute_atoms_is_reproducible_and_sets_charge_and_mass():
+    first = make_tetrahedral_sheet().substitute_atoms("Si", "Al", count=6, seed=3)
+    system = make_tetrahedral_sheet()
+    second = system.substitute_atoms("Si", "Al", count=6, seed=3, charge=1.575)
+    np.testing.assert_array_equal(first, second)
+    assert system.atoms.loc[second, "charge"].tolist() == [1.575] * 6
+    assert system.masses["Al"] == pytest.approx(26.98, rel=1e-3)
+
+
+def test_substitute_atoms_stays_within_the_candidates():
+    system = make_tetrahedral_sheet()
+    silicons = system.atoms.index[system.atoms["type"] == "Si"].to_numpy()
+    ids = system.substitute_atoms("Si", "Al", count=4, candidates=silicons[:10], seed=1)
+    assert set(ids) <= set(silicons[:10])
+
+
+def test_substitute_atoms_rejects_candidates_of_another_type():
+    system = make_tetrahedral_sheet()
+    oxygen = int(system.atoms.index[system.atoms["type"] == "O"][0])
+    with pytest.raises(ValueError, match="not of type"):
+        system.substitute_atoms("Si", "Al", count=1, candidates=[oxygen])
+
+
+def test_substitute_atoms_needs_exactly_one_of_count_and_fraction():
+    system = make_tetrahedral_sheet()
+    with pytest.raises(ValueError, match="exactly one"):
+        system.substitute_atoms("Si", "Al")
+    with pytest.raises(ValueError, match="exactly one"):
+        system.substitute_atoms("Si", "Al", count=2, fraction=0.1)

@@ -68,12 +68,51 @@ def require_box(source, caller: str) -> np.ndarray:
     return np.asarray(dimensions)
 
 
+def frames(
+    universe: mda.Universe, start: int, stop: int | None, step: int, caller: str
+):
+    """Return ``universe.trajectory[start:stop:step]``, or refuse an empty slice.
+
+    Every trajectory analysis takes the same ``start``/``stop``/``step``,
+    read as a Python slice: ``stop=None`` runs to the last frame. They used
+    to take ``end=-1``, which meant every frame in ``density_profile`` but
+    dropped the last one wherever it reached the slice as is.
+
+    Parameters
+    ----------
+    universe : mda.Universe
+        The universe whose trajectory is sliced.
+    start, stop, step : int
+        The slice, as in ``trajectory[start:stop:step]``.
+    caller : str
+        Name of the analysis, quoted in the error message.
+
+    Returns
+    -------
+    FrameIteratorSliced
+        The frames, to iterate over once, in order.
+
+    Raises
+    ------
+    ValueError
+        If the slice holds no frame, which would otherwise end in a
+        division by zero.
+    """
+    trajectory = universe.trajectory[start:stop:step]
+    if len(trajectory) == 0:
+        raise ValueError(
+            f"{caller}: the trajectory slice [{start}:{stop}:{step}] holds no "
+            f"frame (the trajectory has {len(universe.trajectory)})."
+        )
+    return trajectory
+
+
 def write_dcd(
     universe: mda.Universe,
     output_path: str,
     selection: str = "all",
     start: int = 0,
-    end: int = None,
+    stop: int | None = None,
     step: int = 1,
 ) -> None:
     """Write trajectory frames from an MDAnalysis Universe to a new DCD file.
@@ -88,8 +127,8 @@ def write_dcd(
         Selection string (MDAnalysis syntax) specifying which atoms to write.
     start : int, optional
         Starting frame index (0-indexed).
-    end : int, optional
-        Ending frame index. If None, writes up to the last available frame.
+    stop : int, optional
+        Frame index to stop before. If None, writes up to the last frame.
     step : int, optional
         Step size (stride) for writing frames.
     """
@@ -107,11 +146,12 @@ def write_dcd(
     print(f"Selected {len(selected_atoms)} out of {len(universe.atoms)} atoms.")
 
     # handle the trajectory slice definition
-    trajectory_slice = universe.trajectory[start:end:step]
+    trajectory_slice = frames(universe, start, stop, step, "write_dcd")
     total_frames_to_write = len(trajectory_slice)
 
     print(
-        f"Writing {total_frames_to_write} frames (start={start}, end={end}, step={step})..."
+        f"Writing {total_frames_to_write} frames "
+        f"(start={start}, stop={stop}, step={step})..."
     )
 
     # open the writer and stream the frames
@@ -232,7 +272,8 @@ def minmax_position(
     axis: str = "z",
     bounds: Sequence[float] = None,
     start: int = 0,
-    end: int = -1,
+    stop: int | None = None,
+    step: int = 1,
 ) -> tuple[float, float]:
     """Calculate the mean of the minimum and maximum coordinates along an axis.
 
@@ -248,8 +289,10 @@ def minmax_position(
         Optional spatial limits [min, max] in Angstroms to filter atoms.
     start : int, optional
         Starting frame index for the trajectory slice.
-    end : int, optional
-        Ending frame index for the trajectory slice.
+    stop : int, optional
+        Frame index to stop before. If None, runs to the last frame.
+    step : int, optional
+        Step size (stride) over the frames.
 
     Returns
     -------
@@ -277,7 +320,7 @@ def minmax_position(
 
     mins, maxs = [], []
 
-    for ts in tqdm(universe.trajectory[start:end]):
+    for ts in tqdm(frames(universe, start, stop, step, "minmax_position")):
         mins.append(sel.positions[:, axid].min())
         maxs.append(sel.positions[:, axid].max())
 

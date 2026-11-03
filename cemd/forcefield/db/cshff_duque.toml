@@ -1,0 +1,208 @@
+# cshff_duque.toml
+# C-S-H force field of Duque-Redondo et al., as used by Ihaddadene et al. (2026)
+# References: https://doi.org/10.1039/c8cp00654g (Duque-Redondo et al.)
+#             https://doi.org/10.1016/j.cemconres.2025.108053 (Ihaddadene et al., 2026)
+#
+# A hybrid of CSH-FF (Shahsavari et al., 2011; Qomi et al., 2014) and ClayFF
+# (Cygan et al., 2004):
+# - charges: Ca, Si and the silicate O from CSH-FF, the interlayer Ca, the
+#   hydroxide, the water and the ions from ClayFF; Hsi = 0.29 as in the
+#   models of Ihaddadene et al. (read in their production data files);
+# - Lennard-Jones: self terms only (Ca1 = ca, Ca2 = cw, O1 = ob, O2 = osih,
+#   O3 = osi, O5 = oh, O6 = ow in the table of Duque-Redondo et al.). No cross
+#   term is given: every one is mixed (Ihaddadene et al. used geometric mixing,
+#   `pair_modify mix geometric`; Lorentz-Berthelot is cemd's default).
+#
+# The silicate O charges are the values before neutralization: a C-S-H model
+# carries an excess charge, spread by Ihaddadene et al. as one equal offset on
+# every ob, osi and osih atom,
+#     system.neutralize_charge({"Ob": 1.0, "Osi": 1.0, "Osih": 1.0})
+# (e.g. osi = -1.07 at Ca/Si = 1.2, -1.25 at 1.8 in their models).
+#
+# Typing: ca = Ca of the main layers, cw = every other Ca (interlayer, pore,
+# solution), by position (CSHFF_RULES, LayerRule).
+
+[model]
+name = "CSHFF-Duque"
+ref = "https://doi.org/10.1039/c8cp00654g"
+description = "C-S-H force field of Duque-Redondo et al. (CSH-FF + ClayFF), as used by Ihaddadene et al. (2026)"
+
+# ============================================================
+# Atom Types
+# ============================================================
+
+[atom]
+
+[atom.ca]
+element = "Ca"
+charge = 1.43
+environment = "intralayer calcium in csh (Ca1)"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.cw]
+element = "Ca"
+charge = 2.0
+environment = "interlayer calcium in csh (Ca2)"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.si]
+element = "Si"
+charge = 1.72
+environment = "silicate silicon in csh"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.ob]
+element = "O"
+charge = -1.14
+environment = "bridging oxygen Si-O-Si in csh (O1), before neutralization"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.osih]
+element = "O"
+charge = -1.0
+environment = "silanol oxygen Si-O-H in csh (O2), before neutralization"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.osi]
+element = "O"
+charge = -1.0
+environment = "non-bridging silicate oxygen in csh (O3), before neutralization"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.hsi]
+element = "H"
+charge = 0.29
+environment = "silanol hydrogen in csh"
+ref = "https://doi.org/10.1016/j.cemconres.2025.108053"
+
+[atom.oh]
+element = "O"
+charge = -0.95
+environment = "hydroxide oxygen Ca-O-H (O5)"
+ref = "https://doi.org/10.1021/jp0363287"
+
+[atom.hh]
+element = "H"
+charge = 0.425
+environment = "hydroxide hydrogen"
+ref = "https://doi.org/10.1021/jp0363287"
+
+[atom.ow]
+element = "O"
+charge = -0.82
+environment = "water oxygen, flexible SPC (O6)"
+ref = "https://doi.org/10.1021/jp0363287"
+
+[atom.hw]
+element = "H"
+charge = 0.41
+environment = "water hydrogen, flexible SPC"
+ref = "https://doi.org/10.1021/jp0363287"
+
+[atom.na]
+element = "Na"
+charge = 1.0
+environment = "aqueous sodium ion"
+ref = "https://doi.org/10.1021/jp0363287"
+
+[atom.cl]
+element = "Cl"
+charge = -1.0
+environment = "aqueous chloride ion"
+ref = "https://doi.org/10.1021/jp0363287"
+
+[atom.cs]
+element = "Cs"
+charge = 1.0
+environment = "aqueous cesium ion"
+ref = "https://doi.org/10.1021/jp0363287"
+
+# ============================================================
+# Lennard-Jones 12-6 Parameters (self terms only)
+# ============================================================
+
+[lj]
+
+[lj."ca-ca"]
+epsilon = 5.0298e-06
+sigma = 5.5666915504281
+
+[lj."cw-cw"]
+epsilon = 0.1
+sigma = 2.87199019766901
+
+[lj."si-si"]
+epsilon = 1.8405e-06
+sigma = 3.30202700891535
+
+[lj."ob-ob"]
+epsilon = 0.0618
+sigma = 3.447778039
+
+[lj."osih-osih"]
+epsilon = 0.0618
+sigma = 3.447778039
+
+[lj."osi-osi"]
+epsilon = 1.243
+sigma = 2.735059065
+
+[lj."hsi-hsi"]
+epsilon = 0
+sigma = 0
+
+[lj."oh-oh"]
+epsilon = 0.1554
+sigma = 3.16554132529625
+
+[lj."hh-hh"]
+epsilon = 0
+sigma = 0
+
+[lj."ow-ow"]
+epsilon = 0.1554
+sigma = 3.16554132529625
+
+[lj."hw-hw"]
+epsilon = 0
+sigma = 0
+
+[lj."na-na"]
+epsilon = 0.1301
+sigma = 2.35001263871059
+
+[lj."cl-cl"]
+epsilon = 0.1001
+sigma = 4.39997058915151
+
+[lj."cs-cs"]
+epsilon = 0.1
+sigma = 3.83104266774709
+
+# ============================================================
+# Bond Parameters
+# ============================================================
+
+[bond.harmonic]
+
+[bond.harmonic."hw-ow"]
+k = 554.1349
+r0 = 1.0
+
+[bond.harmonic."hh-oh"]
+k = 554.1349
+r0 = 1.0
+
+[bond.harmonic."hsi-osih"]
+k = 554.135
+r0 = 1.0
+
+# ============================================================
+# Angle Parameters
+# ============================================================
+
+[angle.harmonic]
+
+[angle.harmonic."hw-ow-hw"]
+k = 45.7696
+theta0 = 109.47

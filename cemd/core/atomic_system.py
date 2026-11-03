@@ -25,9 +25,8 @@ from typing import TYPE_CHECKING, Any, Self
 import numpy as np
 import pandas as pd
 
-from .._constants import AVOGADRO, MASSES_DICT
+from .._constants import AVOGADRO, MASSES_DICT, element_from_mass
 from .._constants import ELEMENT_MASS_TOLERANCE as _ELEMENT_MASS_TOLERANCE
-from .._constants import element_from_mass
 from ._edit import EditMixin
 from ._format import (
     ANGLES_COLUMNS,
@@ -46,6 +45,8 @@ from .forcefield_mixin import ForceFieldMixin
 from .topology_mixin import TopologyMixin
 
 if TYPE_CHECKING:
+    from pymatgen.core import Structure
+
     from ..build import SolutionBuilder
 
 
@@ -141,6 +142,7 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         """
         self._from_system_dict(system_dict)
         self._finalize_data()
+        self._cache_pmg(system_dict.get("_pmg_struct"))
 
     def __repr__(self) -> str:
         """Return a concise string representation of the AtomicSystem."""
@@ -190,8 +192,6 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
             dict(system_dict["charges"]), [str(t) for t in self.atoms.type.unique()]
         )
         self._atom_style = system_dict.get("atom_style", "full")
-
-        self._pmg_struct = system_dict.get("_pmg_struct", None)
 
         self._ff_keys = ForceFieldKeys.from_system_dict(system_dict)
         self._ff_params = ForceFieldParams.from_system_dict(system_dict)
@@ -281,10 +281,12 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         self._ff_params = copy.deepcopy(other._ff_params)
         self._ff_keys = copy.deepcopy(other._ff_keys)
 
+        # A system without a cached structure keeps ours: `_cached_pmg` drops it
+        # if the new content no longer matches, and typing (which goes through
+        # here and moves nothing) leaves it valid.
         if other._pmg_struct is not None:
             self._pmg_struct = copy.deepcopy(other._pmg_struct)
-        else:
-            self._pmg_struct = None
+            self._pmg_key = other._pmg_key
 
     def _to_system_dict(self) -> dict:
         """Serialize the system to a dictionary for reconstruction."""
@@ -340,8 +342,49 @@ class AtomicSystem(EditMixin, IOMixin, TopologyMixin, ForceFieldMixin):
         new._pmg_struct = (
             copy.deepcopy(self._pmg_struct) if self._pmg_struct is not None else None
         )
+        new._pmg_key = self._pmg_key
 
         return new
+
+    def _geometry_key(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Fingerprint of what a pymatgen structure retains of the system.
+
+        The cell, the positions in order and the mass of each atom -- the mass
+        rather than the type, so that typing, which renames O to Oc but moves
+        nothing, leaves it unchanged.
+        """
+        masses = self.atoms["type"].map(dict(self.masses)).to_numpy(dtype=float)
+        positions = self.atoms[["x", "y", "z"]].to_numpy(dtype=float)
+        return np.asarray(self.box, dtype=float), positions, masses
+
+    def _matches_geometry(self, key: tuple[np.ndarray, ...]) -> bool:
+        """Whether the system still has the geometry fingerprinted in `key`.
+
+        Within a tolerance rather than exactly: typing goes through
+        MDAnalysis, which keeps the cell and positions in single precision.
+        """
+        return all(
+            old.shape == new.shape and np.allclose(old, new, rtol=1e-6, atol=1e-5)
+            for old, new in zip(key, self._geometry_key())
+        )
+
+    def _cache_pmg(self, structure: Structure | None) -> None:
+        """Cache the pymatgen structure the system was built from."""
+        self._pmg_struct = structure
+        self._pmg_key = self._geometry_key() if structure is not None else None
+
+    def _cached_pmg(self) -> Structure | None:
+        """Return the cached pymatgen structure, or None if the system changed since.
+
+        Edits reach the atoms by many paths (methods, setters, in-place
+        DataFrame assignments), so the cache is checked against the system
+        when it is read rather than cleared by each of them. A stale structure
+        is kept rather than dropped, so that an edited crystal can still be
+        told from a system that never had one.
+        """
+        if self._pmg_struct is not None and self._matches_geometry(self._pmg_key):
+            return self._pmg_struct
+        return None
 
     @property
     def atoms(self) -> pd.DataFrame:

@@ -718,22 +718,39 @@ class ForceFieldMixin:
         orig_t2: str,
         is_self_interaction: bool,
     ) -> Any:
-        """Helper method to find or derive pair parameters from the database."""
+        """Helper method to find or derive pair parameters from the database.
 
-        # Search with exact keys (ex: db.lj or db.buckingham)
-        params = db.get_lj(ff_t1, ff_t2) or db.get_buckingham(ff_t1, ff_t2)
-        if params is not None:
-            return params
+        An explicit cross term is only taken from the model both types belong
+        to. Two types of different models ("clayff.cao" with "clayff.o*" is
+        one model, "cshff2014.ob" with "clayff.oh" two) are mixed from their
+        own self terms: the lookup used to search the model of the first type
+        with the short name of the second (Ob-Oh got CSH-FF's "ob-oh", where
+        "oh" is a silanol O), then every model by short name (Ca-Ow got the
+        calcite-water "Ca-Ow" of raiteri2015). The short names of the system
+        types are only searched when the assignment names no model.
+        """
+        model1, _ = db._extract_short_name(ff_t1)
+        model2, _ = db._extract_short_name(ff_t2)
+        no_model = model1 is None and model2 is None
 
-        # Search with the original keys (without the suffix)
-        params = db.get_lj(orig_t1, orig_t2) or db.get_buckingham(orig_t1, orig_t2)
-        if params is not None:
-            return params
+        if model1 == model2:
+            params = db.get_lj(ff_t1, ff_t2) or db.get_buckingham(ff_t1, ff_t2)
+            if params is not None:
+                return params
+
+        if no_model:
+            params = db.get_lj(orig_t1, orig_t2) or db.get_buckingham(orig_t1, orig_t2)
+            if params is not None:
+                return params
 
         # If not found, try to derive it from each atom's own
         # self-interaction LJ parameters (Lorentz-Berthelot mixing).
-        self1 = db.get_lj(ff_t1, ff_t1) or db.get_lj(orig_t1, orig_t1)
-        self2 = db.get_lj(ff_t2, ff_t2) or db.get_lj(orig_t2, orig_t2)
+        self1 = db.get_lj(ff_t1, ff_t1) or (
+            db.get_lj(orig_t1, orig_t1) if model1 is None else None
+        )
+        self2 = db.get_lj(ff_t2, ff_t2) or (
+            db.get_lj(orig_t2, orig_t2) if model2 is None else None
+        )
 
         if self1 is not None and self2 is not None:
             eps_mixed = (self1.epsilon * self2.epsilon) ** 0.5

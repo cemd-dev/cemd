@@ -9,8 +9,9 @@ so Qt never called them. Three lines of import would have caught all of
 it.
 
 The 3D view is not exercised: `StructureTabWidget` builds a PyVista
-`QtInteractor`, which needs a real GL context and dies on a headless
-runner. Opening a structure is therefore out of scope here.
+`QtInteractor`, which needs a real GL context and dies on the offscreen
+Qt platform. Opening a structure is left to test_gui_view.py, which runs
+on a display (Xvfb in CI).
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from __future__ import annotations
 import os
 
 import pytest
+
+from conftest import requires_packmol
 
 # Must be set before the Qt platform plugin is chosen, i.e. before the
 # first QApplication is built.
@@ -292,9 +295,9 @@ def test_a_declined_deletion_takes_no_snapshot(window, water_tab, monkeypatch):
 
 
 def test_atom_table_shows_the_atoms(qt_app):
-    from conftest import make_water_system
-
     from cemd.gui.ui.atom_table import AtomTable
+
+    from conftest import make_water_system
 
     table = AtomTable()
     table.update_data(make_water_system())
@@ -309,10 +312,10 @@ def test_atom_table_shows_the_atoms(qt_app):
 def test_table_selection_follows_the_picked_atoms(qt_app):
     from types import SimpleNamespace
 
-    from conftest import make_water_system
-
     from cemd.gui.tabs import StructureTabWidget
     from cemd.gui.ui.atom_table import AtomTable
+
+    from conftest import make_water_system
 
     table = AtomTable()
     table.update_data(make_water_system())
@@ -325,9 +328,9 @@ def test_table_selection_follows_the_picked_atoms(qt_app):
 
 
 def test_filter_panel_counts_atoms_per_type(qt_app):
-    from conftest import make_water_system
-
     from cemd.gui.ui.panels import FilterPanel
+
+    from conftest import make_water_system
 
     panel = FilterPanel()
     panel.refresh(make_water_system(), {}, {}, 1.0)
@@ -336,10 +339,11 @@ def test_filter_panel_counts_atoms_per_type(qt_app):
 
 def test_a_color_change_refreshes_the_view_once(qt_app):
     """The color button opens its own dialog; the panel must not add one."""
-    from conftest import make_water_system
     from PySide6 import QtGui
 
     from cemd.gui.ui.panels import FilterPanel
+
+    from conftest import make_water_system
 
     panel = FilterPanel()
     panel.refresh(make_water_system(), {}, {}, 1.0)
@@ -353,9 +357,9 @@ def test_a_color_change_refreshes_the_view_once(qt_app):
 
 def test_slider_moves_refresh_the_view_after_a_burst(qt_app):
     """Any move applies, not just a drag release, and a burst applies once."""
-    from conftest import make_water_system
-
     from cemd.gui.ui.panels import FilterPanel
+
+    from conftest import make_water_system
 
     panel = FilterPanel()
     panel.refresh(make_water_system(), {}, {}, 1.0)
@@ -419,6 +423,198 @@ def test_background_work_that_finishes_at_once_does_not_hang(qt_app):
     parent = QtWidgets.QWidget()
     for _ in range(20):
         assert run_in_background(parent, "Working...", lambda: "ok") == "ok"
+
+
+def _sleeping_packmol_run():
+    """Stand-in for a Packmol run: honours the cancel event the same way."""
+    import subprocess
+
+    from cemd.build._packmol import _cancel_event, _wait_for_packmol
+
+    return _wait_for_packmol(subprocess.Popen(["sleep", "30"]), _cancel_event.get())
+
+
+def test_a_cancelled_background_job_stops_and_raises(qt_app):
+    import time
+
+    from PySide6 import QtCore, QtWidgets
+
+    from cemd.build import PackmolCancelledError
+    from cemd.gui.logic.build import run_in_background
+
+    parent = QtWidgets.QWidget()
+
+    def click_cancel():
+        progress = parent.findChild(QtWidgets.QProgressDialog)
+        progress.findChild(QtWidgets.QPushButton).click()
+
+    QtCore.QTimer.singleShot(200, click_cancel)
+
+    start = time.perf_counter()
+    with pytest.raises(PackmolCancelledError):
+        run_in_background(parent, "Working...", _sleeping_packmol_run, cancellable=True)
+    assert time.perf_counter() - start < 5
+    assert not parent.findChild(QtWidgets.QProgressDialog).isVisible()
+
+
+def test_escape_does_not_close_a_job_that_cannot_be_cancelled(qt_app):
+    # Closing the dialog would give back the window it keeps modal, with
+    # the work still reading the structure.
+    import time
+
+    from PySide6 import QtCore, QtTest, QtWidgets
+
+    from cemd.gui.logic.build import run_in_background
+
+    parent = QtWidgets.QWidget()
+    visible_after_escape = []
+
+    def press_escape():
+        progress = parent.findChild(QtWidgets.QProgressDialog)
+        QtTest.QTest.keyClick(progress, QtCore.Qt.Key_Escape)
+        progress.close()
+        visible_after_escape.append(progress.isVisible())
+
+    QtCore.QTimer.singleShot(100, press_escape)
+    assert run_in_background(parent, "Working...", lambda: time.sleep(0.5)) is None
+    assert visible_after_escape == [True]
+    assert not parent.findChild(QtWidgets.QProgressDialog).isVisible()
+
+
+def test_a_finished_cancellable_job_closes_its_dialog(qt_app):
+    # QProgressDialog.close() emits canceled; the cancel handler must not
+    # take it for a click and show the dialog again.
+    from PySide6 import QtWidgets
+
+    from cemd.gui.logic.build import run_in_background
+
+    parent = QtWidgets.QWidget()
+    assert run_in_background(parent, "Working...", lambda: 1, cancellable=True) == 1
+    assert not parent.findChild(QtWidgets.QProgressDialog).isVisible()
+
+
+def test_a_cancelled_build_reports_no_error(window, monkeypatch):
+    from PySide6 import QtWidgets
+
+    from cemd.build import PackmolCancelledError
+    from cemd.gui.logic.build import handle_error
+
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "critical",
+        staticmethod(lambda *a, **k: pytest.fail("no error box expected")),
+    )
+    handle_error(window, "Solution Error", PackmolCancelledError("cancelled"))
+    assert window.statusBar().currentMessage() == "Cancelled."
+
+
+def test_closing_the_csh_builder_stops_its_build(qt_app):
+    import time
+
+    from cemd.gui.ui.build import CASHBuilderDialog, TaskWorker
+
+    dialog = CASHBuilderDialog()
+    dialog.worker = TaskWorker(lambda _progress_callback: _sleeping_packmol_run())
+    errors = []
+    dialog.worker.error.connect(errors.append)
+    dialog.worker.start()
+
+    start = time.perf_counter()
+    dialog.reject()
+    assert time.perf_counter() - start < 5
+    assert not dialog.worker.isRunning()
+    assert errors == []
+
+
+# ----------------------------------------------------------------------
+# Build dialogs
+#
+# What runs after the dialog is accepted, with `exec` answered and the
+# new tab captured: `add_structure_tab` builds the 3D view, which needs a
+# GL context (see test_gui_view.py).
+# ----------------------------------------------------------------------
+
+
+def test_every_build_dialog_opens_and_reads_its_defaults(window):
+    from cemd.gui.ui import build as dialogs
+
+    from conftest import make_water_system
+
+    for cls in (
+        dialogs.SolutionDialog,
+        dialogs.AddDropletDialog,
+        dialogs.AddLiquidLayerDialog,
+        dialogs.ReplicateDialog,
+        dialogs.SplitterDialog,
+        dialogs.GlassBuilderDialog,
+        dialogs.TranslateAtomsDialog,
+    ):
+        assert cls(window).get_values() is not None, cls.__name__
+
+    for cls in (dialogs.AddStructureDialog, dialogs.CASHBuilderDialog):
+        cls(window)
+    dialogs.SurfaceDialog(make_water_system(), parent=window)
+
+
+@pytest.fixture
+def calcite():
+    from cemd.core.atomic_system import AtomicSystem
+
+    from conftest import DATA_DIR
+
+    return AtomicSystem.from_file(DATA_DIR / "calcite.cif")
+
+
+def test_the_surface_search_runs_off_the_gui_thread(qt_app, calcite, monkeypatch):
+    import threading
+
+    from cemd.build import SurfaceBuilder
+    from cemd.gui.ui.build import SurfaceDialog
+
+    threads = []
+    build = SurfaceBuilder.build
+
+    def recording_build(self, *args, **kwargs):
+        threads.append(threading.current_thread())
+        return build(self, *args, **kwargs)
+
+    monkeypatch.setattr(SurfaceBuilder, "build", recording_build)
+
+    dialog = SurfaceDialog(calcite)
+    dialog.on_search()
+
+    assert threads and threads[0] is not threading.main_thread()
+    assert dialog.table.rowCount() == len(dialog.all_slabs) > 0
+    assert dialog.btn_ok.isEnabled()
+
+
+@requires_packmol
+def test_the_solution_dialog_builds_a_water_box(window, monkeypatch):
+    from PySide6 import QtWidgets
+
+    from cemd.gui.logic.build import open_make_solution
+    from cemd.gui.ui.build import SolutionDialog
+
+    monkeypatch.setattr(SolutionDialog, "exec_", lambda self: True)
+    monkeypatch.setattr(
+        SolutionDialog,
+        "get_values",
+        lambda self: ([15.0, 15.0, 15.0], 1.0, {}, {}),
+    )
+    tabs = []
+    monkeypatch.setattr(
+        window, "add_structure_tab", lambda system, **kw: tabs.append(system)
+    )
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "critical",
+        staticmethod(lambda *a, **k: pytest.fail(f"build failed: {a[2:]}")),
+    )
+
+    open_make_solution(window)
+
+    assert len(tabs) == 1
+    assert set(tabs[0].atom_types) == {"Ow", "Hw"}
 
 
 # ----------------------------------------------------------------------
@@ -492,11 +688,12 @@ def test_quitting_with_unsaved_changes_can_be_cancelled(window, water_tab, monke
 def test_a_coordinate_typed_in_the_table_reaches_the_system(qt_app):
     from types import SimpleNamespace
 
-    from conftest import make_water_system
     from PySide6 import QtCore
 
     from cemd.gui.tabs import StructureTabWidget
     from cemd.gui.ui.atom_table import AtomTable
+
+    from conftest import make_water_system
 
     system = make_water_system()
     table = AtomTable()

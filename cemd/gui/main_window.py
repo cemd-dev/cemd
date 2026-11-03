@@ -889,7 +889,6 @@ class AtomViewerGUI(QtWidgets.QMainWindow):
             selected_row = dialog.table.currentRow()
             cid = dialog.table.item(selected_row, 0).text()
             name = dialog.table.item(selected_row, 1).text()
-            formula = dialog.table.item(selected_row, 2).text()
 
             self.add_structure_tab(system, title=f"PubChem_{cid}")
 
@@ -1028,7 +1027,7 @@ def main() -> int:
 
     style = QlementineStyle(app)
     app.setStyle(style)
-    # app.installEventFilter(_TooltipColorFixer(style))
+    app.installEventFilter(_TooltipColorFixer(style))
 
     # Force dot as decimal separator
     qt_locale = QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates)

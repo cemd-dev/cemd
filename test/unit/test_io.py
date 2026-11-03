@@ -11,7 +11,6 @@ from cemd import AtomicSystem
 
 from conftest import DATA_DIR, make_water_system
 
-
 # ---------------------------------------------------------------------------
 # from_file: one check per supported extension
 # ---------------------------------------------------------------------------
@@ -79,9 +78,12 @@ def test_pmg_reader_reindex_preserves_crystal(monkeypatch, angles, perm):
     # The long axis stays along c
     assert topology["box"][2] == pytest.approx(22.68)
 
-    # Same crystal: periodic distances are unchanged
+    # Same crystal: periodic distances are unchanged, in the box cemd builds
+    # from the parameters (a along x), not pymatgen's c-along-z frame
+    from cemd.core._format import lattice2vectors
+
     result = Structure(
-        Lattice.from_parameters(*topology["box"]),
+        Lattice(lattice2vectors(topology["box"])),
         topology["atoms"]["type"].tolist(),
         topology["atoms"][["x", "y", "z"]].to_numpy(),
         coords_are_cartesian=True,
@@ -98,6 +100,32 @@ def test_pmg_reader_reindex_preserves_crystal(monkeypatch, angles, perm):
     assert signed_volume(
         topology["atoms"][["x", "y", "z"]].to_numpy()
     ) == pytest.approx(signed_volume(original.cart_coords))
+
+
+@pytest.mark.parametrize("refine", [False, True])
+def test_pmg_reader_triclinic_positions_match_the_box(refine):
+    # A triclinic cell read without axis reindexing used to keep pymatgen's
+    # Cartesian coordinates (c along z) inside a box oriented a along x:
+    # the fractional coordinates came out shifted by up to a quarter of a
+    # cell, and every bond across a boundary was wrong.
+    from pymatgen.core import Lattice, Structure
+
+    from cemd.core._format import lattice2vectors
+    from cemd.core._io.formats.pmg import PMGReader
+
+    original = Structure(
+        Lattice.from_parameters(5.154, 8.942, 7.391, 91.93, 105.05, 89.80),
+        ["Al", "Si", "O", "O"],
+        [[0.29, 0.50, 0.47], [0.99, 0.34, 0.09], [0.05, 0.35, 0.32], [0.0, 0.5, 0.0]],
+    )
+    topology = PMGReader.read(original, refine=refine)
+    if refine and not np.allclose(topology["box"], original.lattice.parameters):
+        pytest.skip("refinement changed the cell; covered by the reindex test")
+
+    positions = topology["atoms"][["x", "y", "z"]].to_numpy()
+    frac = positions @ np.linalg.inv(lattice2vectors(topology["box"]))
+    shift = (frac - original.frac_coords + 0.5) % 1.0 - 0.5
+    assert np.abs(shift).max() < 1e-8
 
 
 def test_from_file_sdf():
@@ -363,6 +391,59 @@ def test_hybrid36_serials_round_trip():
     assert hy36encode(100000) == "A0000"
 
 
+def _section_frame(values: np.ndarray):
+    import pandas as pd
+
+    n = len(values)
+    return pd.DataFrame(
+        {
+            "molecule": np.arange(n) - 2,
+            "type": pd.array([f"T{i % 3}" for i in range(n)], dtype="str"),
+            "charge": values,
+            "x": values[::-1].copy(),
+        },
+        index=np.arange(1, n + 1) * 7,
+    )
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.random.default_rng(0).uniform(-50, 50, 200),
+        np.round(np.random.default_rng(1).uniform(-50, 50, 200), 2),
+        np.zeros(4),
+        np.array([-0.0, 1.0]),
+        # Rounding noise around 0: pandas writes the column in scientific notation
+        np.array([5e-16, 64.2, -3e-17]),
+        np.array([1e6 + 0.5, 1.0]),
+        np.array([2e6, 1.0]),
+        # Outside the fast path: left to `to_string` itself
+        np.array([np.nan, 1.0]),
+        np.array([np.inf, 1.0]),
+    ],
+)
+@pytest.mark.parametrize("formatters", [None, {"charge": lambda q: f"{q:.10f}"}])
+def test_data_file_sections_match_to_string(values, formatters):
+    from cemd.core._io.formats.lammps import _frame_to_string
+
+    df = _section_frame(values)
+    expected = df.to_string(header=False, index_names=False, formatters=formatters)
+    assert _frame_to_string(df, formatters) == expected
+
+
+def test_data_file_atoms_section_matches_to_string():
+    from cemd.core._io.formats.lammps import _frame_to_string
+
+    system = AtomicSystem.from_file(DATA_DIR / "calcite_ortho.data")
+    system.replicate((2, 2, 2))
+    atoms = system.atoms.copy()
+    atoms.insert(0, "molecule", np.ones(len(atoms), dtype=int))
+    formatters = {"charge": lambda q: f"{q:.10f}"}
+
+    expected = atoms.to_string(header=False, index_names=False, formatters=formatters)
+    assert _frame_to_string(atoms, formatters) == expected
+
+
 # ---------------------------------------------------------------------------
 # Converters: to_mda / from_mda / to_pmg / from_smiles
 # ---------------------------------------------------------------------------
@@ -387,6 +468,13 @@ def test_to_pmg_returns_pymatgen_structure():
     structure = system.to_pmg()
     assert isinstance(structure, Structure)
     assert len(structure) == system.num_atoms
+
+
+def test_to_pmg_converts_force_field_types_to_elements():
+    system = AtomicSystem.from_file(DATA_DIR / "calcite.cif")
+    system.set_types({"O": "Oc"})
+    structure = system.to_pmg()
+    assert structure.composition.reduced_formula == "CaCO3"
 
 
 def test_from_smiles_water():

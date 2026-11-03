@@ -8,7 +8,6 @@ from cemd.build import SolutionBuilder
 
 from conftest import requires_packmol
 
-
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
@@ -204,3 +203,54 @@ def test_build_hemisphere_rejects_non_positive_radius():
     blueprint = SolutionBuilder.from_water(density=1.0)
     with pytest.raises(ValueError, match="radius must be positive"):
         blueprint.build_hemisphere(radius=0.0)
+
+
+# ---------------------------------------------------------------------------
+# Cancellation
+# ---------------------------------------------------------------------------
+
+
+def test_waiting_on_packmol_stops_when_cancelled():
+    import subprocess
+    import threading
+    import time
+
+    from cemd.build import PackmolCancelledError
+    from cemd.build._packmol import _wait_for_packmol
+
+    process = subprocess.Popen(["sleep", "30"])
+    cancel = threading.Event()
+    threading.Timer(0.2, cancel.set).start()
+
+    start = time.perf_counter()
+    with pytest.raises(PackmolCancelledError):
+        _wait_for_packmol(process, cancel)
+    assert time.perf_counter() - start < 5
+    # Killed and reaped, not left running.
+    assert process.poll() is not None
+
+
+@requires_packmol
+def test_a_build_inside_cancel_packmol_on_can_be_cancelled():
+    import threading
+    import time
+
+    from cemd.build import PackmolCancelledError, cancel_packmol_on
+
+    # ~13 000 waters: several seconds of Packmol, far more than the delay.
+    blueprint = SolutionBuilder.from_water(density=1.0)
+    cancel = threading.Event()
+    threading.Timer(0.5, cancel.set).start()
+
+    start = time.perf_counter()
+    with cancel_packmol_on(cancel), pytest.raises(PackmolCancelledError):
+        blueprint.build(box=[75.0, 75.0, 75.0])
+    assert time.perf_counter() - start < 10
+
+
+def test_cancellation_is_not_a_runtime_error():
+    # Code that retries a failed packing catches RuntimeError; it must not
+    # take a cancellation for a failure and start Packmol again.
+    from cemd.build import PackmolCancelledError
+
+    assert not issubclass(PackmolCancelledError, RuntimeError)

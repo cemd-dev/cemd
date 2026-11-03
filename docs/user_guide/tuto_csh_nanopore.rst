@@ -326,34 +326,31 @@ Variant: cutting through a sheet
 =================================
 
 Sometimes the cut plane is imposed -- a given pore width, a given
-orientation -- and no clean window is available. ``repair=True`` then caps
-whatever the cut leaves under-coordinated:
+orientation -- and no clean window is available. ``repair=True`` then
+rebuilds what the cut breaks, by hydrolysis:
 
 .. code-block:: python
 
-   rough = Splitter(csh, coordinate=12.5, axis="z", gap_size=25.0)
+   rough = Splitter(csh, coordinate=12.5, axis="z", gap_size=25.0, repair=True)
    print(rough.count_broken_bonds())
 
-   repaired = rough.split(repair=True)
+   repaired = rough.split()
    print(rough.repair_report)
    print(repaired)
 
 .. code-block:: text
 
-   19
-   {'broken': 19, 'capped': 25, 'skipped': 0}
-   <AtomicSystem with 1705 atoms, 404 bonds, 190 angles>
+   80
+   {'broken': 80, 'capped': 240, 'crowded': 0, 'retyped': 80, 'untyped': 0, 'bonds_added': 80, 'angles_added': 0, 'charge_change': 0.0}
+   <AtomicSystem with 1860 atoms, 440 bonds>
 
-Nineteen severed contacts produced 25 caps: exposed oxygens are
-protonated into hydroxyls, exposed cations get a hydroxyl back along the
-direction their partner used to occupy. ``skipped`` would count caps
-landing on top of an existing atom.
+Each of the 80 severed Si-O bonds gave a silanol on each side: the Si got
+an OH back where its O was, the O an H, three atoms per bond. The new
+atoms are typed like the silanols already in the system, and their O-H
+get an explicit bond wherever the system has one.
 
 .. note::
 
-   The capping atoms are placed collinearly with the broken contact and
-   carry no charge -- this is a starting geometry to relax, not a
-   parameterized structure. Re-run
-   :meth:`~cemd.core.atomic_system.AtomicSystem.set_topology` and
-   :meth:`~cemd.core.atomic_system.AtomicSystem.set_ff_from_database`
-   afterwards.
+   The caps are placed along the broken bond: a starting geometry to
+   relax. Their charges come from the system; check ``charge_change``
+   and neutralize before running.

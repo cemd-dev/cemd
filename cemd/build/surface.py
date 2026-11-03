@@ -21,6 +21,7 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from ..core._io.formats.pmg import order_by_majority
 from ..core.atomic_system import AtomicSystem
 from .base import BaseBuilder
 
@@ -66,11 +67,35 @@ class SurfaceBuilder(BaseBuilder):
 
     def _get_structure(self) -> Structure:
         """Get the structure for surface generation."""
-        # Prefer the original structure
-        if self.system._pmg_struct is not None:
-            return self.system._pmg_struct
-        else:
+        from pymatgen.core.surface import Slab
+
+        # A system read from a format that carries no crystal (.data, .xyz)
+        # is taken as it is: nothing tells whether it is still a bulk.
+        if self.system._pmg_struct is None:
             return self.system.to_pmg()
+
+        if isinstance(self.system._pmg_struct, Slab):
+            raise ValueError(
+                "A slab can only be cut from a bulk crystal, and this system "
+                "is already a slab. Cut the new orientation from the bulk "
+                "structure."
+            )
+
+        # The structure the system was read from (Miller indices refer to its
+        # axes), as long as the system still matches it. A copy, since `build`
+        # adds oxidation states to it, ordered the way the reader ordered the
+        # atoms: SlabGenerator refuses a disordered structure ("species
+        # property only supports ordered structures"), e.g. the Ca0.99Mg0.01
+        # sites of a magnesian calcite (COD 9017359).
+        cached = self.system._cached_pmg()
+        if cached is None:
+            raise ValueError(
+                "A slab can only be cut from a bulk crystal, and this system "
+                "has been edited since it was read (atoms moved, added or "
+                "removed). Cut the slab from the structure as read, then edit "
+                "the slab."
+            )
+        return order_by_majority(cached)
 
     def build(
         self,
@@ -211,9 +236,9 @@ class SurfaceBuilder(BaseBuilder):
             slab = raw_slab.get_orthogonal_c_slab().get_sorted_structure()
             shift_list.append(slab.shift)
             dipole_list.append(0.0)
-            as_system = AtomicSystem.from_pmg(slab, refine=False)
-            as_system._pmg_struct = slab
-            slabs_list_as.append(as_system.wrap())
+            as_system = AtomicSystem.from_pmg(slab, refine=False).wrap()
+            as_system._cache_pmg(slab)
+            slabs_list_as.append(as_system)
 
         if len(slabs_list_as) == 0:
             raise RuntimeError("No slabs could be converted to AtomicSystem.")

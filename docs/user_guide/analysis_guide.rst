@@ -197,7 +197,8 @@ Density Analysis
        atom_types=["Ow", "Ca"],
        axis="z",
        start=0,
-       end=-1,  # All frames
+       stop=None,  # Up to the last frame
+       step=1,
        bin_size=0.1
    )
    

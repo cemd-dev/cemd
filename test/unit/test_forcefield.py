@@ -7,12 +7,10 @@ import warnings
 import pandas as pd
 import pytest
 
+from cemd import AtomicSystem
 from cemd.forcefield.models import LJParams
 
-from cemd import AtomicSystem
-
 from conftest import DATA_DIR, make_water_system
-
 
 # ---------------------------------------------------------------------------
 # set_masses / set_charges
@@ -412,3 +410,50 @@ def test_set_ff_from_database_class2_gap_still_warns(water_system):
     )
 
     assert any("Hw-Ow-Hw" in m for m in messages)
+
+
+def _four_oxygen_ca_system():
+    atoms = pd.DataFrame(
+        {
+            "type": ["Ca", "Ow", "Ob", "Oh"],
+            "charge": 0.0,
+            "x": [0.0, 5.0, 10.0, 15.0],
+            "y": 0.0,
+            "z": 0.0,
+        },
+        index=range(1, 5),
+    )
+    return AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [30.0, 30.0, 30.0, 90.0, 90.0, 90.0],
+            "masses": {"Ca": 40.078, "Ow": 15.999, "Ob": 15.999, "Oh": 15.999},
+            "charges": {},
+        }
+    )
+
+
+def test_cross_terms_of_types_from_different_models_are_mixed():
+    """Ca-Ow used to come from raiteri2015 (a calcite-water model, matched by
+    the short names of the system types) and Ob-Oh from CSH-FF's "ob-oh",
+    where "oh" is a silanol O, not the ClayFF hydroxide."""
+    system = _four_oxygen_ca_system()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        system.set_ff_from_database(
+            {
+                "Ca": "clayff.cao",
+                "Ow": "clayff.o*",
+                "Ob": "cshff2014.ob",
+                "Oh": "clayff.oh",
+            }
+        )
+    pair = system._ff_params.pair
+
+    def lj(a, b):
+        return pair[system._normalize_binary_key(a, b)]
+
+    for a, b in (("Ca", "Ow"), ("Ob", "Oh"), ("Ca", "Ob")):
+        cross, s1, s2 = lj(a, b), lj(a, a), lj(b, b)
+        assert cross.epsilon == pytest.approx((s1.epsilon * s2.epsilon) ** 0.5)
+        assert cross.sigma == pytest.approx((s1.sigma + s2.sigma) / 2)

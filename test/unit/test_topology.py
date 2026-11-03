@@ -6,7 +6,6 @@ import pytest
 
 from conftest import make_water_system
 
-
 # ---------------------------------------------------------------------------
 # set_types / set_types_from_elements / set_type2atoms
 # ---------------------------------------------------------------------------
@@ -203,8 +202,9 @@ def test_guess_angles_from_bonds():
 
 def test_guess_dihedrals_and_impropers_on_chain():
     # Build a 4-atom chain A-B-C-D to exercise dihedral guessing.
-    from cemd import AtomicSystem
     import pandas as pd
+
+    from cemd import AtomicSystem
 
     atoms = pd.DataFrame(
         {

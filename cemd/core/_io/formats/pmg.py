@@ -24,10 +24,36 @@ import numpy as np
 import pandas as pd
 
 from ...._constants import CHARGES_DICT, MASSES_DICT
+from ..._format import lattice2vectors
 from .base import BaseReader
 
 if TYPE_CHECKING:
-    from pymatgen.core import Structure
+    from pymatgen.core import PeriodicSite, Structure
+
+
+def majority_symbol(site: PeriodicSite) -> str:
+    """Element symbol of the species with the largest occupancy on `site`.
+
+    An atomic system has one atom per site, so a site with mixed occupancy
+    (a Ca0.99Mg0.01 substitution in a magnesian calcite) or a partial one
+    is given its main species.
+    """
+    specie = max(site.species.items(), key=lambda item: item[1])[0]
+    return getattr(specie, "element", specie).symbol
+
+
+def order_by_majority(structure: Structure) -> Structure:
+    """A copy of `structure` with each disordered site given its main species.
+
+    The same rule `PMGReader` applies to the atoms, so a structure ordered
+    here matches the system read from it. pymatgen refuses disordered
+    structures in several places (slab generation among them).
+    """
+    ordered = structure.copy()
+    for index, site in enumerate(structure):
+        if not site.is_ordered:
+            ordered.replace(index, majority_symbol(site))
+    return ordered
 
 
 class PMGReader(BaseReader):
@@ -72,7 +98,7 @@ class PMGReader(BaseReader):
         # Extract parameters from the refined structure
         abc = list(refined_structure.lattice.abc)
         angles = list(refined_structure.lattice.angles)
-        positions = refined_structure.cart_coords.copy()
+        frac = refined_structure.frac_coords.copy()
 
         # Reindex the axes of the refined structure
         # to match the order of the initial structure
@@ -101,11 +127,6 @@ class PMGReader(BaseReader):
             reindexed_abc = list(permuted.abc)
             reindexed_angles = list(permuted.angles)
 
-            # Express the positions in the standard orientation of the new box
-            # (a along x, b in the xy plane), as expected by the box parameters.
-            standard = Lattice.from_parameters(*reindexed_abc, *reindexed_angles)
-            positions = standard.get_cartesian_coords(frac)
-
             warnings.warn(
                 f"Axes reindexed with mapping {best_mapping}: "
                 f"original {original_abc} -> refined {abc} -> reindexed {reindexed_abc}",
@@ -115,8 +136,28 @@ class PMGReader(BaseReader):
             abc = reindexed_abc
             angles = reindexed_angles
 
-        # Extract Atom Types
-        types = [site.species.elements[0].name for site in refined_structure]
+        # Express the positions in the orientation of the box built from the
+        # parameters (a along x, b in the xy plane: `lattice2vectors`). Taking
+        # pymatgen's Cartesian coordinates instead put them in its own frame
+        # (c along z), which differs as soon as the cell is not orthogonal:
+        # every bond across a boundary of a triclinic cell came out wrong.
+        # `Lattice.from_parameters` has the same c-along-z convention, so the
+        # reindexed branch was affected too.
+        positions = frac @ lattice2vectors(abc + angles)
+
+        # Extract Atom Types. A disordered site used to take the first
+        # species listed, whichever had the larger occupancy.
+        types = [majority_symbol(site) for site in refined_structure]
+        disordered = sorted(
+            {site.species.formula for site in refined_structure if not site.is_ordered}
+        )
+        if disordered:
+            warnings.warn(
+                "Sites with mixed or partial occupancy were each given their "
+                f"main species: {', '.join(disordered)}.",
+                category=UserWarning,
+                stacklevel=2,
+            )
         unique_types = sorted(set(types))
 
         # Create the DataFrames

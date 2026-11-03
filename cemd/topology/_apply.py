@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .rules import DihedralRule, TopologyRule
+from .rules import DihedralRule, LayerRule, TopologyRule
 
 if TYPE_CHECKING:
     import MDAnalysis as mda
@@ -293,6 +293,56 @@ def _apply_rule_per_center(universe: mda.Universe, rule: TopologyRule) -> mda.Un
     _update_topo(universe, "angles", new_angles)
     _update_topo(universe, "impropers", new_impropers)
 
+    return universe
+
+
+def find_main_layers(universe: mda.Universe, rule: LayerRule) -> list[tuple[float, float]]:
+    """z ranges (lo, hi) of the main layers, hi possibly beyond Lz (periodic).
+
+    See `LayerRule` for the criterion.
+    """
+    lz = float(universe.dimensions[2])
+    z = universe.select_atoms(rule.sheet).positions[:, 2] % lz
+    if len(z) == 0:
+        return []
+    nbins = max(int(round(lz / rule.bin_width)), 4)
+    hist, edges = np.histogram(z, bins=nbins, range=(0.0, lz))
+    # Periodic Gaussian smoothing, by FFT
+    offsets = (np.arange(nbins) - nbins // 2) * (lz / nbins)
+    kernel = np.roll(np.exp(-0.5 * (offsets / rule.smoothing) ** 2), -(nbins // 2))
+    density = np.real(np.fft.ifft(np.fft.fft(hist) * np.fft.fft(kernel)))
+    centres = (edges[:-1] + edges[1:]) / 2
+
+    is_peak = (density > np.roll(density, 1)) & (density >= np.roll(density, -1))
+    peaks = np.flatnonzero(is_peak & (density >= rule.min_peak * density.max()))
+    if len(peaks) < 2:
+        return []
+    zp = centres[peaks]
+    gaps = np.diff(np.append(zp, zp[0] + lz))  # gap k: from sheet k to sheet k+1
+
+    # Narrowest gaps first: each sheet bounds at most one layer
+    layers, used = [], set()
+    for k in np.argsort(gaps):
+        nxt = (k + 1) % len(zp)
+        if gaps[k] > rule.max_sheet_gap or k in used or nxt in used:
+            continue
+        used |= {k, nxt}
+        layers.append((float(zp[k]), float(zp[k] + gaps[k])))
+    return sorted(layers)
+
+
+def apply_layer_rule_to_universe(universe: mda.Universe, rule: LayerRule) -> mda.Universe:
+    """Retype the `rule.center` atoms inside / outside the main layers, in-place."""
+    atoms = universe.select_atoms(rule.center)
+    if len(atoms) == 0:
+        return universe
+    lz = float(universe.dimensions[2])
+    z = atoms.positions[:, 2] % lz
+    inside = np.zeros(len(atoms), dtype=bool)
+    for lo, hi in find_main_layers(universe, rule):
+        inside |= ((z - lo) % lz) <= (hi - lo)
+    types = np.where(inside, rule.inside_type, rule.outside_type).astype(object)
+    atoms.types = types
     return universe
 
 

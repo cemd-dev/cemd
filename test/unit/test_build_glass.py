@@ -8,7 +8,6 @@ from cemd.build import GlassBuilder
 
 from conftest import requires_packmol
 
-
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------

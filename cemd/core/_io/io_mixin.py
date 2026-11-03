@@ -251,13 +251,32 @@ class IOMixin:
         return universe
 
     def to_pmg(self) -> Any:
-        """Convert to Pymatgen Structure."""
+        """Convert to Pymatgen Structure.
+
+        Species are the elements of the atom types (see
+        :attr:`~cemd.core.atomic_system.AtomicSystem.elements`), not the types
+        themselves: a force-field type such as ``Oc`` is no species pymatgen
+        knows.
+
+        Raises
+        ------
+        ValueError
+            If the mass of an atom type matches no element.
+        """
         from pymatgen.core import Lattice, Structure
+
+        elements = dict(self.elements)
+        unknown = sorted(str(t) for t in self.atom_types if t not in elements)
+        if unknown:
+            raise ValueError(
+                f"No element matches the mass of atom type(s) {', '.join(unknown)}; "
+                "set their masses (`set_masses`) to convert to pymatgen."
+            )
 
         lattice = Lattice.from_parameters(*self.box)
         structure = Structure(
             lattice=lattice,
-            species=self.atoms["type"].tolist(),
+            species=self.atoms["type"].map(elements).tolist(),
             coords=self.atoms[["x", "y", "z"]].to_numpy(),
             coords_are_cartesian=True,
         )

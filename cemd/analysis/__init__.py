@@ -15,6 +15,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+from .coordination import analyze_coordination
 from .density import density_map, density_profile, electrostatic_potential
 from .diffusion import diffusion_coefficient, msd, msd_profile
 from .rdf import compute_rdf
@@ -29,4 +30,5 @@ __all__ = [
     "density_map",
     "electrostatic_potential",
     "analyze_silicates",
+    "analyze_coordination",
 ]

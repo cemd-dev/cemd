@@ -331,6 +331,34 @@ class EditMixin:
         original_atoms = self.atoms.copy()
         original_num_atoms = len(original_atoms)
 
+        # Periodic image of each interaction partner relative to atom_1 (minimum image, in
+        # fractional coordinates): a bond that crosses the box boundary must link to the
+        # neighbouring copy, not to the far end of its own copy.
+        frac = pd.DataFrame(
+            original_atoms[["x", "y", "z"]].to_numpy() @ np.linalg.inv(vecs),
+            index=original_atoms.index,
+        )
+        images = {}
+        for name in ["bonds", "angles", "dihedrals", "impropers"]:
+            df = getattr(self, name)
+            if df is not None and not df.empty:
+                atom_cols = [c for c in df.columns if c.startswith("atom_")]
+                s1 = frac.loc[df[atom_cols[0]]].to_numpy()
+                images[name] = {
+                    col: np.rint(frac.loc[df[col]].to_numpy() - s1).astype(int)
+                    for col in atom_cols[1:]
+                }
+
+        def partner_ids(name, col, cell):
+            """Atom IDs of column `col` of interactions `name` in copy `cell`."""
+            ids = getattr(self, name)[col].to_numpy()
+            if col not in images[name]:
+                target = np.broadcast_to(cell, (len(ids), 3))
+            else:
+                target = (np.asarray(cell) - images[name][col]) % (nx, ny, nz)
+            copy = target[:, 0] * ny * nz + target[:, 1] * nz + target[:, 2]
+            return ids + copy * original_num_atoms
+
         all_atoms = []
 
         # Dictionaries to store new interactions
@@ -343,6 +371,16 @@ class EditMixin:
                     if i == 0 and j == 0 and k == 0:
                         all_atoms.append(original_atoms)
                         continue
+
+                    # Copy the interactions of this cell (Bonds, Angles, etc.)
+                    for name in images:
+                        df = getattr(self, name)
+                        new_df = df.copy()
+                        # shift the index type of the interaction itself
+                        new_df.index += (i * ny * nz + j * nz + k) * len(df)
+                        for col in [c for c in df.columns if c.startswith("atom_")]:
+                            new_df[col] = partner_ids(name, col, (i, j, k))
+                        new_interactions[name].append(new_df)
 
                     # Calculate the shift for this cell
                     shift = i * v1 + j * v2 + k * v3
@@ -359,31 +397,18 @@ class EditMixin:
                     new_atoms.index += offset
                     all_atoms.append(new_atoms)
 
-                    # Replicate the interactions (Bonds, Angles, etc.)
-                    for name in ["bonds", "angles", "dihedrals", "impropers"]:
-                        df = getattr(self, name)
-                        if df is not None and not df.empty:
-                            new_df = df.copy()
-                            # shift the index type of the interaction itself
-                            new_df.index += (i * ny * nz + j * nz + k) * len(df)
-
-                            # shift the columns atom_1, atom_2, etc.
-                            atom_cols = [c for c in df.columns if c.startswith("atom_")]
-                            for col in atom_cols:
-                                new_df[col] += offset
-
-                            new_interactions[name].append(new_df)
-
         # Merge Dataframes
         self.atoms = pd.concat(all_atoms)
 
         if self.velocities is not None:
             self.velocities = None
 
-        for name in ["bonds", "angles", "dihedrals", "impropers"]:
-            if new_interactions[name]:
-                full_list = [getattr(self, name)] + new_interactions[name]
-                setattr(self, name, pd.concat(full_list))
+        for name in images:
+            # The interactions of the original cell that cross the boundary move too
+            first = getattr(self, name).copy()
+            for col in images[name]:
+                first[col] = partner_ids(name, col, (0, 0, 0))
+            setattr(self, name, pd.concat([first] + new_interactions[name]))
 
         new_box = self.box.copy()
         new_box[0] *= nx
@@ -572,3 +597,158 @@ class EditMixin:
         self.atoms[["x", "y", "z"]] += shift
 
         self.wrap()
+
+    def substitute_atoms(
+        self,
+        old_type: str | int,
+        new_type: str | int,
+        count: int | None = None,
+        fraction: float | None = None,
+        candidates: Sequence[int] | None = None,
+        avoid_adjacent: bool = True,
+        bridge_types: Sequence[str | int] | None = None,
+        cutoff: float = 2.0,
+        charge: float | None = None,
+        seed: int | None = None,
+        max_attempts: int = 100,
+    ) -> np.ndarray:
+        """Replace randomly chosen atoms of one type by another type.
+
+        Meant for isomorphic substitution in aluminosilicates: Al for Si in
+        the tetrahedral sheet of a mica, Mg for Al in the octahedral sheet of
+        a smectite. A CIF with mixed occupancy (Si0.75Al0.25 in muscovite)
+        is read with the majority species on every site, so the minority one
+        has to be put back explicitly, and where it goes matters.
+
+        With ``avoid_adjacent`` (the default), no two substituted atoms share
+        a bridging atom: Loewenstein's rule, which forbids Al-O-Al linkages
+        between tetrahedra. The rule is applied within ``candidates`` only.
+        In a mica the apical oxygens bridge the tetrahedral Si and the
+        octahedral Al, so the octahedral Al must not be counted as
+        neighbours -- restrict ``candidates`` to the sites that compete.
+
+        Parameters
+        ----------
+        old_type, new_type : str or int
+            Atom type replaced, and the type that replaces it.
+        count : int, optional
+            Number of atoms to substitute. Give either this or ``fraction``.
+        fraction : float, optional
+            Fraction of the candidates to substitute, rounded to the nearest
+            integer.
+        candidates : Sequence[int], optional
+            Atom ids (the `atoms` DataFrame index) to choose from, all of
+            type ``old_type``. Default: every atom of that type. Calling the
+            method once per sheet, with that sheet's atoms as candidates,
+            spreads the substitutions evenly between sheets.
+        avoid_adjacent : bool, optional
+            Forbid two substituted atoms from sharing a bridging atom.
+        bridge_types : Sequence of str or int, optional
+            Atom types that can bridge two candidates. Default: every type
+            whose element is oxygen.
+        cutoff : float, optional
+            Maximum candidate-bridge distance, in Angstroms, for the two to
+            count as bonded (Si-O and Al-O bonds are 1.6-1.9 A).
+        charge : float, optional
+            Charge given to the substituted atoms. Default: the charge already
+            assigned to ``new_type`` in this system, else its entry in
+            ``CHARGES_DICT``, else 0.
+        seed : int, optional
+            Seed of the random generator, for a reproducible arrangement.
+        max_attempts : int, optional
+            Random orderings tried before giving up on placing ``count``
+            atoms without two of them adjacent.
+
+        Returns
+        -------
+        numpy.ndarray
+            Sorted ids of the substituted atoms.
+
+        Raises
+        ------
+        ValueError
+            If the candidates are not all of ``old_type``, if neither or both
+            of ``count`` and ``fraction`` are given, or if ``count`` atoms
+            cannot be placed without two being adjacent.
+        """
+        from MDAnalysis.lib.distances import capped_distance
+
+        from .._constants import CHARGES_DICT
+
+        if (count is None) == (fraction is None):
+            raise ValueError("Give exactly one of `count` and `fraction`.")
+
+        types = self.atoms["type"]
+        if candidates is None:
+            pool = self.atoms.index[types == old_type].to_numpy()
+        else:
+            pool = np.asarray(candidates, dtype=int)
+            wrong = pool[(types.loc[pool] != old_type).to_numpy()]
+            if wrong.size:
+                raise ValueError(
+                    f"Candidates {wrong[:10].tolist()} are not of type {old_type!r}."
+                )
+
+        if fraction is not None:
+            count = int(round(fraction * len(pool)))
+        if count > len(pool):
+            raise ValueError(
+                f"Cannot substitute {count} atoms: only {len(pool)} candidates."
+            )
+        if count == 0:
+            return np.array([], dtype=int)
+
+        neighbours = [set() for _ in range(len(pool))]
+        if avoid_adjacent:
+            if bridge_types is None:
+                elements = self.elements
+                bridge_types = [t for t in self.atom_types if elements.get(t) == "O"]
+            bridges = self.atoms.index[types.isin(list(bridge_types))].to_numpy()
+            if bridges.size:
+                xyz = ["x", "y", "z"]
+                pos_pool = self.atoms.loc[pool, xyz].to_numpy(dtype=float)
+                pos_bridge = self.atoms.loc[bridges, xyz].to_numpy(dtype=float)
+                pairs = capped_distance(
+                    pos_pool, pos_bridge, cutoff, box=self.box, return_distances=False
+                )
+                # Candidates bonded to the same bridging atom are adjacent
+                by_bridge: dict[int, list[int]] = {}
+                for i, b in pairs:
+                    by_bridge.setdefault(int(b), []).append(int(i))
+                for members in by_bridge.values():
+                    for i in members:
+                        neighbours[i].update(m for m in members if m != i)
+
+        # Random sequential placement: a greedy pass over a random order can
+        # block itself before reaching `count`, so try other orders.
+        rng = np.random.default_rng(seed)
+        chosen = None
+        for _ in range(max_attempts):
+            picked: list[int] = []
+            blocked = np.zeros(len(pool), dtype=bool)
+            for i in rng.permutation(len(pool)):
+                if blocked[i]:
+                    continue
+                picked.append(i)
+                blocked[list(neighbours[i])] = True
+                if len(picked) == count:
+                    chosen = picked
+                    break
+            if chosen is not None:
+                break
+        if chosen is None:
+            raise ValueError(
+                f"Could not place {count} {new_type!r} among {len(pool)} candidates "
+                f"without two sharing a bridging atom, in {max_attempts} attempts."
+            )
+
+        ids = np.sort(pool[chosen])
+        if charge is None:
+            charge = self._charges.get(new_type, CHARGES_DICT.get(new_type, 0.0))
+        self.atoms.loc[ids, "type"] = new_type
+        self.atoms.loc[ids, "charge"] = float(charge)
+        self._charges.setdefault(new_type, float(charge))
+        if new_type not in self._masses:
+            self._masses[new_type] = MASSES_DICT.get(new_type, 1.0)
+
+        return ids

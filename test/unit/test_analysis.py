@@ -56,7 +56,7 @@ def uniform_universe(n_frames: int = 1, seed: int = 0) -> mda.Universe:
 
 def test_density_profile_recovers_a_uniform_density():
     universe = uniform_universe()
-    profile = density_profile(universe, ["Ow"], axis="z", bin_size=0.5, end=1)
+    profile = density_profile(universe, ["Ow"], axis="z", bin_size=0.5, stop=1)
 
     assert profile["Ow"].mean() == pytest.approx(EXPECTED_DENSITY, rel=0.01)
 
@@ -75,7 +75,7 @@ def test_density_map_recovers_a_uniform_density():
         eps=BOX,  # the whole box
         axis="z",
         bin_size=0.5,
-        end=1,
+        stop=1,
     )
 
     assert density.values.mean() == pytest.approx(EXPECTED_DENSITY, rel=0.02)
@@ -112,8 +112,8 @@ def test_density_profile_is_reproducible_on_a_trajectory_file(tmp_path):
     first = density_profile(universe, types, axis="z", bin_size=bin_size)
     second = density_profile(universe, types, axis="z", bin_size=bin_size)
 
-    # The reference is a plain loop, one frame after the other. `end=-1`
-    # means every frame here, unlike in `density_map`.
+    # The reference is a plain loop, one frame after the other, over every
+    # frame: `stop=None` runs to the last one.
     bins = np.arange(0, BOX, bin_size)
     counts = np.zeros((len(bins) - 1, len(types)))
     for ts in universe.trajectory:
@@ -129,7 +129,7 @@ def test_density_profile_is_reproducible_on_a_trajectory_file(tmp_path):
 def test_density_profile_and_map_agree():
     # Two projections of the same atoms cannot disagree on the mean.
     universe = uniform_universe()
-    profile = density_profile(universe, ["Ow"], axis="z", bin_size=0.5, end=1)
+    profile = density_profile(universe, ["Ow"], axis="z", bin_size=0.5, stop=1)
     density = density_map(
         universe,
         "Ow",
@@ -137,10 +137,65 @@ def test_density_profile_and_map_agree():
         eps=BOX,
         axis="z",
         bin_size=0.5,
-        end=1,
+        stop=1,
     )
 
     assert density.values.mean() == pytest.approx(profile["Ow"].mean(), rel=0.02)
+
+
+def test_density_map_counts_the_last_frame():
+    # Regression test: `end=-1` reached the slice as is, `[start:-1]`, and
+    # the map dropped the last frame while the profile kept it. Each frame
+    # here holds a different number of atoms in the slab, so the map over
+    # every frame is the mean of the single-frame maps only if none is left
+    # out.
+    n_atoms, n_frames = 100, 3
+    positions = np.zeros((n_frames, n_atoms, 3), dtype=np.float32)
+    rng = np.random.default_rng(3)
+    positions[..., :2] = rng.uniform(0, BOX, (n_frames, n_atoms, 2))
+    positions[..., 2] = BOX - 1.0  # outside the slab
+    for frame, n_in in enumerate((10, 20, 60)):
+        positions[frame, :n_in, 2] = 1.0
+    universe = mda.Universe.empty(
+        n_atoms,
+        n_residues=n_atoms,
+        atom_resindex=np.arange(n_atoms),
+        residue_segindex=np.zeros(n_atoms, dtype=int),
+        trajectory=True,
+    )
+    universe.add_TopologyAttr("type", ["Ow"] * n_atoms)
+    universe.load_new(positions, format=MemoryReader)
+    for ts in universe.trajectory:
+        ts.dimensions = [BOX, BOX, BOX, 90.0, 90.0, 90.0]
+
+    def slab(**frames):
+        return density_map(
+            universe,
+            "Ow",
+            interface_coordinate=1.0,
+            eps=0.5,
+            axis="z",
+            bin_size=1.0,
+            **frames,
+        )
+
+    single = [slab(start=k, stop=k + 1).values for k in range(n_frames)]
+    expected = np.mean(single, axis=0)
+    np.testing.assert_allclose(slab().values, expected)
+
+
+@pytest.mark.parametrize(
+    "analysis",
+    [
+        lambda u, **kw: density_profile(u, ["Ow"], "z", **kw),
+        lambda u, **kw: density_map(u, ["Ow"], 10.0, "z", **kw),
+        lambda u, **kw: compute_rdf(u, "Ow", "Ow", **kw),
+    ],
+    ids=["density_profile", "density_map", "rdf"],
+)
+def test_an_empty_frame_slice_is_refused(analysis):
+    with pytest.raises(ValueError, match="holds no frame"):
+        analysis(uniform_universe(), start=5, stop=5)
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +429,7 @@ def test_density_map_takes_a_slab_centred_on_the_interface():
         eps=2.0,
         axis="z",
         bin_size=1.0,
-        end=1,
+        stop=1,
     )
 
     # A 4 A slab around z = 15 holds one sheet: 2000 atoms over
@@ -413,3 +468,61 @@ def test_analyses_say_so_when_the_trajectory_has_no_box(analysis):
     quietly returned `inf` from a zero volume."""
     with pytest.raises(ValueError, match="periodic box"):
         analysis(boxless_universe())
+
+
+# ---------------------------------------------------------------------------
+# analyze_coordination
+# ---------------------------------------------------------------------------
+
+
+def _al_polyhedra_system():
+    """One AlO6 octahedron and one AlO4 tetrahedron, far apart, the first
+    straddling the periodic boundary."""
+    import pandas as pd
+
+    from cemd import AtomicSystem
+
+    octa = np.array([[1.9, 0, 0], [-1.9, 0, 0], [0, 1.9, 0], [0, -1.9, 0], [0, 0, 1.9], [0, 0, -1.9]])
+    tetra = 1.75 / np.sqrt(3) * np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
+    centers = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
+    positions = np.vstack([centers, octa + centers[0], tetra + centers[1]]) % 20.0
+    types = ["Al", "Al"] + ["O"] * 10
+    atoms = pd.DataFrame(
+        {"type": types, "charge": 0.0, "x": positions[:, 0], "y": positions[:, 1], "z": positions[:, 2]},
+        index=range(1, len(types) + 1),
+    )
+    return AtomicSystem(
+        {"atoms": atoms, "box": [20.0, 20.0, 20.0, 90.0, 90.0, 90.0],
+         "masses": {"Al": 26.9815, "O": 15.9994}, "charges": {}}
+    )
+
+
+def test_analyze_coordination_counts_fourfold_and_sixfold_al():
+    from cemd.analysis import analyze_coordination
+
+    table = analyze_coordination(_al_polyhedra_system())
+    assert list(table.index) == [0]
+    assert table.loc[0, 4] == pytest.approx(50.0)
+    assert table.loc[0, 6] == pytest.approx(50.0)
+    assert table.loc[0, 5] == pytest.approx(0.0)
+    assert table.loc[0, "mean"] == pytest.approx(5.0)
+
+
+def test_analyze_coordination_follows_a_trajectory():
+    from cemd.analysis import analyze_coordination
+
+    u = _al_polyhedra_system().to_mda()
+    frames = np.stack([u.atoms.positions] * 3)
+    frames[2, 7, 2] -= 1.0  # apical O from 1.9 to 2.9 A of its Al: Al(VI) -> Al(V)
+    u.load_new(frames, format=MemoryReader, dimensions=u.dimensions)
+    table = analyze_coordination(u, start=1)
+    assert list(table.index) == [1, 2]
+    assert table.loc[2, 5] == pytest.approx(50.0)
+    assert table.loc[2, 6] == pytest.approx(0.0)
+
+
+def test_analyze_coordination_needs_both_selections():
+    from cemd.analysis import analyze_coordination
+
+    with pytest.raises(ValueError, match="No atom of type"):
+        analyze_coordination(_al_polyhedra_system(), center_types="Mg")

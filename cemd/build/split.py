@@ -75,7 +75,17 @@ class Splitter(BaseBuilder):
     under ClayFF/CSHFF, for instance -- are found geometrically instead,
     from ``bonds_dict``; use :meth:`count_broken_bonds` or
     :meth:`scan_broken_bonds` to choose where to cut, and ``repair=True``
-    to cap the dangling atoms left behind.
+    to rebuild what the cut breaks.
+
+    With ``repair=True``, a hydrogen always goes with its covalent partner,
+    and every other severed bond is hydrolysed: of an X-O bond (Si-O,
+    Al-O, C-O...), X gets an OH back where its O was and the O gets an H
+    -- a bridging Si-O-Si gives two silanols, a Si-O...Ca a silanol and a
+    Ca-OH. The caps take the type and charge of an atom of the system in
+    the same covalent environment (Osih/Hsi, Oh/Hh under CSHFF), and an
+    explicit bond or angle wherever the system already has one between the
+    same types. A severed bond without an O (C-C, Si-Si...) has no such
+    repair: the split refuses it, see ``keep_molecules``.
 
     In a disordered solid there is often no plane that cuts no bond at
     all. With ``keep_molecules=True`` the cut follows the molecules
@@ -107,6 +117,10 @@ class Splitter(BaseBuilder):
         severed contacts. Defaults to :data:`DEFAULT_BOND_CUTOFFS`.
     keep_molecules : bool, default=False
         Move whole covalent units rather than a half-space (see above).
+    repair : bool, default=False
+        Rebuild the severed bonds (see above). Set here, it also applies
+        to :meth:`find_broken_bonds` and the scans, which then count the
+        bonds the repair will rebuild.
     ionic_dict : dict, optional
         ``{(cation, anion): cutoff}`` coordination shells, types or
         elements. Defaults to :data:`DEFAULT_IONIC_CUTOFFS`.
@@ -126,6 +140,7 @@ class Splitter(BaseBuilder):
     >>> scan = splitter.scan_broken_bonds(step=0.25)
     >>> best = scan.loc[scan["n_broken"].idxmin(), "coordinate"]
     >>> result = splitter.with_coordinate(best).split(repair=True)
+    >>> splitter.repair_report["charge_change"]  # to neutralize afterwards
 
     >>> # Pore in a disordered solid: no covalent bond broken, cut placed
     >>> # where it costs the fewest ionic contacts, liquid in the pore
@@ -141,6 +156,7 @@ class Splitter(BaseBuilder):
     bonds_dict: dict[tuple[str, str], float] | None = None
     keep_molecules: bool = False
     ionic_dict: dict[tuple[str, str], float] | None = None
+    repair: bool = False
 
     # Solution options (default: no solution)
     _solution_blueprint: SolutionBuilder | None = field(default=None, repr=False)
@@ -431,12 +447,15 @@ class Splitter(BaseBuilder):
         """Atoms moved by the split (by position in ``system.atoms``).
 
         A half-space for a plain split; whole covalent units and their
-        cations with ``keep_molecules=True``.
+        cations with ``keep_molecules=True``. With ``repair``, every
+        hydrogen goes on the side of its covalent partner.
         """
         coordinate = self._resolve_coordinate(coordinate)
         positions = self.system.atoms[["x", "y", "z"]].to_numpy(dtype=np.float64)
         moves = (positions @ self._unit_norm >= coordinate).astype(int)
         if not self.keep_molecules:
+            if self.repair:
+                moves = self._attach_hydrogens(moves)
             return moves.astype(bool)
 
         labels, rel, span = self._molecules()
@@ -482,7 +501,33 @@ class Splitter(BaseBuilder):
             flip = is_cation & (kept[index, 1 - moves] > kept[index, moves])
             moves[flip] = 1 - moves[flip]
 
+        if self.repair:
+            moves = self._attach_hydrogens(moves)
         return moves.astype(bool)
+
+    def _atom_elements(self) -> np.ndarray:
+        """Element of each atom, its type where the mass names none."""
+        types = self.system.atoms["type"].astype(str).to_numpy()
+        elements = self.system.elements
+        return np.array([elements.get(t, t) for t in types])
+
+    def _attach_hydrogens(self, moves: np.ndarray) -> np.ndarray:
+        """Put every hydrogen on the side of its covalent partner.
+
+        Cutting an O-H leaves a bare proton on one side, which no repair
+        can make sense of; the H goes with its partner instead.
+        """
+        contacts = self._covalent_contacts()
+        i, j, k = contacts["i"], contacts["j"], contacts["k"]
+        is_h = self._atom_elements() == "H"
+        moves = moves.copy()
+        # A pair keeps its separation iff moves[j] - moves[i] == k
+        for h, partner, shift in ((j, i, k), (i, j, -k)):
+            pick = is_h[h] & ~is_h[partner]
+            target = moves[partner[pick]] + shift[pick]
+            fits = (target == 0) | (target == 1)
+            moves[h[pick][fits]] = target[fits]
+        return moves
 
     def _resolve_ionic(self) -> dict:
         return DEFAULT_IONIC_CUTOFFS if self.ionic_dict is None else self.ionic_dict
@@ -558,6 +603,45 @@ class Splitter(BaseBuilder):
         moves = self.side_mask(coordinate)
         return int(self._broken(moves, self._contacts(self._resolve_ionic())).sum())
 
+    def describe_cut(
+        self,
+        coordinate: float | None = None,
+        bonds_dict: dict | None = None,
+    ) -> dict:
+        """What a cut at ``coordinate`` moves and severs, in one pass.
+
+        :meth:`find_broken_bonds` and :meth:`count_broken_ionic` each
+        place the atoms again; with ``keep_molecules`` that placement is
+        most of the cost, so a caller wanting both (a live preview) gets
+        them here from a single :meth:`side_mask`.
+
+        Returns
+        -------
+        dict
+            ``moves``, the :meth:`side_mask`; ``broken``, the pairs of
+            atom ids of the severed bonds, as :meth:`find_broken_bonds`;
+            ``n_ionic``, the number of severed ionic contacts;
+            ``unrepairable``, the pairs of ``broken`` that ``repair``
+            refuses (no O, see :meth:`split`).
+        """
+        moves = self.side_mask(coordinate)
+        contacts = self._covalent_contacts(bonds_dict)
+        broken = self._broken(moves, contacts)
+        ids = self.system.atoms.index.to_numpy()
+        i, j = contacts["i"][broken], contacts["j"][broken]
+        repairable = self._repairable(i, j)
+        return {
+            "moves": moves,
+            "broken": [(int(ids[a]), int(ids[b])) for a, b in zip(i, j)],
+            "unrepairable": [
+                (int(ids[a]), int(ids[b]))
+                for a, b in zip(i[~repairable], j[~repairable])
+            ],
+            "n_ionic": int(
+                self._broken(moves, self._contacts(self._resolve_ionic())).sum()
+            ),
+        }
+
     def scan_broken_bonds(
         self,
         start: float | None = None,
@@ -621,15 +705,23 @@ class Splitter(BaseBuilder):
 
         See :meth:`scan_broken_bonds` for the parameters.
         """
-        scan = self.scan_broken_bonds(start, stop, step)
+        return self.best_in_scan(self.scan_broken_bonds(start, stop, step))
 
+    def best_in_scan(self, scan: pd.DataFrame) -> float:
+        """The position :meth:`best_coordinate` picks, from a scan already made.
+
+        ``scan`` is a :meth:`scan_broken_bonds` table of this splitter.
+        """
         contacts = self._covalent_contacts()
         positions = self.system.atoms[["x", "y", "z"]].to_numpy(dtype=np.float64)
         projections = positions @ self._unit_norm
-        scan["n_crossing"] = [
-            int(self._broken(projections >= c, contacts).sum())
-            for c in scan["coordinate"]
-        ]
+        # Not written into `scan`: it belongs to the caller.
+        scan = scan.assign(
+            n_crossing=[
+                int(self._broken(projections >= c, contacts).sum())
+                for c in scan["coordinate"]
+            ]
+        )
 
         best = scan.sort_values(
             ["n_broken", "n_ionic", "n_crossing"], kind="stable"
@@ -809,108 +901,441 @@ class Splitter(BaseBuilder):
         # Replace the system with the merged result
         self.system._replace_internals(result)
 
-    def _collect_dangling(self, bonds_dict: dict | None) -> list[tuple[int, np.ndarray, float]]:
-        """Record which atoms lose a partner, and in which direction.
+    # ------------------------------------------------------------------
+    # Repair
+    # ------------------------------------------------------------------
 
-        Must run *before* the fragments move: the direction toward the
-        lost partner is taken from the intact geometry (a translation
-        leaves it unchanged, so it stays valid afterwards).
+    #: Closest a cap may come to an atom other than the one it caps, in Å.
+    CAP_CLEARANCE = {"H": 1.4, "O": 2.0}
+
+    #: Tilts (degrees) away from the broken bond tried, in order, when a
+    #: cap's spot is taken; twelve directions around the bond each.
+    CAP_TILTS = (15, 30, 45, 60, 75, 90, 105, 120)
+
+    def _repairable(self, i: np.ndarray, j: np.ndarray) -> np.ndarray:
+        """Which severed pairs a hydrolysis can rebuild: exactly one O."""
+        elements = self._atom_elements()
+        return (elements[i] == "O") != (elements[j] == "O")
+
+    def _plan_repair(self, bonds_dict: dict | None) -> list[tuple]:
+        """List the caps to place, from the intact geometry.
+
+        Refuses the cut, before anything moves, if it severs a bond that
+        cannot be hydrolysed.
 
         Returns
         -------
-        list of (atom id, unit vector toward the lost partner, bond length)
+        list of (atom id, cap, unit vector toward the lost partner, length)
+            ``cap`` is ``"H"`` for an O that lost its partner, ``"OH"``
+            for the partner that lost its O. Translation leaves the
+            vector valid on the split geometry.
         """
-        positions = self.system.atoms[["x", "y", "z"]]
-        dangling = []
+        from MDAnalysis.lib.distances import minimize_vectors
 
-        for id_1, id_2 in self.find_broken_bonds(bonds_dict=bonds_dict):
-            r_1 = positions.loc[id_1].to_numpy(dtype=float)
-            r_2 = positions.loc[id_2].to_numpy(dtype=float)
+        moves = self.side_mask()
+        contacts = self._covalent_contacts(bonds_dict)
+        broken = self._broken(moves, contacts)
+        i, j = contacts["i"][broken], contacts["j"][broken]
 
-            delta = r_2 - r_1
-            length = float(np.linalg.norm(delta))
-            if length < 1e-6:
+        elements = self._atom_elements()
+        ids = self.system.atoms.index.to_numpy()
+        repairable = self._repairable(i, j)
+        if not repairable.all():
+            pairs = pd.Series(
+                [
+                    "-".join(sorted((elements[a], elements[b])))
+                    for a, b in zip(i[~repairable], j[~repairable])
+                ]
+            ).value_counts()
+            raise ValueError(
+                f"The cut severs {int((~repairable).sum())} bonds that "
+                f"cannot be repaired ({pairs.to_dict()}): only a bond to an "
+                "O can be hydrolysed. Move the cut, or use "
+                "keep_molecules=True to keep these molecules whole."
+            )
+
+        positions = self.system.atoms[["x", "y", "z"]].to_numpy(dtype=np.float64)
+        box = np.asarray(self.system.box, dtype=np.float64)
+        bond = minimize_vectors(positions[j] - positions[i], box)
+        length = np.linalg.norm(bond, axis=1)
+        direction = bond / length[:, None]
+
+        plan = []
+        for a, b, d, r in zip(i, j, direction, length):
+            # Seen from each atom: toward the partner it loses
+            for atom, toward in ((a, d), (b, -d)):
+                cap = "H" if elements[atom] == "O" else "OH"
+                plan.append((int(ids[atom]), cap, toward, float(r)))
+        return plan
+
+    def _environment(self, bonds_dict: dict | None) -> tuple[list, list]:
+        """Covalent environment of every atom, at two depths.
+
+        The first depth is the element and its partners' elements; the
+        second replaces each partner by its own first depth, which tells
+        the H of a water (on an O-H-H) from the H of a silanol (on an
+        O-Si-H).
+        """
+        contacts = self._covalent_contacts(bonds_dict)
+        elements = self._atom_elements()
+        partners: list[list[int]] = [[] for _ in range(len(elements))]
+        for a, b in zip(contacts["i"], contacts["j"]):
+            partners[a].append(b)
+            partners[b].append(a)
+        first = [
+            (elements[a], tuple(sorted(elements[p] for p in partners[a])))
+            for a in range(len(elements))
+        ]
+        second = [
+            (elements[a], tuple(sorted(first[p] for p in partners[a])))
+            for a in range(len(elements))
+        ]
+        return first, second
+
+    def _templates(self, bonds_dict: dict | None) -> tuple[dict, dict, dict]:
+        """Type and charge of each covalent environment of the system.
+
+        Read from the intact system: its atoms are the models for the
+        ones the repair adds or changes. Each environment keeps its most
+        common type, with that type's mean charge there. The third table
+        is each atom's own environment, by id, to tell later which ones
+        the repair changed.
+        """
+        first, second = self._environment(bonds_dict)
+        atoms = self.system.atoms
+        tables = []
+        for environment in (first, second):
+            frame = pd.DataFrame(
+                {
+                    "env": environment,
+                    "type": atoms["type"].to_numpy(),
+                    "charge": atoms["charge"].to_numpy(dtype=np.float64),
+                }
+            )
+            table = {}
+            for env, group in frame.groupby("env", sort=False):
+                atype = group["type"].value_counts().index[0]
+                charge = group.loc[group["type"] == atype, "charge"].mean()
+                table[env] = (atype, float(charge))
+            tables.append(table)
+        return tables[0], tables[1], dict(zip(atoms.index, second))
+
+    def _place_caps(
+        self, plan: list[tuple], oh_length: float
+    ) -> tuple[list, list, int]:
+        """Positions of the caps, clear of the atoms around them.
+
+        A cap goes along the broken bond, at the bond length for an OH's O
+        and ``oh_length`` for an H. When an atom (or a cap already placed)
+        sits closer than :attr:`CAP_CLEARANCE`, the cap tilts away from
+        the bond, as little as frees it; with no free direction, it takes
+        the roomiest one and counts as crowded.
+
+        Returns
+        -------
+        caps : list of (element, position, index of its partner)
+            The partner is an atom id, or the position in ``caps`` of the
+            cap it is bonded to (the O of an OH, for its H), as ``-1 - i``.
+        bonds : list of (partner, cap) in the same notation
+        crowded : int
+        """
+        from MDAnalysis.lib.distances import capped_distance, minimize_vectors
+
+        if not plan:
+            return [], [], 0
+
+        atoms = self.system.atoms
+        positions = atoms[["x", "y", "z"]].to_numpy(dtype=np.float64)
+        box = np.asarray(self.system.box, dtype=np.float64)
+        row = {atom_id: n for n, atom_id in enumerate(atoms.index)}
+
+        anchors = np.array([row[step[0]] for step in plan], dtype=int)
+        reach = (
+            oh_length
+            + 2 * max(step[3] for step in plan)
+            + max(self.CAP_CLEARANCE.values())
+        )
+        near: list[list[int]] = [[] for _ in plan]
+        pairs = capped_distance(
+            positions[anchors],
+            positions,
+            max_cutoff=reach,
+            box=box,
+            return_distances=False,
+        )
+        for n, other in pairs:
+            near[n].append(other)
+
+        caps: list[tuple[str, np.ndarray, int]] = []
+        bonds: list[tuple[int, int]] = []
+        crowded = 0
+
+        # The tilts and turns tried around a bond, the bond itself first
+        tilt = np.radians(np.repeat([0, *self.CAP_TILTS], 12)[11:])
+        turn = np.tile(
+            np.linspace(0, 2 * np.pi, 12, endpoint=False), len(self.CAP_TILTS) + 1
+        )[11:]
+
+        def directions(axis: np.ndarray) -> np.ndarray:
+            """`axis`, then cones of growing tilt around it."""
+            helper = np.eye(3)[np.argmin(np.abs(axis))]
+            u = np.cross(axis, helper)
+            u /= np.linalg.norm(u)
+            v = np.cross(axis, u)
+            side = np.cos(turn)[:, None] * u + np.sin(turn)[:, None] * v
+            return np.cos(tilt)[:, None] * axis + np.sin(tilt)[:, None] * side
+
+        def place(element, origin, axis, length, others, own=None) -> np.ndarray:
+            """Best spot for a cap; `own` is the cap it bonds to, if any."""
+            nonlocal crowded
+            candidates = origin + length * directions(axis)
+            # Caps placed so far, the nearby ones only
+            placed = np.array([c[1] for n, c in enumerate(caps) if n != own])
+            if len(placed):
+                offset = minimize_vectors(placed - origin, box)
+                placed = placed[np.linalg.norm(offset, axis=1) < reach]
+            reference = np.vstack([positions[others], placed.reshape(-1, 3)])
+            if len(reference) == 0:
+                return candidates[0]
+            gaps = minimize_vectors(
+                (reference[None, :, :] - candidates[:, None, :]).reshape(-1, 3),
+                box,
+            ).reshape(len(candidates), len(reference), 3)
+            closest = np.linalg.norm(gaps, axis=2).min(axis=1)
+            free = np.flatnonzero(closest >= self.CAP_CLEARANCE[element])
+            if len(free):
+                return candidates[free[0]]
+            crowded += 1
+            return candidates[np.argmax(closest)]
+
+        for n, (atom_id, cap, toward, length) in enumerate(plan):
+            anchor = anchors[n]
+            others = [o for o in near[n] if o != anchor]
+            origin = positions[anchor]
+            if cap == "H":
+                position = place("H", origin, toward, oh_length, others)
+                caps.append(("H", position, atom_id))
+                bonds.append((atom_id, -len(caps)))
                 continue
+            oxygen = place("O", origin, toward, length, others)
+            caps.append(("O", oxygen, atom_id))
+            bonds.append((atom_id, -len(caps)))
+            oxygen_cap = -len(caps)
+            # The H continues away from the anchor: Si-O-H is no line, but
+            # the relaxation bends it.
+            axis = (oxygen - origin) / np.linalg.norm(oxygen - origin)
+            hydrogen = place("H", oxygen, axis, oh_length, others, own=len(caps) - 1)
+            caps.append(("H", hydrogen, oxygen_cap))
+            bonds.append((oxygen_cap, -len(caps)))
 
-            direction = delta / length
-            dangling.append((id_1, direction, length))
-            dangling.append((id_2, -direction, length))
+        return caps, bonds, crowded
 
-        return dangling
-
-    def _repair_dangling(
+    def _repair(
         self,
-        dangling: list[tuple[int, np.ndarray, float]],
+        plan: list[tuple],
+        templates: tuple[dict, dict],
+        explicit: tuple[set, set],
+        bonds_dict: dict | None,
         oh_length: float,
-        min_distance: float = 0.5,
-    ) -> dict[str, int]:
-        """Cap atoms left under-coordinated by the cut.
+    ) -> dict:
+        """Add the caps, type them, and give them their explicit topology."""
+        from ..core._format import canonical_ff_type as canonical
 
-        An exposed oxygen is protonated into a hydroxyl; any other exposed
-        atom (Si, Al, C, S, ...) receives a hydroxyl group in the direction
-        its partner used to occupy. The added atoms are placed collinearly
-        with the broken contact and carry a zero charge -- this is a
-        starting geometry meant to be relaxed, and to be re-typed with
-        `set_topology()` / `set_ff_from_database()` afterwards.
+        system = self.system
+        charge_before = float(system.atoms["charge"].sum())
+        caps, cap_bonds, crowded = self._place_caps(plan, oh_length)
 
-        An exposed oxygen that already carried a specific force-field type
-        (e.g. ``Osi``, a non-bridging Si-OH oxygen under ClayFF/CSHFF) has
-        that type reset to its bare element symbol before capping. Those
-        types are only ever assigned to atoms matching a literal ``type O``
-        selection, so a stale specific type would otherwise never be
-        revisited by `set_topology()` and the atom would keep describing an
-        environment (e.g. "still bonded to its original Si") that the cut
-        just removed.
+        first_id = int(system.atoms.index.max()) + 1
+        cap_ids = [first_id + n for n in range(len(caps))]
+        if caps:
+            for element in {c[0] for c in caps}:
+                if element not in system._masses:
+                    system._masses[element] = MASSES_DICT[element]
+            system.add_atoms([c[0] for c in caps], np.array([c[1] for c in caps]))
 
-        A cap that would land on top of an existing atom is skipped rather
-        than created: a bridging oxygen that loses *both* its cations would
-        otherwise have each of them restore a copy of it at the very same
-        site. Skipped caps are reported back so the caller knows some
-        atoms were left under-coordinated.
+        def atom_id(ref: int) -> int:
+            return cap_ids[-1 - ref] if ref < 0 else ref
+
+        new_bonds = [(atom_id(a), atom_id(b)) for a, b in cap_bonds]
+
+        # Type and charge the caps, and the atoms around them whose
+        # environment the repair changed (an Ob that took an H, the H of
+        # an Osih that became a water), from the atom of the intact
+        # system in the same environment.
+        self._contact_cache = {}
+        first, second = self._environment(bonds_dict)
+        by_first, by_second, before = templates
+        ids = system.atoms.index.to_numpy()
+        row = {i: n for n, i in enumerate(ids)}
+        contacts = self._covalent_contacts(bonds_dict)
+        partners: dict[int, list[int]] = {}
+        for a, b in zip(ids[contacts["i"]], ids[contacts["j"]]):
+            partners.setdefault(int(a), []).append(int(b))
+            partners.setdefault(int(b), []).append(int(a))
+        touched = {a for bond in new_bonds for a in bond}
+        touched |= {p for a in list(touched) for p in partners.get(a, ())}
+        retyped = untyped = 0
+        relabel = set()
+        for atom in sorted(touched):
+            n = row[atom]
+            is_cap = atom >= first_id
+            if not is_cap and before.get(atom) == second[n]:
+                continue
+            match = by_second.get(second[n]) or by_first.get(first[n])
+            old_type = system.atoms.at[atom, "type"]
+            if match is None:
+                untyped += 1
+                atype = first[n][0]
+                charge = 0.0 if is_cap else system.atoms.at[atom, "charge"]
+                if atype not in system._masses:
+                    system._masses[atype] = MASSES_DICT.get(atype, 1.0)
+            else:
+                atype, charge = match
+            if not is_cap and atype != old_type:
+                retyped += 1
+                relabel.add(atom)
+            system.atoms.at[atom, "type"] = atype
+            system.atoms.at[atom, "charge"] = charge
+
+        # The explicit connections of a retyped atom name its old type
+        types = system.atoms["type"].astype(str)
+        for name, kind, n_atoms in (("bonds", "bond", 2), ("angles", "angle", 3)):
+            frame = getattr(system, name)
+            if frame is None or frame.empty or not relabel:
+                continue
+            columns = [f"atom_{i + 1}" for i in range(n_atoms)]
+            stale = frame[columns].isin(relabel).any(axis=1)
+            known = explicit[0 if kind == "bond" else 1]
+            frame.loc[stale, "type"] = [
+                known.get(key, key)
+                for key in (
+                    canonical(tuple(types[a] for a in atoms), kind)
+                    for atoms in frame.loc[stale, columns].itertuples(index=False)
+                )
+            ]
+
+        bonds_added, angles_added = self._extend_topology(
+            new_bonds, explicit, canonical
+        )
+        self._contact_cache = {}
+        self._molecule_cache = None
+
+        return {
+            "broken": len(plan) // 2,
+            "capped": len(caps),
+            "crowded": crowded,
+            "retyped": retyped,
+            "untyped": untyped,
+            "bonds_added": bonds_added,
+            "angles_added": angles_added,
+            "charge_change": float(system.atoms["charge"].sum()) - charge_before,
+        }
+
+    def _explicit_labels(self) -> tuple[dict, dict]:
+        """The explicit bond and angle types of the system, by atom types.
+
+        Keyed on the canonical form of the atom types they join, with the
+        label the system itself uses as value: a builder may have written
+        "O1-H1" where the canonical form reads "H1-O1".
         """
-        elements = self.system.elements
-        occupied = list(self.system.atoms[["x", "y", "z"]].to_numpy(dtype=float))
-        report = {"capped": 0, "skipped": 0}
+        from ..core._format import canonical_ff_type
 
-        def place(atom_type: str, position: np.ndarray) -> bool:
-            if any(np.linalg.norm(position - other) < min_distance for other in occupied):
-                report["skipped"] += 1
-                return False
+        types = self.system.atoms["type"].astype(str)
+        labels = []
+        for name, kind, n_atoms in (("bonds", "bond", 2), ("angles", "angle", 3)):
+            frame = getattr(self.system, name)
+            table: dict[str, str] = {}
+            if frame is not None and not frame.empty:
+                columns = [f"atom_{i + 1}" for i in range(n_atoms)]
+                for label, atoms in zip(
+                    frame["type"], frame[columns].itertuples(index=False)
+                ):
+                    key = canonical_ff_type(tuple(types[a] for a in atoms), kind)
+                    if isinstance(label, str):
+                        table.setdefault(key, label)
+            labels.append(table)
+        return labels[0], labels[1]
 
-            self.system.add_atom(atom_type, position)
-            occupied.append(position)
-            report["capped"] += 1
-            return True
+    def _extend_topology(
+        self, new_bonds: list[tuple[int, int]], explicit: tuple[set, set], canonical
+    ) -> tuple[int, int]:
+        """Give the new bonds the explicit bonds and angles the system has.
 
-        for atom_id, direction, length in dangling:
-            atom = self.system.atoms.loc[atom_id]
-            element = elements.get(str(atom["type"]), str(atom["type"]))
+        A new pair gets an explicit bond when the intact system had one
+        between the same two types (Osih-Hsi, Oh-Hh), and a new triple an
+        angle likewise, with the system's label; pairs the force field
+        leaves implicit (Si-O under ClayFF) stay so.
+        """
+        bond_types, angle_types = explicit
+        system = self.system
+        types = system.atoms["type"].astype(str)
 
-            # An exposed hydrogen means its oxygen went the other way; the
-            # oxygen side gets capped on its own, so leave this one alone.
-            if element == "H":
-                continue
+        added_bonds = []
+        for a, b in new_bonds:
+            label = bond_types.get(canonical((types[a], types[b]), "bond"))
+            if label is not None:
+                added_bonds.append({"type": label, "atom_1": a, "atom_2": b})
+        if added_bonds:
+            frame = pd.DataFrame(added_bonds)
+            system.bonds = (
+                frame
+                if system.bonds is None or system.bonds.empty
+                else pd.concat([system.bonds, frame], ignore_index=True)
+            )
 
-            position = atom[["x", "y", "z"]].to_numpy(dtype=float)
-
-            if element == "O":
-                if str(atom["type"]) != "O":
-                    if "O" not in self.system._masses:
-                        self.system._masses["O"] = MASSES_DICT["O"]
-                    self.system.atoms.loc[atom_id, "type"] = "O"
-                place("H", position + direction * oh_length)
-                continue
-
-            # Cation side: restore the missing oxygen, then cap it.
-            oxygen_position = position + direction * length
-            if place("O", oxygen_position):
-                place("H", oxygen_position + direction * oh_length)
-
-        return report
+        added_angles = []
+        if added_bonds and angle_types:
+            partners: dict[int, set] = {}
+            for a, b in zip(system.bonds["atom_1"], system.bonds["atom_2"]):
+                partners.setdefault(int(a), set()).add(int(b))
+                partners.setdefault(int(b), set()).add(int(a))
+            existing = set()
+            if system.angles is not None and not system.angles.empty:
+                existing = {
+                    (int(a), int(c), int(e))
+                    for a, c, e in zip(
+                        system.angles["atom_1"],
+                        system.angles["atom_2"],
+                        system.angles["atom_3"],
+                    )
+                }
+            for bond in added_bonds:
+                a, b = bond["atom_1"], bond["atom_2"]
+                for centre, end in ((a, b), (b, a)):
+                    for other in partners.get(centre, ()):
+                        if other == end:
+                            continue
+                        triple = (min(other, end), centre, max(other, end))
+                        if triple in existing:
+                            continue
+                        label = angle_types.get(
+                            canonical(
+                                (types[triple[0]], types[centre], types[triple[2]]),
+                                "angle",
+                            )
+                        )
+                        if label is not None:
+                            existing.add(triple)
+                            added_angles.append(
+                                {
+                                    "type": label,
+                                    "atom_1": triple[0],
+                                    "atom_2": centre,
+                                    "atom_3": triple[2],
+                                }
+                            )
+        if added_angles:
+            frame = pd.DataFrame(added_angles)
+            system.angles = (
+                frame
+                if system.angles is None or system.angles.empty
+                else pd.concat([system.angles, frame], ignore_index=True)
+            )
+        return len(added_bonds), len(added_angles)
 
     def split(
         self,
-        repair: bool = False,
+        repair: bool | None = None,
         bonds_dict: dict | None = None,
         oh_length: float = 1.0,
     ) -> AtomicSystem:
@@ -919,9 +1344,9 @@ class Splitter(BaseBuilder):
 
         Parameters
         ----------
-        repair : bool, default=False
-            Cap the atoms left under-coordinated by the cut (see
-            :meth:`find_broken_bonds` for how they are detected).
+        repair : bool, optional
+            Rebuild the severed bonds (see the class description). Defaults
+            to the splitter's own ``repair``; given here, it replaces it.
         bonds_dict : dict, optional
             Cutoff table used for that detection, see
             :data:`DEFAULT_BOND_CUTOFFS`.
@@ -933,25 +1358,41 @@ class Splitter(BaseBuilder):
         AtomicSystem
             The split system, optionally repaired and filled with solution.
 
+        Raises
+        ------
+        ValueError
+            With ``repair``, if the cut severs a bond without an O, which
+            no hydrolysis rebuilds. Nothing has moved yet.
+
         Notes
         -----
-        Repair adds neutral H (and O) atoms: re-run ``set_topology()`` and
-        ``set_ff_from_database()`` afterwards so the new atoms get proper
-        types and charges. After a repair, ``repair_report`` summarises how
-        many caps were added and how many were skipped as overlapping.
+        After a repair, ``repair_report`` gives ``broken`` (bonds
+        rebuilt), ``capped`` (atoms added), ``crowded`` (caps that found
+        no spot clear of other atoms), ``retyped`` (atoms of the system
+        whose type changed, an Ob turned Osih), ``untyped`` (atoms with no
+        model in the system: typed by element, a new one uncharged),
+        ``bonds_added``, ``angles_added`` and ``charge_change``. The
+        caps take their charges from the system, which leaves it charged
+        in general: ``neutralize_charge`` afterwards.
 
         ``split_report`` compares, pair by pair, the bonds (explicit and
         ``bonds_dict``) and the ionic contacts (``ionic_dict``) of the
         intact geometry with the same pairs once split: any pair whose
         minimum-image distance changed is listed as broken.
         """
+        if repair is not None:
+            self.repair = repair
         self._resolve_coordinate(None)
         original_positions = self.system.atoms[["x", "y", "z"]].copy()
         old_box = np.array(self.system.box, dtype=np.float64)
         n_explicit = 0 if self.system.bonds is None else len(self.system.bonds)
 
-        # Detection has to happen on the intact geometry.
-        dangling = self._collect_dangling(bonds_dict) if repair else []
+        # Detection has to happen on the intact geometry, and so does the
+        # reading of the types, charges and explicit topology to copy.
+        if self.repair:
+            plan = self._plan_repair(bonds_dict)
+            templates = self._templates(bonds_dict)
+            explicit = self._explicit_labels()
         bonds = self._covalent_contacts(bonds_dict)
         ionic = self._contacts(self._resolve_ionic())
 
@@ -981,11 +1422,10 @@ class Splitter(BaseBuilder):
         self._contact_cache = {}
         self._molecule_cache = None
 
-        if repair:
-            self.repair_report = {
-                "broken": len(dangling) // 2,
-                **self._repair_dangling(dangling, oh_length),
-            }
+        if self.repair:
+            self.repair_report = self._repair(
+                plan, templates, explicit, bonds_dict, oh_length
+            )
 
         if self._has_solution:
             self._insert_solution()

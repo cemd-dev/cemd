@@ -15,7 +15,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-from .rules import NeighborCriterion, TopologyRule
+from .rules import LayerRule, NeighborCriterion, TopologyRule
 
 CLAYFF_RULES: list[TopologyRule] = [
     # --- Silicate oxygens ---
@@ -62,15 +62,10 @@ CLAYFF_RULES: list[TopologyRule] = [
 ]
 
 
+# Ca of the main layers (between the planes of paired tetrahedra) stay Ca,
+# every other Ca (interlayer, pore, solution) becomes Cw. A neighbour rule
+# ("Ca with a water O within 3.2 A -> Cw", used from 2026-09-01) mistyped
+# 25-50 % of the Ca of a defective C-S-H: see LayerRule.
 CSHFF_RULES = CLAYFF_RULES + [
-    TopologyRule(
-        center="type Ca",
-        neighbors=NeighborCriterion(
-            selection="type Ow",
-            cutoff=3.2,
-            count=1,
-            exact_match=False,
-        ),
-        new_type="Cw",
-    ),
+    LayerRule("type Ca", "type Si", inside_type="Ca", outside_type="Cw"),
 ]

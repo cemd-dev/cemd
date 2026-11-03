@@ -80,6 +80,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "ipython",
+    "ruff",
 ]
 
 [project.gui-scripts]
@@ -135,6 +136,16 @@ ignore = [
     "E501",  # Lignes trop longues (déjà géré par ruff format)
     "N813",  # CamelCase importé en lowercase
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Qt overrides (closeEvent, rowCount, setData, ...) must keep Qt's camelCase.
+"cemd/gui/**" = ["N802"]
+# Uppercase names follow the maths notation (G(r), A1, W).
+"cemd/analysis/**" = ["N803", "N806"]
+
+[tool.ruff.lint.isort]
+# The test helpers import the local conftest after cemd itself.
+known-local-folder = ["conftest"]
 
 [tool.ruff.format]
 quote-style = "double"

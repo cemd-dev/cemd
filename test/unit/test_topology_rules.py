@@ -84,8 +84,49 @@ def test_cshff_rules_add_calcium_water_coordination():
 
     system.set_topology(CSHFF_RULES)
 
-    assert "Cw" in system.atom_types  # Ca within range of a water oxygen
+    assert "Cw" in system.atom_types  # no silicate layer: the Ca is outside
     assert set(system.atom_types) == {"Cw", "Ow", "Hw"}
+
+
+def test_cshff_rules_type_calcium_by_layer_position():
+    """Intralayer Ca stay Ca even next to a water, interlayer Ca become Cw
+    even with only OH around them (the neighbour rule got both wrong)."""
+    # One layer: paired Si planes at z = 2 and 6 (8 Si each), a bridging Si
+    # at z = 8; box 20 A along z, so the interlayer runs from 6 to 22 (= 2).
+    si = [(x, y, z) for z in (2.0, 6.0) for x in (0.0, 5.0) for y in (0.0, 2.5, 5.0, 7.5)]
+    si.append((2.5, 2.5, 8.0))
+    rows = [("Si", *p) for p in si] + [
+        ("Ca", 2.5, 1.2, 4.0),  # intralayer Ca ...
+        ("O", 2.5, 1.2, 6.7),  # ... with an apical water above it
+        ("H", 3.3, 1.2, 7.3),
+        ("H", 1.7, 1.2, 7.3),
+        ("Ca", 2.5, 6.2, 11.0),  # interlayer Ca solvated by one OH only
+        ("O", 2.5, 6.2, 13.4),
+        ("H", 2.5, 6.2, 14.4),
+    ]
+    atoms = pd.DataFrame(
+        {
+            "type": [r[0] for r in rows],
+            "charge": 0.0,
+            "x": [r[1] for r in rows],
+            "y": [r[2] for r in rows],
+            "z": [r[3] for r in rows],
+        },
+        index=range(1, len(rows) + 1),
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [10.0, 10.0, 20.0, 90.0, 90.0, 90.0],
+            "masses": {"Ca": 40.078, "Si": 28.086, "O": 15.999, "H": 1.008},
+            "charges": {},
+        }
+    )
+
+    system.set_topology(CSHFF_RULES)
+
+    ca = system.atoms[system.atoms["type"].isin(["Ca", "Cw"])].sort_values("z")
+    assert ca["type"].tolist() == ["Ca", "Cw"]
 
 
 def test_clayff_string_and_list_forms_are_equivalent():
@@ -232,7 +273,8 @@ def test_neighbor_lists_match_one_selection_per_center(seed):
 
     system = _random_mix(800, seed)
     reference, fast = system.to_mda(), system.to_mda()
-    for rule in CSHFF_RULES + extra:
+    neighbor_rules = [r for r in CSHFF_RULES if isinstance(r, TopologyRule)]
+    for rule in neighbor_rules + extra:
         _apply._apply_rule_per_center(reference, rule)
         _apply._apply_rule_with_neighbor_lists(fast, rule)
 
