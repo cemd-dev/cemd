@@ -42,20 +42,33 @@ def qt_app():
 
 
 @pytest.fixture(scope="module")
-def window(qt_app):
+def window(qt_app, tmp_path_factory):
+    from cemd.gui import _userdata
     from cemd.gui.main_window import AtomViewerGUI
 
-    window = AtomViewerGUI()
-    window.show()
-    yield window
-    for index in reversed(range(window.tabs.count())):
-        window.set_tab_modified(window.tabs.widget(index), False)
-    window.close()
+    # The window loads its display settings from the user's config, and
+    # the shipped defaults hold no bond rules: a test that relied on the
+    # developer's own config.json passed locally and failed on CI. Point
+    # it at an empty directory so it sees the defaults only, wherever it
+    # runs, and never writes over a real config.
+    home = tmp_path_factory.mktemp("home")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("HOME", str(home))
+        mp.setenv("XDG_CONFIG_HOME", str(home / "config"))
+        mp.setattr(_userdata, "legacy_config_file", lambda: home / "no-legacy.json")
+        window = AtomViewerGUI()
+        window.show()
+        yield window
+        for index in reversed(range(window.tabs.count())):
+            window.set_tab_modified(window.tabs.widget(index), False)
+        window.close()
 
 
 def test_opening_a_structure_draws_it(window):
     from conftest import make_water_system
 
+    # The defaults define no bond rules, so give the one this system needs.
+    window.display.bond_map["Hw-Ow"] = 1.1
     window.add_structure_tab(make_water_system(), title="water")
     tab = window.tabs.currentWidget()
     actors = tab.plotter.renderer.actors

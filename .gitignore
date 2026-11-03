@@ -32,3 +32,6 @@ cemd/gui/*_cache.json
 
 # Logo design drafts, kept locally only
 /.logo_preview/
+
+# Local bibliography for force field curation (PDF/SI, not distributed)
+cemd/forcefield/biblio/
