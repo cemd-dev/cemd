@@ -20,13 +20,14 @@ parameters, and analyzing the result.
       Step-by-step instructions to set up CEMD and its dependencies
       on your system.
 
-      +++
-      .. button-ref:: installation
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the installation guide
+         .. button-ref:: installation
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the installation guide
 
    .. grid-item-card:: :material-regular:`rocket_launch;2em` Getting Started
       :link: getting_started
@@ -36,13 +37,14 @@ parameters, and analyzing the result.
       New to CEMD? Start here for a quick introduction to the main
       concepts and your first atomic system.
 
-      +++
-      .. button-ref:: getting_started
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the getting started guide
+         .. button-ref:: getting_started
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the getting started guide
 
    .. grid-item-card:: :material-regular:`auto_stories;2em` User Guide
       :link: user_guide/index
@@ -52,13 +54,14 @@ parameters, and analyzing the result.
       In-depth explanations of CEMD concepts — building systems,
       applying force fields, and running analyses.
 
-      +++
-      .. button-ref:: user_guide/index
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the user guide
+         .. button-ref:: user_guide/index
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the user guide
 
    .. grid-item-card:: :material-regular:`biotech;2em` API Reference
       :link: api/index
@@ -68,13 +71,14 @@ parameters, and analyzing the result.
       Detailed description of all classes, methods and functions
       in CEMD. Assumes familiarity with the key concepts.
 
-      +++
-      .. button-ref:: api/index
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the API reference
+         .. button-ref:: api/index
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the API reference
 
 .. toctree::
    :hidden:

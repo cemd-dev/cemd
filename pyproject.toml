@@ -74,7 +74,8 @@ docs = [
     # Loaded by docs/conf.py for the grid/card directives used on the
     # landing pages. It was missing here and only went unnoticed because
     # it happened to be installed in the development environment.
-    "sphinx-design",
+    # >= 0.8 for the card-footer directive used on those pages.
+    "sphinx-design>=0.8",
 ]
 dev = [
     "pytest",

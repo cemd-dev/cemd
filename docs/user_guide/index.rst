@@ -13,11 +13,12 @@ This guide explains how to build and analyze your atomistic models.
 
       Automate the construction of complex atomistic systems, from simple crystal bulks to intricate solid-liquid interfaces.
 
-      +++
-      .. button-ref:: build_guide
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
+
+         .. button-ref:: build_guide
+            :expand:
+            :color: primary
+            :click-parent:
 
    .. grid-item-card:: :material-regular:`query_stats;2em` Analysis Guide
       :link: analysis_guide
@@ -26,11 +27,12 @@ This guide explains how to build and analyze your atomistic models.
 
       Extract physical properties from molecular dynamics simulations.
 
-      +++
-      .. button-ref:: analysis_guide
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
+
+         .. button-ref:: analysis_guide
+            :expand:
+            :color: primary
+            :click-parent:
 
    .. grid-item-card:: :material-regular:`storage;2em` Force Field Database
       :link: ff_database
@@ -39,11 +41,12 @@ This guide explains how to build and analyze your atomistic models.
 
       Explore the force field database and find parameters for your system.
 
-      +++
-      .. button-ref:: ff_database
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
+
+         .. button-ref:: ff_database
+            :expand:
+            :color: primary
+            :click-parent:
 
    .. grid-item-card:: :material-regular:`school;2em` Tutorial
       :link: tuto_calcite_surface

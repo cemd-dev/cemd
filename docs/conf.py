@@ -138,6 +138,10 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 pygments_style = "sphinx"
 todo_include_todos = True
 add_module_names = False
+# Cards use the card-header/card-footer directives (sphinx-design >= 0.8).
+# The +++ separators they replaced are deprecated, and under -W a fresh CI
+# install of 0.8 turned that deprecation into a failed build.
+sd_card_legacy_separators = False
 
 # ---------------------------------------------------------------------------
 # Autodoc / Autosummary

@@ -12,13 +12,14 @@ API Reference
       Complete reference for the ``AtomicSystem`` class — coordinates,
       topology, force field parameters and editing methods.
 
-      +++
-      .. button-ref:: atomic_system
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the core API
+         .. button-ref:: atomic_system
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the core API
 
    .. grid-item-card:: :material-regular:`construction;2em` Build
       :link: build
@@ -28,14 +29,15 @@ API Reference
       Build C-S-H models, aqueous solutions, surfaces and
       solid-liquid interfaces automatically.
 
-      +++
-      .. button-ref:: build
-         :ref-type: doc
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the build module
+         .. button-ref:: build
+            :ref-type: doc
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the build module
 
    .. grid-item-card:: :material-regular:`query_stats;2em` Analysis
       :link: analysis
@@ -45,13 +47,14 @@ API Reference
       Compute RDF, MSD, diffusion coefficients, density profiles
       and electrostatic potentials.
 
-      +++
-      .. button-ref:: analysis
-         :expand:
-         :color: primary
-         :click-parent:
+      .. card-footer::
 
-         To the analysis module
+         .. button-ref:: analysis
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the analysis module
 
    .. grid-item-card:: :material-regular:`account_tree;2em` Topology
       :link: topology
@@ -60,14 +63,15 @@ API Reference
 
       Typing rules (ClayFF, CSH-FF, custom), bonds, angles and layers.
 
-      +++
+      .. card-footer::
 
-      .. button-ref:: topology
-         :expand:
-         :color: primary
-         :click-parent:
 
-         To the topology module
+         .. button-ref:: topology
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the topology module
 
    .. grid-item-card:: :material-regular:`storage;2em` Force Field
       :link: forcefield
@@ -76,14 +80,15 @@ API Reference
 
       The force-field database and its parameter classes.
 
-      +++
+      .. card-footer::
 
-      .. button-ref:: forcefield
-         :expand:
-         :color: primary
-         :click-parent:
 
-         To the force-field module
+         .. button-ref:: forcefield
+            :expand:
+            :color: primary
+            :click-parent:
+
+            To the force-field module
 
 .. toctree::
    :hidden:
