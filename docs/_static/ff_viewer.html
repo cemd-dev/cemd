@@ -393,6 +393,14 @@ const EMBEDDED_DATA = {
         "moltemplate"
       ]
     },
+    "afff": {
+      "name": "AFFF",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "year": 0,
+      "authors": [],
+      "description": "Force field for ettringite (AFt), monosulfoaluminate (AFm) and tricalcium aluminate (Honorio et al. 2020)",
+      "tags": []
+    },
     "iff_charmm": {
       "name": "CHARMM INTERFACE FF 1.5",
       "ref": " https://doi.org/10.1021/la3038846",
@@ -414,6 +422,14 @@ const EMBEDDED_DATA = {
       "year": 0,
       "authors": [],
       "description": "Force field for clay minerals and aqueous solutions",
+      "tags": []
+    },
+    "clayff_moh": {
+      "name": "ClayFF-MOH",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "year": 0,
+      "authors": [],
+      "description": "ClayFF with Morse O-H and metal-O-H angle terms (Cygan et al. 2021; Pouvreau et al. 2017)",
       "tags": []
     },
     "cshff2014": {
@@ -438,6 +454,22 @@ const EMBEDDED_DATA = {
         "Cement"
       ]
     },
+    "duque2018": {
+      "name": "Duque-Redondo 2018",
+      "ref": "https://doi.org/10.1039/c8cp00654g",
+      "year": 0,
+      "authors": [],
+      "description": "C-S-H force field of Duque-Redondo et al. (CSH-FF + ClayFF), as used by Ihaddadene et al. (2026)",
+      "tags": []
+    },
+    "freitas2015": {
+      "name": "Freitas 2015",
+      "ref": "https://doi.org/10.1039/c5cp02823j",
+      "year": 0,
+      "authors": [],
+      "description": "Lennard-Jones force field for cement clinker phases and CaO-Al2O3-SiO2 glasses",
+      "tags": []
+    },
     "guillot2007": {
       "name": "Guillot & Sator 2007",
       "ref": "https://doi.org/10.1016/j.gca.2006.11.015",
@@ -451,7 +483,23 @@ const EMBEDDED_DATA = {
       "ref": "https://doi.org/10.1039/C4DT00438H",
       "year": 0,
       "authors": [],
-      "description": "Interface Force Field for cement minerals",
+      "description": "Interface Force Field: C3S, C3A, silica, calcium sulfates, portlandite and tobermorite (12-6 LJ)",
+      "tags": []
+    },
+    "joung2008": {
+      "name": "Joung-Cheatham 2008",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "year": 0,
+      "authors": [],
+      "description": "Monovalent ion parameters specific to TIP3P, TIP4P-Ew and SPC/E water",
+      "tags": []
+    },
+    "madrid2019": {
+      "name": "Madrid-2019",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "year": 0,
+      "authors": [],
+      "description": "Scaled-charge (0.85) ion and sulfate force field for TIP4P/2005 water",
       "tags": []
     },
     "raiteri2015": {
@@ -462,12 +510,20 @@ const EMBEDDED_DATA = {
       "description": "Force field parameters for calcite-water interface. All energies converted to kcal/mol.",
       "tags": []
     },
+    "sadat2016": {
+      "name": "Sadat 2016",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "year": 0,
+      "authors": [],
+      "description": "Force field for geopolymer/metakaolin",
+      "tags": []
+    },
     "solcon": {
       "name": "SolCon",
       "ref": "https://doi.org/10.1098/rsta.2022.0250",
       "year": 0,
       "authors": [],
-      "description": "Force field for calcium carbonate (solubility-consistent)",
+      "description": "Solubility-consistent force field for aqueous alkaline-earth carbonates (Armstrong et al. 2023)",
       "tags": []
     },
     "spc": {
@@ -494,20 +550,12 @@ const EMBEDDED_DATA = {
       "description": "Simple point charge water model (extended)",
       "tags": []
     },
-    "sperinck": {
-      "name": "Sperinck 2016",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "year": 0,
-      "authors": [],
-      "description": "Force field for geopolymer/metakaolin",
-      "tags": []
-    },
     "tip3p": {
-      "name": "TIP3P",
+      "name": "TIP3P (Price & Brooks 2004)",
       "ref": "https://doi.org/10.1063/1.1808117",
       "year": 0,
       "authors": [],
-      "description": "Transferable Intermolecular Potential 3-point water model",
+      "description": "TIP3P water model modified for Ewald summation (Price & Brooks 2004)",
       "tags": []
     },
     "tip4p2005": {
@@ -526,8 +574,8 @@ const EMBEDDED_DATA = {
       "description": "Transferable Intermolecular Potential 4-point water model (Ewald)",
       "tags": []
     },
-    "wang2008": {
-      "name": "Wang 2008",
+    "wang2009": {
+      "name": "Wang & Becker 2009",
       "ref": "https://doi.org/10.2138/am.2009.2939",
       "year": 0,
       "authors": [],
@@ -1275,6 +1323,116 @@ const EMBEDDED_DATA = {
       "environment": "",
       "ref": "",
       "mass": 15.9994
+    },
+    {
+      "type": "hw",
+      "full_type": "afff.hw",
+      "element": "H",
+      "charge": 0.4238,
+      "model": "afff",
+      "environment": "water hydrogen (SPC/E)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "ow",
+      "full_type": "afff.ow",
+      "element": "O",
+      "charge": -0.8476,
+      "model": "afff",
+      "environment": "water oxygen (SPC/E)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "hh",
+      "full_type": "afff.hh",
+      "element": "H",
+      "charge": 0.4238,
+      "model": "afff",
+      "environment": "hydroxyl hydrogen",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "oh_aft",
+      "full_type": "afff.oh_aft",
+      "element": "O",
+      "charge": -0.8988,
+      "model": "afff",
+      "environment": "hydroxyl oxygen in ettringite (AFt)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "oh_afm",
+      "full_type": "afff.oh_afm",
+      "element": "O",
+      "charge": -0.965467,
+      "model": "afff",
+      "environment": "hydroxyl oxygen in monosulfoaluminate (AFm)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "oh_c3a",
+      "full_type": "afff.oh_c3a",
+      "element": "O",
+      "charge": -1.15,
+      "model": "afff",
+      "environment": "hydroxyl oxygen in tricalcium aluminate",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "os",
+      "full_type": "afff.os",
+      "element": "O",
+      "charge": -1.0,
+      "model": "afff",
+      "environment": "sulfate oxygen",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "s",
+      "full_type": "afff.s",
+      "element": "S",
+      "charge": 2.0,
+      "model": "afff",
+      "environment": "sulfur in sulfate",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "al",
+      "full_type": "afff.al",
+      "element": "Al",
+      "charge": 1.05,
+      "model": "afff",
+      "environment": "aluminium (AFt, AFm, C3A)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "ca",
+      "full_type": "afff.ca",
+      "element": "Ca",
+      "charge": 1.6,
+      "model": "afff",
+      "environment": "calcium in AFt and C3A",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
+    },
+    {
+      "type": "ca_afm",
+      "full_type": "afff.ca_afm",
+      "element": "Ca",
+      "charge": 1.6,
+      "model": "afff",
+      "environment": "calcium in AFm",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106126",
+      "mass": null
     },
     {
       "type": "AC1",
@@ -3112,7 +3270,7 @@ const EMBEDDED_DATA = {
       "element": "O",
       "charge": -1.05,
       "model": "clayff",
-      "environment": "bridging oxygen in csh",
+      "environment": "bridging oxygen",
       "ref": "https://doi.org/10.1021/jp0363287",
       "mass": null
     },
@@ -3177,33 +3335,273 @@ const EMBEDDED_DATA = {
       "mass": null
     },
     {
+      "type": "st",
+      "full_type": "clayff_moh.st",
+      "element": "Si",
+      "charge": 2.1,
+      "model": "clayff_moh",
+      "environment": "tetrahedral silicon",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "ao",
+      "full_type": "clayff_moh.ao",
+      "element": "Al",
+      "charge": 1.575,
+      "model": "clayff_moh",
+      "environment": "octahedral aluminium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "at",
+      "full_type": "clayff_moh.at",
+      "element": "Al",
+      "charge": 1.575,
+      "model": "clayff_moh",
+      "environment": "tetrahedral aluminium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "mgo",
+      "full_type": "clayff_moh.mgo",
+      "element": "Mg",
+      "charge": 1.36,
+      "model": "clayff_moh",
+      "environment": "octahedral magnesium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "mgh",
+      "full_type": "clayff_moh.mgh",
+      "element": "Mg",
+      "charge": 1.05,
+      "model": "clayff_moh",
+      "environment": "hydroxide magnesium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "cao",
+      "full_type": "clayff_moh.cao",
+      "element": "Ca",
+      "charge": 1.36,
+      "model": "clayff_moh",
+      "environment": "octahedral calcium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "cah",
+      "full_type": "clayff_moh.cah",
+      "element": "Ca",
+      "charge": 1.05,
+      "model": "clayff_moh",
+      "environment": "hydroxide calcium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "feo",
+      "full_type": "clayff_moh.feo",
+      "element": "Fe",
+      "charge": 1.575,
+      "model": "clayff_moh",
+      "environment": "octahedral iron",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "lio",
+      "full_type": "clayff_moh.lio",
+      "element": "Li",
+      "charge": 0.525,
+      "model": "clayff_moh",
+      "environment": "octahedral lithium",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "ob",
+      "full_type": "clayff_moh.ob",
+      "element": "O",
+      "charge": -1.05,
+      "model": "clayff_moh",
+      "environment": "bridging oxygen",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "obos",
+      "full_type": "clayff_moh.obos",
+      "element": "O",
+      "charge": -1.1808,
+      "model": "clayff_moh",
+      "environment": "bridging oxygen with octahedral substitution",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "obts",
+      "full_type": "clayff_moh.obts",
+      "element": "O",
+      "charge": -1.1688,
+      "model": "clayff_moh",
+      "environment": "bridging oxygen with tetrahedral substitution",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "obss",
+      "full_type": "clayff_moh.obss",
+      "element": "O",
+      "charge": -1.2996,
+      "model": "clayff_moh",
+      "environment": "bridging oxygen with double substitution",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "oh",
+      "full_type": "clayff_moh.oh",
+      "element": "O",
+      "charge": -0.95,
+      "model": "clayff_moh",
+      "environment": "hydroxyl oxygen (dioctahedral Morse O-H)",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "ohs",
+      "full_type": "clayff_moh.ohs",
+      "element": "O",
+      "charge": -1.0808,
+      "model": "clayff_moh",
+      "environment": "hydroxyl oxygen with substitution (trioctahedral Morse O-H)",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "ho",
+      "full_type": "clayff_moh.ho",
+      "element": "H",
+      "charge": 0.425,
+      "model": "clayff_moh",
+      "environment": "hydroxyl hydrogen",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "o*",
+      "full_type": "clayff_moh.o*",
+      "element": "O",
+      "charge": -0.82,
+      "model": "clayff_moh",
+      "environment": "SPC water oxygen",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "h*",
+      "full_type": "clayff_moh.h*",
+      "element": "H",
+      "charge": 0.41,
+      "model": "clayff_moh",
+      "environment": "SPC water hydrogen",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "na",
+      "full_type": "clayff_moh.na",
+      "element": "Na",
+      "charge": 1.0,
+      "model": "clayff_moh",
+      "environment": "aqueous sodium ion",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "k",
+      "full_type": "clayff_moh.k",
+      "element": "K",
+      "charge": 1.0,
+      "model": "clayff_moh",
+      "environment": "aqueous potassium ion",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "cs",
+      "full_type": "clayff_moh.cs",
+      "element": "Cs",
+      "charge": 1.0,
+      "model": "clayff_moh",
+      "environment": "aqueous cesium ion",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "ca",
+      "full_type": "clayff_moh.ca",
+      "element": "Ca",
+      "charge": 2.0,
+      "model": "clayff_moh",
+      "environment": "aqueous calcium ion",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "ba",
+      "full_type": "clayff_moh.ba",
+      "element": "Ba",
+      "charge": 2.0,
+      "model": "clayff_moh",
+      "environment": "aqueous barium ion",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
+      "type": "cl",
+      "full_type": "clayff_moh.cl",
+      "element": "Cl",
+      "charge": -1.0,
+      "model": "clayff_moh",
+      "environment": "aqueous chloride ion",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600",
+      "mass": null
+    },
+    {
       "type": "ca",
       "full_type": "cshff2014.ca",
       "element": "Ca",
-      "charge": 1.435466,
+      "charge": 1.43,
       "model": "cshff2014",
       "environment": "intralayer calcium in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
       "type": "cw",
       "full_type": "cshff2014.cw",
       "element": "Ca",
-      "charge": 1.705529,
+      "charge": 1.7,
       "model": "cshff2014",
       "environment": "interlayer calcium in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
       "type": "h",
       "full_type": "cshff2014.h",
       "element": "H",
-      "charge": 0.425,
+      "charge": 0.29,
       "model": "cshff2014",
-      "environment": "hydrogen in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "environment": "hydroxyl hydrogen in csh",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
@@ -3220,20 +3618,20 @@ const EMBEDDED_DATA = {
       "type": "o",
       "full_type": "cshff2014.o",
       "element": "O",
-      "charge": -1.0,
+      "charge": -1.14,
       "model": "cshff2014",
-      "environment": "oxygen in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "environment": "silicate oxygen in csh (CSH-FF O)",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
       "type": "ob",
       "full_type": "cshff2014.ob",
       "element": "O",
-      "charge": -1.14,
+      "charge": -1.0,
       "model": "cshff2014",
-      "environment": "bridging oxygen in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "environment": "bridging oxygen in csh (CSH-FF Oh parameters)",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
@@ -3242,8 +3640,8 @@ const EMBEDDED_DATA = {
       "element": "O",
       "charge": -1.0,
       "model": "cshff2014",
-      "environment": "hydroxyl oxygen in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "environment": "hydroxyl oxygen in csh (CSH-FF Oh)",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
@@ -3260,10 +3658,10 @@ const EMBEDDED_DATA = {
       "type": "si",
       "full_type": "cshff2014.si",
       "element": "Si",
-      "charge": 1.722357,
+      "charge": 1.72,
       "model": "cshff2014",
       "environment": "silicate silicium in csh",
-      "ref": "https://doi.org/10.1038/ncomms5960",
+      "ref": "https://doi.org/10.1039/c0cp00516a",
       "mass": null
     },
     {
@@ -5037,6 +5435,186 @@ const EMBEDDED_DATA = {
       "mass": 14.9994
     },
     {
+      "type": "ca",
+      "full_type": "duque2018.ca",
+      "element": "Ca",
+      "charge": 1.43,
+      "model": "duque2018",
+      "environment": "intralayer calcium in csh (Ca1)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "cw",
+      "full_type": "duque2018.cw",
+      "element": "Ca",
+      "charge": 2.0,
+      "model": "duque2018",
+      "environment": "interlayer calcium in csh (Ca2)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "si",
+      "full_type": "duque2018.si",
+      "element": "Si",
+      "charge": 1.72,
+      "model": "duque2018",
+      "environment": "silicate silicon in csh",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "ob",
+      "full_type": "duque2018.ob",
+      "element": "O",
+      "charge": -1.14,
+      "model": "duque2018",
+      "environment": "bridging oxygen Si-O-Si in csh (O1), before neutralization",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "osih",
+      "full_type": "duque2018.osih",
+      "element": "O",
+      "charge": -1.0,
+      "model": "duque2018",
+      "environment": "silanol oxygen Si-O-H in csh (O2), before neutralization",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "osi",
+      "full_type": "duque2018.osi",
+      "element": "O",
+      "charge": -1.0,
+      "model": "duque2018",
+      "environment": "non-bridging silicate oxygen in csh (O3), before neutralization",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "hsi",
+      "full_type": "duque2018.hsi",
+      "element": "H",
+      "charge": 0.29,
+      "model": "duque2018",
+      "environment": "silanol hydrogen in csh",
+      "ref": "https://doi.org/10.1016/j.cemconres.2025.108053",
+      "mass": null
+    },
+    {
+      "type": "oh",
+      "full_type": "duque2018.oh",
+      "element": "O",
+      "charge": -0.95,
+      "model": "duque2018",
+      "environment": "hydroxide oxygen Ca-O-H (O5)",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "hh",
+      "full_type": "duque2018.hh",
+      "element": "H",
+      "charge": 0.425,
+      "model": "duque2018",
+      "environment": "hydroxide hydrogen",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "ow",
+      "full_type": "duque2018.ow",
+      "element": "O",
+      "charge": -0.82,
+      "model": "duque2018",
+      "environment": "water oxygen, flexible SPC (O6)",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "hw",
+      "full_type": "duque2018.hw",
+      "element": "H",
+      "charge": 0.41,
+      "model": "duque2018",
+      "environment": "water hydrogen, flexible SPC",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "na",
+      "full_type": "duque2018.na",
+      "element": "Na",
+      "charge": 1.0,
+      "model": "duque2018",
+      "environment": "aqueous sodium ion",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "cl",
+      "full_type": "duque2018.cl",
+      "element": "Cl",
+      "charge": -1.0,
+      "model": "duque2018",
+      "environment": "aqueous chloride ion",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "cs",
+      "full_type": "duque2018.cs",
+      "element": "Cs",
+      "charge": 1.0,
+      "model": "duque2018",
+      "environment": "aqueous cesium ion",
+      "ref": "https://doi.org/10.1021/jp0363287",
+      "mass": null
+    },
+    {
+      "type": "si",
+      "full_type": "freitas2015.si",
+      "element": "Si",
+      "charge": 2.4,
+      "model": "freitas2015",
+      "environment": "silicon in clinker phases / CAS glasses",
+      "ref": "https://doi.org/10.1039/c5cp02823j",
+      "mass": null
+    },
+    {
+      "type": "ca",
+      "full_type": "freitas2015.ca",
+      "element": "Ca",
+      "charge": 1.2,
+      "model": "freitas2015",
+      "environment": "calcium in clinker phases / CAS glasses",
+      "ref": "https://doi.org/10.1039/c5cp02823j",
+      "mass": null
+    },
+    {
+      "type": "al",
+      "full_type": "freitas2015.al",
+      "element": "Al",
+      "charge": 1.8,
+      "model": "freitas2015",
+      "environment": "aluminium in clinker phases / CAS glasses",
+      "ref": "https://doi.org/10.1039/c5cp02823j",
+      "mass": null
+    },
+    {
+      "type": "o",
+      "full_type": "freitas2015.o",
+      "element": "O",
+      "charge": -1.2,
+      "model": "freitas2015",
+      "environment": "oxygen in clinker phases / CAS glasses",
+      "ref": "https://doi.org/10.1039/c5cp02823j",
+      "mass": null
+    },
+    {
       "type": "alsm",
       "full_type": "guillot2007.alsm",
       "element": "Al",
@@ -5300,7 +5878,7 @@ const EMBEDDED_DATA = {
       "type": "o_silica_bulk",
       "full_type": "iff.o_silica_bulk",
       "element": "O",
-      "charge": -0.675,
+      "charge": -0.55,
       "model": "iff",
       "environment": "oxygen atom in silica (bulk)",
       "ref": "https://doi.org/10.1021/cm500365c",
@@ -5310,7 +5888,7 @@ const EMBEDDED_DATA = {
       "type": "o_silica_silanol",
       "full_type": "iff.o_silica_silanol",
       "element": "O",
-      "charge": -0.55,
+      "charge": -0.675,
       "model": "iff",
       "environment": "oxygen atom in silica (silanol)",
       "ref": "https://doi.org/10.1021/cm500365c",
@@ -5334,6 +5912,556 @@ const EMBEDDED_DATA = {
       "model": "iff",
       "environment": "silicium atom in silica",
       "ref": "https://doi.org/10.1021/cm500365c",
+      "mass": null
+    },
+    {
+      "type": "ca_sulfate",
+      "full_type": "iff.ca_sulfate",
+      "element": "Ca",
+      "charge": 1.7,
+      "model": "iff",
+      "environment": "calcium in calcium sulfates",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262",
+      "mass": null
+    },
+    {
+      "type": "s_sulfate",
+      "full_type": "iff.s_sulfate",
+      "element": "S",
+      "charge": 0.5,
+      "model": "iff",
+      "environment": "sulfur in sulfate ion (calcium sulfates)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262",
+      "mass": null
+    },
+    {
+      "type": "o_sulfate",
+      "full_type": "iff.o_sulfate",
+      "element": "O",
+      "charge": -0.55,
+      "model": "iff",
+      "environment": "oxygen in sulfate ion (calcium sulfates)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262",
+      "mass": null
+    },
+    {
+      "type": "ow_sulfate",
+      "full_type": "iff.ow_sulfate",
+      "element": "O",
+      "charge": -0.82,
+      "model": "iff",
+      "environment": "water oxygen in calcium sulfate hydrates (flexible SPC)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262",
+      "mass": null
+    },
+    {
+      "type": "hw_sulfate",
+      "full_type": "iff.hw_sulfate",
+      "element": "H",
+      "charge": 0.41,
+      "model": "iff",
+      "environment": "water hydrogen in calcium sulfate hydrates (flexible SPC)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262",
+      "mass": null
+    },
+    {
+      "type": "cax",
+      "full_type": "iff.cax",
+      "element": "Ca",
+      "charge": 1.7,
+      "model": "iff",
+      "environment": "calcium in portlandite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "ox",
+      "full_type": "iff.ox",
+      "element": "O",
+      "charge": -1.05,
+      "model": "iff",
+      "environment": "hydroxide oxygen in portlandite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "hox",
+      "full_type": "iff.hox",
+      "element": "H",
+      "charge": 0.2,
+      "model": "iff",
+      "environment": "hydroxide hydrogen in portlandite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "casl",
+      "full_type": "iff.casl",
+      "element": "Ca",
+      "charge": 1.7,
+      "model": "iff",
+      "environment": "interlayer calcium in tobermorite 14 A",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "cat",
+      "full_type": "iff.cat",
+      "element": "Ca",
+      "charge": 1.5,
+      "model": "iff",
+      "environment": "intralayer calcium in tobermorite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "sc2",
+      "full_type": "iff.sc2",
+      "element": "Si",
+      "charge": 1.0,
+      "model": "iff",
+      "environment": "silicon in tobermorite (bulk)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "sc3",
+      "full_type": "iff.sc3",
+      "element": "Si",
+      "charge": 1.0,
+      "model": "iff",
+      "environment": "silicon in tobermorite (with silanol)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "oc12",
+      "full_type": "iff.oc12",
+      "element": "O",
+      "charge": -0.58,
+      "model": "iff",
+      "environment": "bridging oxygen in tobermorite (14 A; -0.56 in 11 A)",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "oc13",
+      "full_type": "iff.oc13",
+      "element": "O",
+      "charge": -0.94,
+      "model": "iff",
+      "environment": "apical silicate oxygen in tobermorite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "oc22",
+      "full_type": "iff.oc22",
+      "element": "O",
+      "charge": -1.08,
+      "model": "iff",
+      "environment": "apical interlayer silicate oxygen in tobermorite 14 A",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "ocx",
+      "full_type": "iff.ocx",
+      "element": "O",
+      "charge": -0.58,
+      "model": "iff",
+      "environment": "interlayer bridging oxygen in tobermorite 11 A",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "oc14",
+      "full_type": "iff.oc14",
+      "element": "O",
+      "charge": -0.67,
+      "model": "iff",
+      "environment": "silanol oxygen in tobermorite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "hoy",
+      "full_type": "iff.hoy",
+      "element": "H",
+      "charge": 0.4,
+      "model": "iff",
+      "environment": "silanol hydrogen in tobermorite",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003",
+      "mass": null
+    },
+    {
+      "type": "li_tip3p",
+      "full_type": "joung2008.li_tip3p",
+      "element": "Li",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Li ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "li_tip4pew",
+      "full_type": "joung2008.li_tip4pew",
+      "element": "Li",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Li ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "li_spce",
+      "full_type": "joung2008.li_spce",
+      "element": "Li",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Li ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "na_tip3p",
+      "full_type": "joung2008.na_tip3p",
+      "element": "Na",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Na ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "na_tip4pew",
+      "full_type": "joung2008.na_tip4pew",
+      "element": "Na",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Na ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "na_spce",
+      "full_type": "joung2008.na_spce",
+      "element": "Na",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Na ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "k_tip3p",
+      "full_type": "joung2008.k_tip3p",
+      "element": "K",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous K ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "k_tip4pew",
+      "full_type": "joung2008.k_tip4pew",
+      "element": "K",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous K ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "k_spce",
+      "full_type": "joung2008.k_spce",
+      "element": "K",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous K ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "rb_tip3p",
+      "full_type": "joung2008.rb_tip3p",
+      "element": "Rb",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Rb ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "rb_tip4pew",
+      "full_type": "joung2008.rb_tip4pew",
+      "element": "Rb",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Rb ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "rb_spce",
+      "full_type": "joung2008.rb_spce",
+      "element": "Rb",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Rb ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "cs_tip3p",
+      "full_type": "joung2008.cs_tip3p",
+      "element": "Cs",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Cs ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "cs_tip4pew",
+      "full_type": "joung2008.cs_tip4pew",
+      "element": "Cs",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Cs ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "cs_spce",
+      "full_type": "joung2008.cs_spce",
+      "element": "Cs",
+      "charge": 1.0,
+      "model": "joung2008",
+      "environment": "aqueous Cs ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "f_tip3p",
+      "full_type": "joung2008.f_tip3p",
+      "element": "F",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous F ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "f_tip4pew",
+      "full_type": "joung2008.f_tip4pew",
+      "element": "F",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous F ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "f_spce",
+      "full_type": "joung2008.f_spce",
+      "element": "F",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous F ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "cl_tip3p",
+      "full_type": "joung2008.cl_tip3p",
+      "element": "Cl",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous Cl ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "cl_tip4pew",
+      "full_type": "joung2008.cl_tip4pew",
+      "element": "Cl",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous Cl ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "cl_spce",
+      "full_type": "joung2008.cl_spce",
+      "element": "Cl",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous Cl ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "br_tip3p",
+      "full_type": "joung2008.br_tip3p",
+      "element": "Br",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous Br ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "br_tip4pew",
+      "full_type": "joung2008.br_tip4pew",
+      "element": "Br",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous Br ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "br_spce",
+      "full_type": "joung2008.br_spce",
+      "element": "Br",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous Br ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "i_tip3p",
+      "full_type": "joung2008.i_tip3p",
+      "element": "I",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous I ion for TIP3P water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "i_tip4pew",
+      "full_type": "joung2008.i_tip4pew",
+      "element": "I",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous I ion for TIP4P-Ew water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "i_spce",
+      "full_type": "joung2008.i_spce",
+      "element": "I",
+      "charge": -1.0,
+      "model": "joung2008",
+      "environment": "aqueous I ion for SPC/E water",
+      "ref": "https://doi.org/10.1021/jp8001614",
+      "mass": null
+    },
+    {
+      "type": "li",
+      "full_type": "madrid2019.li",
+      "element": "Li",
+      "charge": 0.85,
+      "model": "madrid2019",
+      "environment": "lithium ion",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "na",
+      "full_type": "madrid2019.na",
+      "element": "Na",
+      "charge": 0.85,
+      "model": "madrid2019",
+      "environment": "sodium ion",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "k",
+      "full_type": "madrid2019.k",
+      "element": "K",
+      "charge": 0.85,
+      "model": "madrid2019",
+      "environment": "potassium ion",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "mg",
+      "full_type": "madrid2019.mg",
+      "element": "Mg",
+      "charge": 1.7,
+      "model": "madrid2019",
+      "environment": "magnesium ion",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "ca",
+      "full_type": "madrid2019.ca",
+      "element": "Ca",
+      "charge": 1.7,
+      "model": "madrid2019",
+      "environment": "calcium ion",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "cl",
+      "full_type": "madrid2019.cl",
+      "element": "Cl",
+      "charge": -0.85,
+      "model": "madrid2019",
+      "environment": "chloride ion",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "s",
+      "full_type": "madrid2019.s",
+      "element": "S",
+      "charge": 0.9,
+      "model": "madrid2019",
+      "environment": "sulfur in sulfate",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "os",
+      "full_type": "madrid2019.os",
+      "element": "O",
+      "charge": -0.65,
+      "model": "madrid2019",
+      "environment": "oxygen in sulfate",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "ow",
+      "full_type": "madrid2019.ow",
+      "element": "O",
+      "charge": -1.1128,
+      "model": "madrid2019",
+      "environment": "water oxygen (TIP4P/2005, charge on the M site)",
+      "ref": "https://doi.org/10.1063/1.5121392",
+      "mass": null
+    },
+    {
+      "type": "hw",
+      "full_type": "madrid2019.hw",
+      "element": "H",
+      "charge": 0.5564,
+      "model": "madrid2019",
+      "environment": "water hydrogen (TIP4P/2005)",
+      "ref": "https://doi.org/10.1063/1.5121392",
       "mass": null
     },
     {
@@ -5417,33 +6545,163 @@ const EMBEDDED_DATA = {
       "mass": null
     },
     {
-      "type": "ca_solcon",
-      "full_type": "solcon.ca_solcon",
+      "type": "algp",
+      "full_type": "sadat2016.algp",
+      "element": "Al",
+      "charge": 1.8,
+      "model": "sadat2016",
+      "environment": "aluminium in geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "cagp",
+      "full_type": "sadat2016.cagp",
+      "element": "Ca",
+      "charge": 1.2,
+      "model": "sadat2016",
+      "environment": "geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "hwgp",
+      "full_type": "sadat2016.hwgp",
+      "element": "H",
+      "charge": 0.41,
+      "model": "sadat2016",
+      "environment": "fw/spc water for geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "kgp",
+      "full_type": "sadat2016.kgp",
+      "element": "K",
+      "charge": 0.6,
+      "model": "sadat2016",
+      "environment": "geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "nagp",
+      "full_type": "sadat2016.nagp",
+      "element": "Na",
+      "charge": 0.6,
+      "model": "sadat2016",
+      "environment": "geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "ogp",
+      "full_type": "sadat2016.ogp",
+      "element": "O",
+      "charge": -1.2,
+      "model": "sadat2016",
+      "environment": "geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "owgp",
+      "full_type": "sadat2016.owgp",
+      "element": "O",
+      "charge": -0.82,
+      "model": "sadat2016",
+      "environment": "fw/spc water for geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "sigp",
+      "full_type": "sadat2016.sigp",
+      "element": "Si",
+      "charge": 2.4,
+      "model": "sadat2016",
+      "environment": "geopolymer/metakaolin",
+      "ref": "https://doi.org/10.1063/1.4964301",
+      "mass": null
+    },
+    {
+      "type": "Mg",
+      "full_type": "solcon.Mg",
+      "element": "Mg",
+      "charge": 2.0,
+      "model": "solcon",
+      "environment": "magnesium ion",
+      "ref": "https://doi.org/10.1098/rsta.2022.0250",
+      "mass": null
+    },
+    {
+      "type": "Ca",
+      "full_type": "solcon.Ca",
       "element": "Ca",
       "charge": 2.0,
       "model": "solcon",
-      "environment": "calcium in calcium carbonate (solubility-consistent)",
+      "environment": "calcium ion",
       "ref": "https://doi.org/10.1098/rsta.2022.0250",
       "mass": null
     },
     {
-      "type": "cc_solcon",
-      "full_type": "solcon.cc_solcon",
+      "type": "Sr",
+      "full_type": "solcon.Sr",
+      "element": "Sr",
+      "charge": 2.0,
+      "model": "solcon",
+      "environment": "strontium ion",
+      "ref": "https://doi.org/10.1098/rsta.2022.0250",
+      "mass": null
+    },
+    {
+      "type": "Ba",
+      "full_type": "solcon.Ba",
+      "element": "Ba",
+      "charge": 2.0,
+      "model": "solcon",
+      "environment": "barium ion",
+      "ref": "https://doi.org/10.1098/rsta.2022.0250",
+      "mass": null
+    },
+    {
+      "type": "Cc",
+      "full_type": "solcon.Cc",
       "element": "C",
       "charge": 1.423285,
       "model": "solcon",
-      "environment": "carbon in calcium carbonate (solubility-consistent)",
+      "environment": "carbonate carbon",
       "ref": "https://doi.org/10.1098/rsta.2022.0250",
       "mass": null
     },
     {
-      "type": "oc_solcon",
-      "full_type": "solcon.oc_solcon",
+      "type": "Oc",
+      "full_type": "solcon.Oc",
       "element": "O",
-      "charge": -1.14109,
+      "charge": -1.141095,
       "model": "solcon",
-      "environment": "oxygen in calcium carbonate (solubility-consistent)",
+      "environment": "carbonate oxygen",
       "ref": "https://doi.org/10.1098/rsta.2022.0250",
+      "mass": null
+    },
+    {
+      "type": "Ow",
+      "full_type": "solcon.Ow",
+      "element": "O",
+      "charge": -0.82,
+      "model": "solcon",
+      "environment": "water oxygen, SPC/Fw",
+      "ref": "https://doi.org/10.1063/1.2136877",
+      "mass": null
+    },
+    {
+      "type": "Hw",
+      "full_type": "solcon.Hw",
+      "element": "H",
+      "charge": 0.41,
+      "model": "solcon",
+      "environment": "water hydrogen, SPC/Fw",
+      "ref": "https://doi.org/10.1063/1.2136877",
       "mass": null
     },
     {
@@ -5487,6 +6745,16 @@ const EMBEDDED_DATA = {
       "mass": null
     },
     {
+      "type": "Ow",
+      "full_type": "spc_fw.Ow",
+      "element": "O",
+      "charge": -0.82,
+      "model": "spc_fw",
+      "environment": "",
+      "ref": "http://dx.doi.org/10.1063/1.2136877",
+      "mass": null
+    },
+    {
       "type": "Hw",
       "full_type": "spc_fw.Hw",
       "element": "H",
@@ -5514,86 +6782,6 @@ const EMBEDDED_DATA = {
       "model": "spce",
       "environment": "water oxygen",
       "ref": "https://doi.org/10.1021/j100308a038",
-      "mass": null
-    },
-    {
-      "type": "algp",
-      "full_type": "sperinck.algp",
-      "element": "Al",
-      "charge": 1.8,
-      "model": "sperinck",
-      "environment": "aluminium in geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "cagp",
-      "full_type": "sperinck.cagp",
-      "element": "Ca",
-      "charge": 1.2,
-      "model": "sperinck",
-      "environment": "geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "hwgp",
-      "full_type": "sperinck.hwgp",
-      "element": "H",
-      "charge": 0.41,
-      "model": "sperinck",
-      "environment": "fw/spc water for geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "kgp",
-      "full_type": "sperinck.kgp",
-      "element": "K",
-      "charge": 0.6,
-      "model": "sperinck",
-      "environment": "geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "nagp",
-      "full_type": "sperinck.nagp",
-      "element": "Na",
-      "charge": 0.6,
-      "model": "sperinck",
-      "environment": "geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "ogp",
-      "full_type": "sperinck.ogp",
-      "element": "O",
-      "charge": -1.2,
-      "model": "sperinck",
-      "environment": "geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "owgp",
-      "full_type": "sperinck.owgp",
-      "element": "O",
-      "charge": -0.82,
-      "model": "sperinck",
-      "environment": "fw/spc water for geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
-      "mass": null
-    },
-    {
-      "type": "sigp",
-      "full_type": "sperinck.sigp",
-      "element": "Si",
-      "charge": 2.4,
-      "model": "sperinck",
-      "environment": "geopolymer/metakaolin",
-      "ref": "https://doi.org/10.1063/1.4964301",
       "mass": null
     },
     {
@@ -5640,7 +6828,7 @@ const EMBEDDED_DATA = {
       "type": "htp4p",
       "full_type": "tip4p_ew.htp4p",
       "element": "H",
-      "charge": 0.52,
+      "charge": 0.52422,
       "model": "tip4p_ew",
       "environment": "water hydrogen",
       "ref": "https://doi.org/10.1063/1.1683075",
@@ -5650,7 +6838,7 @@ const EMBEDDED_DATA = {
       "type": "otp4p",
       "full_type": "tip4p_ew.otp4p",
       "element": "O",
-      "charge": -1.04,
+      "charge": -1.04844,
       "model": "tip4p_ew",
       "environment": "water oxygen",
       "ref": "https://doi.org/10.1063/1.1683075",
@@ -5658,30 +6846,30 @@ const EMBEDDED_DATA = {
     },
     {
       "type": "cac",
-      "full_type": "wang2008.cac",
+      "full_type": "wang2009.cac",
       "element": "Ca",
       "charge": 2.0,
-      "model": "wang2008",
+      "model": "wang2009",
       "environment": "calcium in vaterite",
       "ref": "https://doi.org/10.2138/am.2009.2939",
       "mass": null
     },
     {
       "type": "ccc",
-      "full_type": "wang2008.ccc",
+      "full_type": "wang2009.ccc",
       "element": "C",
       "charge": 1.123,
-      "model": "wang2008",
+      "model": "wang2009",
       "environment": "carbon in vaterite",
       "ref": "https://doi.org/10.2138/am.2009.2939",
       "mass": null
     },
     {
       "type": "occ",
-      "full_type": "wang2008.occ",
+      "full_type": "wang2009.occ",
       "element": "O",
       "charge": -1.041,
-      "model": "wang2008",
+      "model": "wang2009",
       "environment": "oxygen in vaterite",
       "ref": "https://doi.org/10.2138/am.2009.2939",
       "mass": null
@@ -25569,6 +26757,94 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "hw",
+      "type 2": "hw",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "ow",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.155354,
+      "sigma (A)": 3.166,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "hh",
+      "type 2": "hh",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "oh_aft",
+      "type 2": "oh_aft",
+      "epsilon (kcal/mol)": 0.155354,
+      "sigma (A)": 3.166,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "oh_afm",
+      "type 2": "oh_afm",
+      "epsilon (kcal/mol)": 0.155354,
+      "sigma (A)": 3.1,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "oh_c3a",
+      "type 2": "oh_c3a",
+      "epsilon (kcal/mol)": 0.155354,
+      "sigma (A)": 3.1,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "os",
+      "type 2": "os",
+      "epsilon (kcal/mol)": 0.200048,
+      "sigma (A)": 3.15,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "s",
+      "type 2": "s",
+      "epsilon (kcal/mol)": 0.25,
+      "sigma (A)": 0.1,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "al",
+      "type 2": "al",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 4.27,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "ca",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 5.56,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "ca_afm",
+      "type 2": "ca_afm",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 5.1,
+      "model": "afff",
+      "ref": ""
+    },
+    {
       "type 1": "C",
       "type 2": "C",
       "epsilon (kcal/mol)": 0.11,
@@ -27004,7 +28280,7 @@ const EMBEDDED_DATA = {
       "type 1": "mgh",
       "type 2": "mgh",
       "epsilon (kcal/mol)": 9.0298e-07,
-      "sigma (A)": 5.256302437028,
+      "sigma (A)": 5.26432052549126,
       "model": "clayff",
       "ref": ""
     },
@@ -27012,7 +28288,7 @@ const EMBEDDED_DATA = {
       "type 1": "mgo",
       "type 2": "mgo",
       "epsilon (kcal/mol)": 9.0298e-07,
-      "sigma (A)": 5.256302437028,
+      "sigma (A)": 5.26432052549126,
       "model": "clayff",
       "ref": ""
     },
@@ -27073,11 +28349,211 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "ohs",
+      "type 2": "ohs",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.16554132529625,
+      "model": "clayff",
+      "ref": ""
+    },
+    {
       "type 1": "st",
       "type 2": "st",
       "epsilon (kcal/mol)": 1.8405e-06,
       "sigma (A)": 3.30202700891535,
       "model": "clayff",
+      "ref": ""
+    },
+    {
+      "type 1": "st",
+      "type 2": "st",
+      "epsilon (kcal/mol)": 1.8405e-06,
+      "sigma (A)": 3.302,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ao",
+      "type 2": "ao",
+      "epsilon (kcal/mol)": 1.3298e-06,
+      "sigma (A)": 4.2712,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "at",
+      "type 2": "at",
+      "epsilon (kcal/mol)": 1.8405e-06,
+      "sigma (A)": 3.302,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "mgo",
+      "type 2": "mgo",
+      "epsilon (kcal/mol)": 9.0298e-07,
+      "sigma (A)": 5.2643,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "mgh",
+      "type 2": "mgh",
+      "epsilon (kcal/mol)": 9.0298e-07,
+      "sigma (A)": 5.2643,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "cao",
+      "type 2": "cao",
+      "epsilon (kcal/mol)": 5.0298e-06,
+      "sigma (A)": 5.5667,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "cah",
+      "type 2": "cah",
+      "epsilon (kcal/mol)": 5.0298e-06,
+      "sigma (A)": 5.5667,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "feo",
+      "type 2": "feo",
+      "epsilon (kcal/mol)": 9.0298e-07,
+      "sigma (A)": 4.9062,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "lio",
+      "type 2": "lio",
+      "epsilon (kcal/mol)": 9.0298e-07,
+      "sigma (A)": 4.2101,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ob",
+      "type 2": "ob",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "obos",
+      "type 2": "obos",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "obts",
+      "type 2": "obts",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "obss",
+      "type 2": "obss",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "oh",
+      "type 2": "oh",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ohs",
+      "type 2": "ohs",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ho",
+      "type 2": "ho",
+      "epsilon (kcal/mol)": 0.0,
+      "sigma (A)": 0.0,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "o*",
+      "type 2": "o*",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.1655,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "h*",
+      "type 2": "h*",
+      "epsilon (kcal/mol)": 0.0,
+      "sigma (A)": 0.0,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "na",
+      "type 2": "na",
+      "epsilon (kcal/mol)": 0.1301,
+      "sigma (A)": 2.35,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "k",
+      "type 2": "k",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 3.334,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "cs",
+      "type 2": "cs",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 3.831,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "ca",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 2.872,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ba",
+      "type 2": "ba",
+      "epsilon (kcal/mol)": 0.047,
+      "sigma (A)": 3.8166,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "cl",
+      "epsilon (kcal/mol)": 0.1001,
+      "sigma (A)": 4.4,
+      "model": "clayff_moh",
       "ref": ""
     },
     {
@@ -27849,6 +29325,158 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "ca",
+      "type 2": "ca",
+      "epsilon (kcal/mol)": 5.0298e-06,
+      "sigma (A)": 5.5666915504281,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "cw",
+      "type 2": "cw",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 2.87199019766901,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "si",
+      "type 2": "si",
+      "epsilon (kcal/mol)": 1.8405e-06,
+      "sigma (A)": 3.30202700891535,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "ob",
+      "type 2": "ob",
+      "epsilon (kcal/mol)": 0.0618,
+      "sigma (A)": 3.447778039,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "osih",
+      "type 2": "osih",
+      "epsilon (kcal/mol)": 0.0618,
+      "sigma (A)": 3.447778039,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "osi",
+      "type 2": "osi",
+      "epsilon (kcal/mol)": 1.243,
+      "sigma (A)": 2.735059065,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "hsi",
+      "type 2": "hsi",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "oh",
+      "type 2": "oh",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.16554132529625,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "hh",
+      "type 2": "hh",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "ow",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.1554,
+      "sigma (A)": 3.16554132529625,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "hw",
+      "type 2": "hw",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "na",
+      "type 2": "na",
+      "epsilon (kcal/mol)": 0.1301,
+      "sigma (A)": 2.35001263871059,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "cl",
+      "epsilon (kcal/mol)": 0.1001,
+      "sigma (A)": 4.39997058915151,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "cs",
+      "type 2": "cs",
+      "epsilon (kcal/mol)": 0.1,
+      "sigma (A)": 3.83104266774709,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "o",
+      "type 2": "si",
+      "epsilon (kcal/mol)": 26.909815,
+      "sigma (A)": 1.4988,
+      "model": "freitas2015",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "o",
+      "epsilon (kcal/mol)": 1.938008,
+      "sigma (A)": 2.4203,
+      "model": "freitas2015",
+      "ref": ""
+    },
+    {
+      "type 1": "o",
+      "type 2": "o",
+      "epsilon (kcal/mol)": 0.324462,
+      "sigma (A)": 3.2528,
+      "model": "freitas2015",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "ca",
+      "epsilon (kcal/mol)": 0.002537,
+      "sigma (A)": 4.1978,
+      "model": "freitas2015",
+      "ref": ""
+    },
+    {
+      "type 1": "al",
+      "type 2": "o",
+      "epsilon (kcal/mol)": 3.985324,
+      "sigma (A)": 1.7773,
+      "model": "freitas2015",
+      "ref": ""
+    },
+    {
       "type 1": "ac1",
       "type 2": "ac1",
       "epsilon (kcal/mol)": 0.5,
@@ -27885,6 +29513,22 @@ const EMBEDDED_DATA = {
       "type 2": "hos",
       "epsilon (kcal/mol)": 0.015,
       "sigma (A)": 0.966625109182268,
+      "model": "iff",
+      "ref": ""
+    },
+    {
+      "type 1": "hoc_c3a",
+      "type 2": "hoc_c3a",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "iff",
+      "ref": ""
+    },
+    {
+      "type 1": "hoca",
+      "type 2": "hoca",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
       "model": "iff",
       "ref": ""
     },
@@ -27961,6 +29605,598 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "si_silica",
+      "type 2": "si_silica",
+      "epsilon (kcal/mol)": 0.093,
+      "sigma (A)": 3.69722968028,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_silica_bulk",
+      "type 2": "o_silica_bulk",
+      "epsilon (kcal/mol)": 0.054,
+      "sigma (A)": 3.09141855195,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_silica_silanol",
+      "type 2": "o_silica_silanol",
+      "epsilon (kcal/mol)": 0.122,
+      "sigma (A)": 3.09141855195,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "h_silica",
+      "type 2": "h_silica",
+      "epsilon (kcal/mol)": 0.015,
+      "sigma (A)": 0.96662510918,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "ca_sulfate",
+      "type 2": "ca_sulfate",
+      "epsilon (kcal/mol)": 0.22,
+      "sigma (A)": 2.76178602624,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "s_sulfate",
+      "type 2": "s_sulfate",
+      "epsilon (kcal/mol)": 0.3,
+      "sigma (A)": 3.74177461619,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "o_sulfate",
+      "type 2": "o_sulfate",
+      "epsilon (kcal/mol)": 0.12,
+      "sigma (A)": 3.02905564168,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "ow_sulfate",
+      "type 2": "ow_sulfate",
+      "epsilon (kcal/mol)": 0.155,
+      "sigma (A)": 3.16536314555,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "hw_sulfate",
+      "type 2": "hw_sulfate",
+      "epsilon (kcal/mol)": 0.0,
+      "sigma (A)": 0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "cax",
+      "type 2": "cax",
+      "epsilon (kcal/mol)": 0.28,
+      "sigma (A)": 2.80633096214,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "ox",
+      "type 2": "ox",
+      "epsilon (kcal/mol)": 0.18,
+      "sigma (A)": 3.1626904494,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "hox",
+      "type 2": "hox",
+      "epsilon (kcal/mol)": 0.016,
+      "sigma (A)": 0.96662510918,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "casl",
+      "type 2": "casl",
+      "epsilon (kcal/mol)": 0.29,
+      "sigma (A)": 2.89542083396,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "cat",
+      "type 2": "cat",
+      "epsilon (kcal/mol)": 0.29,
+      "sigma (A)": 3.02905564168,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "sc2",
+      "type 2": "sc2",
+      "epsilon (kcal/mol)": 0.51,
+      "sigma (A)": 4.05358916754,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "sc3",
+      "type 2": "sc3",
+      "epsilon (kcal/mol)": 0.51,
+      "sigma (A)": 4.05358916754,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "oc12",
+      "epsilon (kcal/mol)": 0.16,
+      "sigma (A)": 3.02905564168,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc13",
+      "type 2": "oc13",
+      "epsilon (kcal/mol)": 0.14,
+      "sigma (A)": 2.7796040006,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc22",
+      "type 2": "oc22",
+      "epsilon (kcal/mol)": 0.19,
+      "sigma (A)": 3.38541512893,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "ocx",
+      "type 2": "ocx",
+      "epsilon (kcal/mol)": 0.16,
+      "sigma (A)": 3.02905564168,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc14",
+      "type 2": "oc14",
+      "epsilon (kcal/mol)": 0.12,
+      "sigma (A)": 3.09141855195,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "hoy",
+      "type 2": "hoy",
+      "epsilon (kcal/mol)": 0.016,
+      "sigma (A)": 0.96662510918,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "li_tip3p",
+      "type 2": "li_tip3p",
+      "epsilon (kcal/mol)": 0.0279896,
+      "sigma (A)": 1.826342,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "li_tip4pew",
+      "type 2": "li_tip4pew",
+      "epsilon (kcal/mol)": 0.1039884,
+      "sigma (A)": 1.439692,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "li_spce",
+      "type 2": "li_spce",
+      "epsilon (kcal/mol)": 0.3367344,
+      "sigma (A)": 1.409402,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "na_tip3p",
+      "type 2": "na_tip3p",
+      "epsilon (kcal/mol)": 0.0874393,
+      "sigma (A)": 2.439281,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "na_tip4pew",
+      "type 2": "na_tip4pew",
+      "epsilon (kcal/mol)": 0.1684375,
+      "sigma (A)": 2.184484,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "na_spce",
+      "type 2": "na_spce",
+      "epsilon (kcal/mol)": 0.3526418,
+      "sigma (A)": 2.159538,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "k_tip3p",
+      "type 2": "k_tip3p",
+      "epsilon (kcal/mol)": 0.1936829,
+      "sigma (A)": 3.037965,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "k_tip4pew",
+      "type 2": "k_tip4pew",
+      "epsilon (kcal/mol)": 0.2794651,
+      "sigma (A)": 2.833058,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "k_spce",
+      "type 2": "k_spce",
+      "epsilon (kcal/mol)": 0.4297054,
+      "sigma (A)": 2.838403,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "rb_tip3p",
+      "type 2": "rb_tip3p",
+      "epsilon (kcal/mol)": 0.3278219,
+      "sigma (A)": 3.230399,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "rb_tip4pew",
+      "type 2": "rb_tip4pew",
+      "epsilon (kcal/mol)": 0.4331494,
+      "sigma (A)": 3.045092,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "rb_spce",
+      "type 2": "rb_spce",
+      "epsilon (kcal/mol)": 0.4451036,
+      "sigma (A)": 3.094982,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "cs_tip3p",
+      "type 2": "cs_tip3p",
+      "epsilon (kcal/mol)": 0.4065394,
+      "sigma (A)": 3.520832,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "cs_tip4pew",
+      "type 2": "cs_tip4pew",
+      "epsilon (kcal/mol)": 0.3944318,
+      "sigma (A)": 3.364034,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "cs_spce",
+      "type 2": "cs_spce",
+      "epsilon (kcal/mol)": 0.0898565,
+      "sigma (A)": 3.601013,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "f_tip3p",
+      "type 2": "f_tip3p",
+      "epsilon (kcal/mol)": 0.003364,
+      "sigma (A)": 4.103479,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "f_tip4pew",
+      "type 2": "f_tip4pew",
+      "epsilon (kcal/mol)": 0.0015752,
+      "sigma (A)": 4.522202,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "f_spce",
+      "type 2": "f_spce",
+      "epsilon (kcal/mol)": 0.0074005,
+      "sigma (A)": 4.021517,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "cl_tip3p",
+      "type 2": "cl_tip3p",
+      "epsilon (kcal/mol)": 0.035591,
+      "sigma (A)": 4.477657,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "cl_tip4pew",
+      "type 2": "cl_tip4pew",
+      "epsilon (kcal/mol)": 0.0116615,
+      "sigma (A)": 4.917761,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "cl_spce",
+      "type 2": "cl_spce",
+      "epsilon (kcal/mol)": 0.012785,
+      "sigma (A)": 4.830453,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "br_tip3p",
+      "type 2": "br_tip3p",
+      "epsilon (kcal/mol)": 0.0586554,
+      "sigma (A)": 4.646928,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "br_tip4pew",
+      "type 2": "br_tip4pew",
+      "epsilon (kcal/mol)": 0.0303773,
+      "sigma (A)": 4.932015,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "br_spce",
+      "type 2": "br_spce",
+      "epsilon (kcal/mol)": 0.0269586,
+      "sigma (A)": 4.901725,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "i_tip3p",
+      "type 2": "i_tip3p",
+      "epsilon (kcal/mol)": 0.0536816,
+      "sigma (A)": 5.095941,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "i_tip4pew",
+      "type 2": "i_tip4pew",
+      "epsilon (kcal/mol)": 0.0417082,
+      "sigma (A)": 5.259866,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "i_spce",
+      "type 2": "i_spce",
+      "epsilon (kcal/mol)": 0.0427845,
+      "sigma (A)": 5.201067,
+      "model": "joung2008",
+      "ref": ""
+    },
+    {
+      "type 1": "li",
+      "type 2": "li",
+      "epsilon (kcal/mol)": 0.103989,
+      "sigma (A)": 1.4397,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "li",
+      "type 2": "cl",
+      "epsilon (kcal/mol)": 0.306631,
+      "sigma (A)": 2.7,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "li",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.167459,
+      "sigma (A)": 2.12,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "li",
+      "type 2": "os",
+      "epsilon (kcal/mol)": 0.192067,
+      "sigma (A)": 2.84485,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "na",
+      "type 2": "na",
+      "epsilon (kcal/mol)": 0.351902,
+      "sigma (A)": 2.21737,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "na",
+      "epsilon (kcal/mol)": 0.343904,
+      "sigma (A)": 3.00512,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "na",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.189624,
+      "sigma (A)": 2.60838,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "k",
+      "type 2": "k",
+      "epsilon (kcal/mol)": 0.474603,
+      "sigma (A)": 2.3014,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "k",
+      "epsilon (kcal/mol)": 0.334608,
+      "sigma (A)": 3.397,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "k",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.334711,
+      "sigma (A)": 2.8904,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "k",
+      "type 2": "os",
+      "epsilon (kcal/mol)": 0.308202,
+      "sigma (A)": 3.2,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "mg",
+      "type 2": "mg",
+      "epsilon (kcal/mol)": 0.872825,
+      "sigma (A)": 1.1629,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "mg",
+      "epsilon (kcal/mol)": 0.717017,
+      "sigma (A)": 3.0,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "mg",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 2.868069,
+      "sigma (A)": 1.81,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "mg",
+      "type 2": "os",
+      "epsilon (kcal/mol)": 0.656965,
+      "sigma (A)": 2.40645,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "ca",
+      "epsilon (kcal/mol)": 0.121224,
+      "sigma (A)": 2.6656,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "cl",
+      "epsilon (kcal/mol)": 0.239006,
+      "sigma (A)": 3.15,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "ca",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 1.732792,
+      "sigma (A)": 2.4,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "cl",
+      "epsilon (kcal/mol)": 0.018385,
+      "sigma (A)": 4.69906,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "cl",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.014814,
+      "sigma (A)": 4.23867,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "ow",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.185207,
+      "sigma (A)": 3.1589,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "os",
+      "type 2": "ow",
+      "epsilon (kcal/mol)": 0.150335,
+      "sigma (A)": 3.40445,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "s",
+      "type 2": "s",
+      "epsilon (kcal/mol)": 0.250167,
+      "sigma (A)": 3.55,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "os",
+      "type 2": "os",
+      "epsilon (kcal/mol)": 0.200143,
+      "sigma (A)": 3.65,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "hw",
+      "type 2": "hw",
+      "epsilon (kcal/mol)": 0,
+      "sigma (A)": 0,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
       "type 1": "Ow",
       "type 2": "Ow",
       "epsilon (kcal/mol)": 0.1554,
@@ -27998,31 +30234,63 @@ const EMBEDDED_DATA = {
       "epsilon (kcal/mol)": 0.01515,
       "sigma (A)": 3.965,
       "model": "raiteri2015",
-      "ref": "https://doi.org/10.1021/acs.jpcc.5b07532)"
+      "ref": "https://doi.org/10.1021/acs.jpcc.5b07532"
     },
     {
-      "type 1": "ca_solcon",
-      "type 2": "ca_solcon",
-      "epsilon (kcal/mol)": 0.1,
-      "sigma (A)": 2.87199,
-      "model": "solcon",
-      "ref": "https://doi.org/10.1098/rsta.2022.0250"
+      "type 1": "ogp",
+      "type 2": "owgp",
+      "epsilon (kcal/mol)": 0.560578857214517,
+      "sigma (A)": 2.4952,
+      "model": "sadat2016",
+      "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
-      "type 1": "cc_solcon",
-      "type 2": "cc_solcon",
-      "epsilon (kcal/mol)": 0.0576286,
-      "sigma (A)": 2.784959,
-      "model": "solcon",
-      "ref": "https://doi.org/10.1098/rsta.2022.0250"
+      "type 1": "owgp",
+      "type 2": "owgp",
+      "epsilon (kcal/mol)": 0.1554253,
+      "sigma (A)": 3.169,
+      "model": "sadat2016",
+      "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
-      "type 1": "oc_solcon",
-      "type 2": "oc_solcon",
-      "epsilon (kcal/mol)": 0.1554,
-      "sigma (A)": 3.1655,
+      "type 1": "Ow",
+      "type 2": "Ow",
+      "epsilon (kcal/mol)": 0.155428,
+      "sigma (A)": 3.165492,
       "model": "solcon",
-      "ref": "https://doi.org/10.1098/rsta.2022.0250"
+      "ref": ""
+    },
+    {
+      "type 1": "Mg",
+      "type 2": "Ow",
+      "epsilon (kcal/mol)": 0.02622,
+      "sigma (A)": 2.72,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Ca",
+      "type 2": "Ow",
+      "epsilon (kcal/mol)": 0.021908,
+      "sigma (A)": 3.25,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Sr",
+      "type 2": "Ow",
+      "epsilon (kcal/mol)": 0.017895,
+      "sigma (A)": 3.52,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Ba",
+      "type 2": "Ow",
+      "epsilon (kcal/mol)": 0.015151,
+      "sigma (A)": 3.82,
+      "model": "solcon",
+      "ref": ""
     },
     {
       "type 1": "hspc",
@@ -28081,22 +30349,6 @@ const EMBEDDED_DATA = {
       "ref": "https://doi.org/10.1021/j100308a038"
     },
     {
-      "type 1": "ogp",
-      "type 2": "owgp",
-      "epsilon (kcal/mol)": 0.560578857214517,
-      "sigma (A)": 2.4952,
-      "model": "sperinck",
-      "ref": "https://doi.org/10.1063/1.4964301"
-    },
-    {
-      "type 1": "owgp",
-      "type 2": "owgp",
-      "epsilon (kcal/mol)": 0.1554253,
-      "sigma (A)": 3.169,
-      "model": "sperinck",
-      "ref": "https://doi.org/10.1063/1.4964301"
-    },
-    {
       "type 1": "ht3p",
       "type 2": "ht3p",
       "epsilon (kcal/mol)": 0,
@@ -28149,7 +30401,7 @@ const EMBEDDED_DATA = {
       "type 2": "cac",
       "epsilon (kcal/mol)": 0.1,
       "sigma (A)": 2.87198,
-      "model": "wang2008",
+      "model": "wang2009",
       "ref": "https://doi.org/10.2138/am.2009.2939"
     },
     {
@@ -28157,7 +30409,7 @@ const EMBEDDED_DATA = {
       "type 2": "ccc",
       "epsilon (kcal/mol)": 0.0576286145988961,
       "sigma (A)": 2.78495919333787,
-      "model": "wang2008",
+      "model": "wang2009",
       "ref": "https://doi.org/10.2138/am.2009.2939"
     },
     {
@@ -28165,7 +30417,7 @@ const EMBEDDED_DATA = {
       "type 2": "occ",
       "epsilon (kcal/mol)": 0.1554,
       "sigma (A)": 3.1655,
-      "model": "wang2008",
+      "model": "wang2009",
       "ref": "https://doi.org/10.2138/am.2009.2939"
     }
   ],
@@ -28329,7 +30581,7 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 281371.360329828,
       "rho (A)": 0.195628,
       "C (kcal/mol.A6)": 737.868348936317,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
@@ -28338,7 +30590,7 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 315996.496170929,
       "rho (A)": 0.193817,
       "C (kcal/mol.A6)": 1260.97381592608,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
@@ -28347,7 +30599,7 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 63532.5541290503,
       "rho (A)": 0.258583,
       "C (kcal/mol.A6)": 780.161393657672,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
@@ -28356,7 +30608,7 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 472989.315901252,
       "rho (A)": 0.233726,
       "C (kcal/mol.A6)": 1187.38760779857,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
@@ -28365,16 +30617,16 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 170309.236847579,
       "rho (A)": 0.255185,
       "C (kcal/mol.A6)": 2312.05052549786,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
       "type 1": "ogp",
       "type 2": "ogp",
-      "A (kcal/mol)": 42541.056301164,
+      "A (kcal/mol)": 46795.0013,
       "rho (A)": 0.343645,
       "C (kcal/mol.A6)": 4441.00030122061,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
@@ -28383,7 +30635,7 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 60331.3211639708,
       "rho (A)": 0.258583,
       "C (kcal/mol.A6)": 780.161393657672,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
@@ -28392,8 +30644,80 @@ const EMBEDDED_DATA = {
       "A (kcal/mol)": 2306.0547830619,
       "rho (A)": 0.25,
       "C (kcal/mol.A6)": 0,
-      "model": "sperinck",
+      "model": "sadat2016",
       "ref": "https://doi.org/10.1063/1.4964301"
+    },
+    {
+      "type 1": "Oc",
+      "type 2": "Ow",
+      "A (kcal/mol)": 289051.4042,
+      "rho (A)": 0.202,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Cc",
+      "type 2": "Ow",
+      "A (kcal/mol)": 289051.4042,
+      "rho (A)": 0.28,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Hw",
+      "type 2": "Oc",
+      "A (kcal/mol)": 7840.5863,
+      "rho (A)": 0.217,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Oc",
+      "type 2": "Oc",
+      "A (kcal/mol)": 1730293.8885,
+      "rho (A)": 0.198913,
+      "C (kcal/mol.A6)": 645.6953,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Mg",
+      "type 2": "Oc",
+      "A (kcal/mol)": 76943.5224,
+      "rho (A)": 0.244667,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Ca",
+      "type 2": "Oc",
+      "A (kcal/mol)": 201578.7093,
+      "rho (A)": 0.24496,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Sr",
+      "type 2": "Oc",
+      "A (kcal/mol)": 75499.3579,
+      "rho (A)": 0.283096,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
+    },
+    {
+      "type 1": "Ba",
+      "type 2": "Oc",
+      "A (kcal/mol)": 356806.658,
+      "rho (A)": 0.255163,
+      "C (kcal/mol.A6)": 0.0,
+      "model": "solcon",
+      "ref": ""
     }
   ],
   "bond": [
@@ -30462,6 +32786,30 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "hw",
+      "type 2": "ow",
+      "k (kcal/(mol.A2)": 554.1291,
+      "r (A)": 1.0,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "hh",
+      "type 2": "oh_aft",
+      "k (kcal/(mol.A2)": 554.1291,
+      "r (A)": 1.0,
+      "model": "afff",
+      "ref": ""
+    },
+    {
+      "type 1": "hh",
+      "type 2": "oh_afm",
+      "k (kcal/(mol.A2)": 554.1291,
+      "r (A)": 0.844,
+      "model": "afff",
+      "ref": ""
+    },
+    {
       "type 1": "CST",
       "type 2": "OST",
       "k (kcal/(mol.A2)": 937.96,
@@ -32356,6 +34704,30 @@ const EMBEDDED_DATA = {
       "r (A)": 1.0,
       "model": "clayff",
       "ref": ""
+    },
+    {
+      "type 1": "h*",
+      "type 2": "o*",
+      "k (kcal/(mol.A2)": 554.1349,
+      "r (A)": 1.0,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ho",
+      "type 2": "oh",
+      "k (kcal/(mol.A2)": 0.0,
+      "r (A)": 0.945,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600"
+    },
+    {
+      "type 1": "ho",
+      "type 2": "ohs",
+      "k (kcal/(mol.A2)": 0.0,
+      "r (A)": 0.9572,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.1c04600"
     },
     {
       "type 1": "hw",
@@ -34478,6 +36850,30 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "hw",
+      "type 2": "ow",
+      "k (kcal/(mol.A2)": 554.1349,
+      "r (A)": 1.0,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "hh",
+      "type 2": "oh",
+      "k (kcal/(mol.A2)": 554.1349,
+      "r (A)": 1.0,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
+      "type 1": "hsi",
+      "type 2": "osih",
+      "k (kcal/(mol.A2)": 554.135,
+      "r (A)": 1.0,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
       "type 1": "oc1",
       "type 2": "sc1",
       "k (kcal/(mol.A2)": 250,
@@ -34510,6 +36906,14 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "oc6",
+      "type 2": "sc1",
+      "k (kcal/(mol.A2)": 250,
+      "r (A)": 1.68,
+      "model": "iff",
+      "ref": ""
+    },
+    {
       "type 1": "ac1",
       "type 2": "oc4",
       "k (kcal/(mol.A2)": 180,
@@ -34534,7 +36938,135 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
-      "type 1": "Ow",
+      "type 1": "ac1",
+      "type 2": "oc5a",
+      "k (kcal/(mol.A2)": 180,
+      "r (A)": 1.81,
+      "model": "iff",
+      "ref": ""
+    },
+    {
+      "type 1": "o_silica_bulk",
+      "type 2": "si_silica",
+      "k (kcal/(mol.A2)": 285,
+      "r (A)": 1.68,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_silica_silanol",
+      "type 2": "si_silica",
+      "k (kcal/(mol.A2)": 285,
+      "r (A)": 1.68,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "h_silica",
+      "type 2": "o_silica_silanol",
+      "k (kcal/(mol.A2)": 495,
+      "r (A)": 0.945,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_sulfate",
+      "type 2": "s_sulfate",
+      "k (kcal/(mol.A2)": 380,
+      "r (A)": 1.505,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "hw_sulfate",
+      "type 2": "ow_sulfate",
+      "k (kcal/(mol.A2)": 540.63,
+      "r (A)": 0.96,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "hox",
+      "type 2": "ox",
+      "k (kcal/(mol.A2)": 495,
+      "r (A)": 0.955,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc2",
+      "k (kcal/(mol.A2)": 300,
+      "r (A)": 1.71,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc3",
+      "k (kcal/(mol.A2)": 300,
+      "r (A)": 1.67,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "ocx",
+      "type 2": "sc3",
+      "k (kcal/(mol.A2)": 300,
+      "r (A)": 1.62,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc13",
+      "type 2": "sc2",
+      "k (kcal/(mol.A2)": 300,
+      "r (A)": 1.62,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc14",
+      "type 2": "sc3",
+      "k (kcal/(mol.A2)": 300,
+      "r (A)": 1.68,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc22",
+      "type 2": "sc3",
+      "k (kcal/(mol.A2)": 300,
+      "r (A)": 1.59,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "hoy",
+      "type 2": "oc14",
+      "k (kcal/(mol.A2)": 495,
+      "r (A)": 0.945,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "hw",
+      "type 2": "ow",
+      "k (kcal/(mol.A2)": 0,
+      "r (A)": 0.9572,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "os",
+      "type 2": "s",
+      "k (kcal/(mol.A2)": 0,
+      "r (A)": 1.49,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "Hw",
       "type 2": "Ow",
       "k (kcal/(mol.A2)": 529.54,
       "r (A)": 1.012,
@@ -34550,12 +37082,28 @@ const EMBEDDED_DATA = {
       "ref": "https://doi.org/10.1021/acs.jpcc.5b07532"
     },
     {
-      "type 1": "cc_solcon",
-      "type 2": "oc_solcon",
-      "k (kcal/(mol.A2)": 770,
-      "r (A)": 1.3,
+      "type 1": "hwgp",
+      "type 2": "owgp",
+      "k (kcal/(mol.A2)": 529.581,
+      "r (A)": 1.012,
+      "model": "sadat2016",
+      "ref": "https://doi.org/10.1063/1.4964301"
+    },
+    {
+      "type 1": "Hw",
+      "type 2": "Ow",
+      "k (kcal/(mol.A2)": 529.581,
+      "r (A)": 1.012,
       "model": "solcon",
-      "ref": ""
+      "ref": "https://doi.org/10.1063/1.2136877"
+    },
+    {
+      "type 1": "Cc",
+      "type 2": "Oc",
+      "k (kcal/(mol.A2)": 470.97,
+      "r (A)": 1.3042,
+      "model": "solcon",
+      "ref": "https://doi.org/10.1021/acs.jpcc.5b07532"
     },
     {
       "type 1": "hspc",
@@ -34590,14 +37138,6 @@ const EMBEDDED_DATA = {
       "ref": "https://doi.org/10.1021/j100308a038"
     },
     {
-      "type 1": "hwgp",
-      "type 2": "owgp",
-      "k (kcal/(mol.A2)": 1059.162,
-      "r (A)": 1.012,
-      "model": "sperinck",
-      "ref": "https://doi.org/10.1063/1.4964301"
-    },
-    {
       "type 1": "ht3p",
       "type 2": "ot3p",
       "k (kcal/(mol.A2)": 450,
@@ -34626,7 +37166,7 @@ const EMBEDDED_DATA = {
       "type 2": "occ",
       "k (kcal/(mol.A2)": 770,
       "r (A)": 1.3,
-      "model": "wang2008",
+      "model": "wang2009",
       "ref": "https://doi.org/10.2138/am.2009.2939"
     }
   ],
@@ -36096,6 +38636,15 @@ const EMBEDDED_DATA = {
       "k (kcal/(mol.rad2))": 145.15276643216362,
       "theta (deg)": 101.0,
       "model": "gromos",
+      "ref": ""
+    },
+    {
+      "type 1": "hw",
+      "type 2": "ow",
+      "type 3": "hw",
+      "k (kcal/(mol.rad2))": 45.7696,
+      "theta (deg)": 109.47,
+      "model": "afff",
       "ref": ""
     },
     {
@@ -41499,6 +44048,69 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "h*",
+      "type 2": "o*",
+      "type 3": "h*",
+      "k (kcal/(mol.rad2))": 45.7696,
+      "theta (deg)": 109.47,
+      "model": "clayff_moh",
+      "ref": ""
+    },
+    {
+      "type 1": "ao",
+      "type 2": "oh",
+      "type 3": "ho",
+      "k (kcal/(mol.rad2))": 15.0,
+      "theta (deg)": 116.0,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.7b05362"
+    },
+    {
+      "type 1": "ao",
+      "type 2": "ohs",
+      "type 3": "ho",
+      "k (kcal/(mol.rad2))": 15.0,
+      "theta (deg)": 116.0,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.7b05362"
+    },
+    {
+      "type 1": "mgo",
+      "type 2": "oh",
+      "type 3": "ho",
+      "k (kcal/(mol.rad2))": 6.0,
+      "theta (deg)": 120.0,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.7b05362"
+    },
+    {
+      "type 1": "mgo",
+      "type 2": "ohs",
+      "type 3": "ho",
+      "k (kcal/(mol.rad2))": 6.0,
+      "theta (deg)": 120.0,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.7b05362"
+    },
+    {
+      "type 1": "st",
+      "type 2": "oh",
+      "type 3": "ho",
+      "k (kcal/(mol.rad2))": 15.0,
+      "theta (deg)": 100.0,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.7b05362"
+    },
+    {
+      "type 1": "st",
+      "type 2": "ohs",
+      "type 3": "ho",
+      "k (kcal/(mol.rad2))": 15.0,
+      "theta (deg)": 100.0,
+      "model": "clayff_moh",
+      "ref": "https://doi.org/10.1021/acs.jpcc.7b05362"
+    },
+    {
       "type 1": "hw",
       "type 2": "ow",
       "type 3": "hw",
@@ -44766,6 +47378,15 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "hw",
+      "type 2": "ow",
+      "type 3": "hw",
+      "k (kcal/(mol.rad2))": 45.7696,
+      "theta (deg)": 109.47,
+      "model": "duque2018",
+      "ref": ""
+    },
+    {
       "type 1": "oc1",
       "type 2": "sc1",
       "type 3": "oc1",
@@ -44785,8 +47406,8 @@ const EMBEDDED_DATA = {
     },
     {
       "type 1": "sc1",
-      "type 2": "oc5",
-      "type 3": "hoc",
+      "type 2": "oc6",
+      "type 3": "hos",
       "k (kcal/(mol.rad2))": 50,
       "theta (deg)": 115,
       "model": "iff",
@@ -44821,11 +47442,209 @@ const EMBEDDED_DATA = {
     },
     {
       "type 1": "hoca",
-      "type 2": "oc4",
+      "type 2": "oc5a",
       "type 3": "ac1",
       "k (kcal/(mol.rad2))": 40,
       "theta (deg)": 115,
       "model": "iff",
+      "ref": ""
+    },
+    {
+      "type 1": "o_silica_bulk",
+      "type 2": "si_silica",
+      "type 3": "o_silica_bulk",
+      "k (kcal/(mol.rad2))": 100,
+      "theta (deg)": 109.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_silica_bulk",
+      "type 2": "si_silica",
+      "type 3": "o_silica_silanol",
+      "k (kcal/(mol.rad2))": 100,
+      "theta (deg)": 109.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_silica_silanol",
+      "type 2": "si_silica",
+      "type 3": "o_silica_silanol",
+      "k (kcal/(mol.rad2))": 100,
+      "theta (deg)": 109.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "si_silica",
+      "type 2": "o_silica_bulk",
+      "type 3": "si_silica",
+      "k (kcal/(mol.rad2))": 100,
+      "theta (deg)": 149.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "si_silica",
+      "type 2": "o_silica_silanol",
+      "type 3": "h_silica",
+      "k (kcal/(mol.rad2))": 50,
+      "theta (deg)": 115.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1021/cm500365c"
+    },
+    {
+      "type 1": "o_sulfate",
+      "type 2": "s_sulfate",
+      "type 3": "o_sulfate",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 109.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "hw_sulfate",
+      "type 2": "ow_sulfate",
+      "type 3": "hw_sulfate",
+      "k (kcal/(mol.rad2))": 50.0,
+      "theta (deg)": 104.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2020.106262"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc2",
+      "type 3": "oc13",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 111.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc2",
+      "type 3": "oc12",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 100.2,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc13",
+      "type 2": "sc2",
+      "type 3": "oc13",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 112.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc3",
+      "type 3": "ocx",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 107.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc3",
+      "type 3": "oc12",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 107.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc22",
+      "type 2": "sc3",
+      "type 3": "oc12",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 107.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc12",
+      "type 2": "sc3",
+      "type 3": "oc14",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 111.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "ocx",
+      "type 2": "sc3",
+      "type 3": "oc14",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 111.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "oc22",
+      "type 2": "sc3",
+      "type 3": "oc14",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 111.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "sc2",
+      "type 2": "oc12",
+      "type 3": "sc3",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 139.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "sc2",
+      "type 2": "oc12",
+      "type 3": "sc2",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 144.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "sc3",
+      "type 2": "ocx",
+      "type 3": "sc3",
+      "k (kcal/(mol.rad2))": 170,
+      "theta (deg)": 174.5,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "sc3",
+      "type 2": "oc14",
+      "type 3": "hoy",
+      "k (kcal/(mol.rad2))": 50,
+      "theta (deg)": 115.0,
+      "model": "iff",
+      "ref": "https://doi.org/10.1016/j.cemconres.2017.09.003"
+    },
+    {
+      "type 1": "hw",
+      "type 2": "ow",
+      "type 3": "hw",
+      "k (kcal/(mol.rad2))": 0,
+      "theta (deg)": 104.52,
+      "model": "madrid2019",
+      "ref": ""
+    },
+    {
+      "type 1": "os",
+      "type 2": "s",
+      "type 3": "os",
+      "k (kcal/(mol.rad2))": 0,
+      "theta (deg)": 109.4712,
+      "model": "madrid2019",
       "ref": ""
     },
     {
@@ -44847,13 +47666,31 @@ const EMBEDDED_DATA = {
       "ref": "https://doi.org/10.1021/acs.jpcc.5b07532"
     },
     {
-      "type 1": "oc_solcon",
-      "type 2": "cc_solcon",
-      "type 3": "oc_solcon",
-      "k (kcal/(mol.rad2))": 110,
-      "theta (deg)": 120,
+      "type 1": "hwgp",
+      "type 2": "owgp",
+      "type 3": "hwgp",
+      "k (kcal/(mol.rad2))": 37.95,
+      "theta (deg)": 113.24,
+      "model": "sadat2016",
+      "ref": "https://doi.org/10.1063/1.4964301"
+    },
+    {
+      "type 1": "Hw",
+      "type 2": "Ow",
+      "type 3": "Hw",
+      "k (kcal/(mol.rad2))": 37.95,
+      "theta (deg)": 113.24,
       "model": "solcon",
-      "ref": ""
+      "ref": "https://doi.org/10.1063/1.2136877"
+    },
+    {
+      "type 1": "Oc",
+      "type 2": "Cc",
+      "type 3": "Oc",
+      "k (kcal/(mol.rad2))": 152.5906668,
+      "theta (deg)": 120.0,
+      "model": "solcon",
+      "ref": "https://doi.org/10.1021/acs.jpcc.5b07532"
     },
     {
       "type 1": "hspc",
@@ -44881,15 +47718,6 @@ const EMBEDDED_DATA = {
       "theta (deg)": 109.47,
       "model": "spce",
       "ref": "https://doi.org/10.1021/j100308a038"
-    },
-    {
-      "type 1": "hwgp",
-      "type 2": "owgp",
-      "type 3": "hwgp",
-      "k (kcal/(mol.rad2))": 75.9,
-      "theta (deg)": 113.24,
-      "model": "sperinck",
-      "ref": "https://doi.org/10.1063/1.4964301"
     },
     {
       "type 1": "ht3p",
@@ -44924,7 +47752,7 @@ const EMBEDDED_DATA = {
       "type 3": "occ",
       "k (kcal/(mol.rad2))": 110,
       "theta (deg)": 120,
-      "model": "wang2008",
+      "model": "wang2009",
       "ref": "https://doi.org/10.2138/am.2009.2939"
     }
   ],
@@ -46310,13 +49138,23 @@ const EMBEDDED_DATA = {
       "ref": ""
     },
     {
+      "type 1": "Cc",
+      "type 2": "Oc",
+      "type 3": "Oc",
+      "type 4": "Oc",
+      "k (kcal/(mol,rad2))": 314.7052788,
+      "theta (deg)": 0.0,
+      "model": "solcon",
+      "ref": "https://doi.org/10.1021/acs.jpcc.5b07532"
+    },
+    {
       "type 1": "occ",
       "type 2": "occ",
       "type 3": "ccc",
       "type 4": "occ",
       "k (kcal/(mol,rad2))": 250.956022944551,
       "theta (deg)": 0,
-      "model": "wang2008",
+      "model": "wang2009",
       "ref": "https://doi.org/10.2138/am.2009.2939"
     }
   ],

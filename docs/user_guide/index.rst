@@ -71,7 +71,28 @@ This guide explains how to build and analyze your atomistic models.
       :link-type: doc
       :text-align: center
 
-      Opening a nanopore in a C-S-H matrix and filling it with an alkaline pore solution.
+      Opening a nanopore in a C-S-H matrix, filling it with a NaCl solution and assigning the force field.
+
+   .. grid-item-card:: :material-regular:`school;2em` Tutorial
+      :link: tuto_cash
+      :link-type: doc
+      :text-align: center
+
+      From C-S-H to C-A-S-H: aluminium substitution, chain length, Al coordination and force field.
+
+   .. grid-item-card:: :material-regular:`school;2em` Tutorial
+      :link: tuto_kaolinite
+      :link-type: doc
+      :text-align: center
+
+      Kaolinite from COD with ClayFF-MOH: Al-O-H angles, Fe substitution, Morse hydroxyls.
+
+   .. grid-item-card:: :material-regular:`photo_camera;2em` Visualization
+      :link: visualization
+      :link-type: doc
+      :text-align: center
+
+      Viewing systems in VMD and rendering publication pictures.
 
 .. toctree::
    :hidden:
@@ -83,3 +104,6 @@ This guide explains how to build and analyze your atomistic models.
    tuto_topo_ff
    tuto_caffeine_solvation
    tuto_csh_nanopore
+   tuto_cash
+   tuto_kaolinite
+   visualization

@@ -299,3 +299,19 @@ def test_set_topology_list_of_rules():
 def test_set_topology_list_rejects_bad_items(water_system):
     with pytest.raises(TypeError):
         water_system.set_topology([42])
+
+
+def test_retyping_an_atom_relabels_its_connections(water_system):
+    # Regression test: `set_type2atoms` (used by `substitute_atoms` and
+    # `CSHBuilder.to_cash`) changed the atom type but left the bonds and
+    # angles around it with the old label, so they kept the old parameters.
+    water_system.set_type2atoms([1], "Oh")
+    assert sorted(water_system.bonds["type"]) == ["Hw-Oh", "Hw-Oh", "Hw-Ow", "Hw-Ow"]
+    assert sorted(water_system.angles["type"]) == ["Hw-Oh-Hw", "Hw-Ow-Hw"]
+
+
+def test_substitute_atoms_relabels_connections(water_system):
+    ids = water_system.substitute_atoms("Ow", "Oh", count=1, seed=0)
+    assert len(ids) == 1
+    assert "Hw-Oh" in water_system.bond_types
+    assert "Hw-Oh-Hw" in water_system.angle_types

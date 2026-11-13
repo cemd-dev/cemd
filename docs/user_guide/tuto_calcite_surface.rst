@@ -187,7 +187,7 @@ Visualize the generated surface using VMD:
 .. image:: /_static/images/calcite_104.png
    :alt: Calcite (104) slab
    :align: center
-   :width: 400px
+   :height: 450px
 
 
 Step 6: Extend the slab and write
@@ -202,6 +202,6 @@ Step 6: Extend the slab and write
 .. image:: /_static/images/calcite_104_big.png
    :alt: Big calcite (104) slab
    :align: center
-   :width: 400px
+   :height: 450px
 
    

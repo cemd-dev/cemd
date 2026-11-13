@@ -43,7 +43,6 @@ def test_split_opens_gap_and_grows_box():
     system = _make_chain_system()
     result = Splitter(system, coordinate=5.0, axis="z", gap_size=10.0).split()
 
-    assert result is system
     assert result.box[2] == pytest.approx(20.0)
 
     # Atoms below the cut are untouched; atoms above are shifted by gap_size.
@@ -858,3 +857,22 @@ def test_repair_refuses_a_bond_without_oxygen():
         splitter.split()
     # Refused before anything moved
     assert system.atoms["z"].tolist() == [0.0, 1.5]
+
+
+def test_split_leaves_the_input_system_unchanged():
+    # Regression test: `split()` worked on the system given to the Splitter
+    # and returned it, so the input came back opened, and charges set on the
+    # result changed the input too.
+    system = _make_chain_system()
+    box_before = list(system.box)
+    z_before = system.atoms["z"].tolist()
+
+    result = Splitter(system, coordinate=5.0, axis="z", gap_size=10.0).split()
+
+    assert result is not system
+    assert list(system.box) == box_before
+    assert system.atoms["z"].tolist() == z_before
+    first = result.atom_types[0]
+    result.set_charges({first: 0.5})
+    assert system.charges[first] != 0.5
+

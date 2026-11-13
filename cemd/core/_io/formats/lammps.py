@@ -45,6 +45,28 @@ from ....forcefield.models import (
 )
 from .base import BaseReader, BaseWriter
 
+# LAMMPS style of each bonded parameter class, used to write a "# hybrid"
+# section when one section mixes several styles.
+_HYBRID_STYLES = {
+    ("Bond Coeffs", HarmonicBondParams): "harmonic",
+    ("Bond Coeffs", MorseBondParams): "morse",
+    ("Bond Coeffs", Class2BondParams): "class2",
+    ("Angle Coeffs", HarmonicAngleParams): "harmonic",
+    ("Angle Coeffs", Class2AngleParams): "class2",
+    ("Improper Coeffs", HarmonicImproperParams): "harmonic",
+    ("Improper Coeffs", CVFFImproperParams): "cvff",
+    ("Improper Coeffs", DistanceImproperParams): "distance",
+    ("Improper Coeffs", Class2ImproperParams): "class2",
+}
+
+
+def _is_number(token: Any) -> bool:
+    try:
+        float(token)
+    except (TypeError, ValueError):
+        return False
+    return True
+
 
 def _format_column(values: pd.Series, formatter: Any) -> list[str] | None:
     """Strings of one column as ``DataFrame.to_string`` writes them, before
@@ -314,7 +336,14 @@ class LAMMPSReader(BaseReader):
         for key, values in sections.items():
             if not values:
                 continue
-            array = np.array([line.split() for line in values])
+            rows = [line.split() for line in values]
+            # Coefficient sections may mix styles of different lengths (LJ and
+            # Buckingham pairs, hybrid bonds): keep such rows as a ragged array.
+            if len({len(row) for row in rows}) == 1:
+                array = np.array(rows)
+            else:
+                array = np.empty(len(rows), dtype=object)
+                array[:] = rows
 
             if key == "Atoms":
                 cls._parse_atoms(array, topology, type_labels["atom"])
@@ -677,7 +706,11 @@ class LAMMPSReader(BaseReader):
                     style = "harmonic"
 
             label = type_label(int(row[0]))
-            coeffs = [float(x) for x in row[1:]]
+            values = list(row[1:])
+            # "# hybrid" sections put the style name before the coefficients
+            if key != "pair_params" and values and not _is_number(values[0]):
+                style = str(values.pop(0))
+            coeffs = [float(x) for x in values]
             if key == "pair_params":
                 partner = label
                 if pair_ij:
@@ -908,12 +941,22 @@ class LAMMPSWriter(BaseWriter):
                 f.write(f"# {i} {t}\n")
             f.write("\n")
         else:
-            f.write(f"\n {section_title}\n\n")
+            # A section mixing several styles (e.g. harmonic water bonds and
+            # Morse hydroxyl bonds) needs LAMMPS's hybrid form: "# hybrid" on
+            # the header and the style name at the start of every line.
+            styles = {
+                label: _HYBRID_STYLES.get((section_title, type(params)))
+                for label, params in params_dict.items()
+                if label in types_list
+            }
+            hybrid = len(set(styles.values())) > 1 and None not in styles.values()
+            f.write(f"\n {section_title}{'  # hybrid' if hybrid else ''}\n\n")
             for i, label in enumerate(types_list, 1):
                 params = params_dict.get(label)
                 if params is not None:
                     formatted_val = cls._format_coeff_values(params)
-                    f.write(f"{i:<3} {formatted_val}   # {label}\n")
+                    style = f"{styles[label]} " if hybrid else ""
+                    f.write(f"{i:<3} {style}{formatted_val}   # {label}\n")
             f.write("\n")
 
     @classmethod

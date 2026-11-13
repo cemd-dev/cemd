@@ -12,6 +12,7 @@ from .models import (
     HarmonicBondParams,
     HarmonicImproperParams,
     LJParams,
+    MorseBondParams,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "HarmonicBondParams",
     "HarmonicImproperParams",
     "LJParams",
+    "MorseBondParams",
 ]

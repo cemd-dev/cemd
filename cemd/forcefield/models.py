@@ -30,6 +30,14 @@ class ForceFieldModel:
     description: str = ""
     ref: str = ""
     tags: list[str] = field(default_factory=list)
+    # Kind of system the model is meant for: "minerals", "carbonates",
+    # "ions" or "water" (groups the models in the documentation).
+    category: str = ""
+    # Combination rule for the LJ pairs the model does not list:
+    # "arithmetic" (Lorentz-Berthelot), "geometric", or "none" when every
+    # pair is given explicitly and unlisted pairs are Coulomb only.
+    mixing: str = ""
+    mixing_note: str = ""
 
 
 @dataclass
@@ -134,7 +142,7 @@ class Class2BondBondParams:
     """
     Parameters for the bond-bond term (E_bb) of angle_style class2.
 
-    The potential is: E_bb = M *(r_ij -r1) *(r_jk -r2)
+    The potential is: ``E_bb = M (r_ij - r1) (r_jk - r2)``
     """
 
     m: float  # M (energy/distance^2)

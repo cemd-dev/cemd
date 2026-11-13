@@ -196,8 +196,15 @@ class PDBReader:
             types = df_atoms["type"].astype(str)
             t1 = pd.Series(pairs[:, 0]).map(types).fillna("X")
             t2 = pd.Series(pairs[:, 1]).map(types).fillna("X")
+            # `.to_numpy()`: the Series are indexed from 0 and the frame from
+            # 1, so assigning the Series aligned them on the index and gave
+            # each bond the type of the next one (the last one NaN).
             df_bonds = pd.DataFrame(
-                {"type": t1 + "-" + t2, "atom_1": pairs[:, 0], "atom_2": pairs[:, 1]},
+                {
+                    "type": (t1 + "-" + t2).to_numpy(),
+                    "atom_1": pairs[:, 0],
+                    "atom_2": pairs[:, 1],
+                },
                 index=pd.RangeIndex(1, len(pairs) + 1, name="id"),
             )
 

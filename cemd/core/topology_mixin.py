@@ -178,6 +178,8 @@ class TopologyMixin:
             )
 
         self.atoms.loc[indices, "type"] = atom_type
+        if isinstance(atom_type, str):
+            self._relabel_connections(indices)
 
         # Test the stored values: the `masses`/`charges` properties list
         # every current type, the new one included, so the fallbacks below
@@ -191,6 +193,46 @@ class TopologyMixin:
             self.set_charges({atom_type: fallback_charge})
 
         return self
+
+    def _relabel_connections(self, indices: Sequence[int]) -> None:
+        """Recompute the type of every connection touching ``indices``.
+
+        A connection type is built from the types of its atoms: retyping an
+        atom (an Al put in place of a Si, a Fe in place of an Al) left the
+        bonds and angles around it with the old label, so they kept the
+        parameters of the old atom type.
+        """
+        ids = {int(i) for i in indices}
+        types = self.atoms["type"]
+        for target, kind, ncols in (
+            ("bonds", "bond", 2),
+            ("angles", "angle", 3),
+            ("dihedrals", "dihedral", 4),
+            ("impropers", "improper", 4),
+        ):
+            df = getattr(self, target, None)
+            if df is None or len(df) == 0:
+                continue
+            cols = [f"atom_{i + 1}" for i in range(ncols)]
+            mask = df[cols].isin(ids).any(axis=1)
+            if not mask.any():
+                continue
+            labels = []
+            for row in df.loc[mask, cols].itertuples(index=False):
+                atom_types = tuple(types.at[int(i)] for i in row)
+                if not all(isinstance(at, str) for at in atom_types):
+                    labels = None
+                    break
+                labels.append(
+                    "-".join(atom_types)
+                    if kind == "dihedral"
+                    else canonical_ff_type(atom_types, kind)
+                )
+            if labels is None:
+                continue
+            df = df.copy()
+            df.loc[mask, "type"] = labels
+            setattr(self, target, df)
 
     def add_bond(self, atom_list: Sequence[int]) -> AtomicSystem:
         """Add a bond between two atoms.

@@ -1065,12 +1065,21 @@ class CASHBuilderDialog(BaseBuilderDialog):
                 res_al = builder.to_cash(as_ratio=self.as_r.value())
                 system = res_al[0] if isinstance(res_al, (tuple, list)) else res_al
 
-            nsi = system.get_count("Si")
-            nca = system.get_count("Ca") + system.get_count("Cw")
-            nh = 0
-            for i in ["H", "Hw", "HsiHh"]:
-                nh += system.get_count(i)
-            nal = system.get_count("Al")
+            # Count by element: a C-S-H straight from the builder has
+            # crystallographic labels (H1, H2...), a C-A-S-H CSH-FF types
+            # (Hw, Hsi, Hh, Cw...). A fixed list of type names ("HsiHh")
+            # missed some or all of the hydrogens.
+            elements = system.elements
+
+            def count(element: str) -> int:
+                return sum(
+                    system.get_count(t) for t, el in elements.items() if el == element
+                )
+
+            nsi = count("Si")
+            nca = count("Ca")
+            nh = count("H")
+            nal = count("Al")
 
             self.l_cs.setText(f"<b>{nca / nsi:.3f}</b>" if nsi > 0 else "0")
             self.l_al.setText(f"<b>{nal / nsi:.4f}</b>" if nsi > 0 else "0")

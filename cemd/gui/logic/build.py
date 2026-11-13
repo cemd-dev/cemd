@@ -411,7 +411,7 @@ def open_split(parent: AtomViewerGUI) -> None:
 
             def work():
                 splitter = Splitter(
-                    source.copy(),
+                    source,  # split() returns a new system
                     coordinate=p["coordinate"],
                     axis=p["axis"],
                     gap_size=p["gap_size"],

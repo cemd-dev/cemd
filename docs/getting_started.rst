@@ -369,11 +369,13 @@ Load force field parameters from the built-in database:
 .. code-block:: python
 
    # Map atom types to force field parameters
+   # Use "model.type": a bare short name such as "ca" exists in several
+   # models (clayff, cshff2014, madrid2019...) and is ambiguous
    assignments = {
-       'O': 'ospc',   # Water oxygen (SPC model)
-       'H': 'hspc',   # Water hydrogen (SPC model)
-       'Si': 'st',    # Tetrahedral silicon (ClayFF)
-       'Ca': 'ca'     # Aqueous calcium (ClayFF)
+       'O': 'spc.ospc',     # Water oxygen (SPC model)
+       'H': 'spc.hspc',     # Water hydrogen (SPC model)
+       'Si': 'clayff.st',   # Tetrahedral silicon (ClayFF)
+       'Ca': 'clayff.ca',   # Aqueous calcium (ClayFF)
    }
    
    # Apply the force field

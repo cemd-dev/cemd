@@ -5,7 +5,10 @@
 [model]
 name = "IFF"
 ref = "https://doi.org/10.1039/C4DT00438H"
-description = "Interface Force Field for cement minerals"
+description = "Interface Force Field: C3S, C3A, silica, calcium sulfates, portlandite and tobermorite (12-6 LJ)"
+category = "minerals"
+mixing = "arithmetic"
+mixing_note = "12-6 CHARMM column; the portlandite and tobermorite block comes from the CVFF column (geometric rule)"
 
 # ============================================================
 # Atom Types
@@ -111,13 +114,13 @@ ref = "https://doi.org/10.1016/j.cemconres.2017.06.006"
 
 [atom.o_silica_bulk]
 element = "O"
-charge = -0.675
+charge = -0.55
 environment = "oxygen atom in silica (bulk)"
 ref = "https://doi.org/10.1021/cm500365c"
 
 [atom.o_silica_silanol]
 element = "O"
-charge = -0.55
+charge = -0.675
 environment = "oxygen atom in silica (silanol)"
 ref = "https://doi.org/10.1021/cm500365c"
 
@@ -158,6 +161,15 @@ sigma = 0.966625109182268
 [lj."hos-hos"]
 epsilon = 0.015
 sigma = 0.966625109182268
+
+# Hydrogens of C3A hydroxyls: zero 12-6 LJ (Mishra et al. 2014, Table 1, note d)
+[lj."hoc_c3a-hoc_c3a"]
+epsilon = 0
+sigma = 0
+
+[lj."hoca-hoca"]
+epsilon = 0
+sigma = 0
 
 [lj."oc1-oc1"]
 epsilon = 0.08
@@ -217,6 +229,11 @@ r0 = 0.929
 k = 495
 r0 = 0.929
 
+# Si-O of the silanol group (Pustovgar et al. 2017, Table 4)
+[bond.harmonic."oc6-sc1"]
+k = 250
+r0 = 1.68
+
 [bond.harmonic."ac1-oc4"]
 k = 180
 r0 = 1.81
@@ -228,6 +245,11 @@ r0 = 0.929
 [bond.harmonic."hoca-oc5a"]
 k = 495
 r0 = 0.929
+
+# Al-O of the aluminol group = Al-Oapical (Mishra et al. 2014, Table 1)
+[bond.harmonic."ac1-oc5a"]
+k = 180
+r0 = 1.81
 
 # ============================================================
 # Angle Parameters
@@ -243,7 +265,7 @@ theta0 = 109.5
 k = 110
 theta0 = 111.5
 
-[angle.harmonic."sc1-oc5-hoc"]
+[angle.harmonic."sc1-oc6-hos"]
 k = 50
 theta0 = 115
 
@@ -259,6 +281,410 @@ theta0 = 105
 k = 110
 theta0 = 121
 
-[angle.harmonic."hoca-oc4-ac1"]
+[angle.harmonic."hoca-oc5a-ac1"]
 k = 40
 theta0 = 115
+
+# ============================================================
+# Silica (Emami et al. 2014, Tables 3-4; 12-6 LJ column CHARMM/CVFF/AMBER)
+# sigma = sigma0 / 2^(1/6) (IFF gives the LJ minimum distance sigma0).
+# Si-O r0 = 1.68 A (use 1.65 A with AMBER 1-4 scaling). Siloxide groups (SiO- Na+)
+# need Si +0.725 / O -0.9 and are not included.
+# ============================================================
+
+[lj."si_silica-si_silica"]
+epsilon = 0.093
+sigma = 3.69722968028
+ref = "https://doi.org/10.1021/cm500365c"
+
+[lj."o_silica_bulk-o_silica_bulk"]
+epsilon = 0.054
+sigma = 3.09141855195
+ref = "https://doi.org/10.1021/cm500365c"
+
+[lj."o_silica_silanol-o_silica_silanol"]
+epsilon = 0.122
+sigma = 3.09141855195
+ref = "https://doi.org/10.1021/cm500365c"
+
+[lj."h_silica-h_silica"]
+epsilon = 0.015
+sigma = 0.96662510918
+ref = "https://doi.org/10.1021/cm500365c"
+
+[bond.harmonic."o_silica_bulk-si_silica"]
+k = 285
+r0 = 1.68
+ref = "https://doi.org/10.1021/cm500365c"
+
+[bond.harmonic."o_silica_silanol-si_silica"]
+k = 285
+r0 = 1.68
+ref = "https://doi.org/10.1021/cm500365c"
+
+[bond.harmonic."h_silica-o_silica_silanol"]
+k = 495
+r0 = 0.945
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_bulk-si_silica-o_silica_bulk"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_bulk-si_silica-o_silica_silanol"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_silanol-si_silica-o_silica_silanol"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."si_silica-o_silica_bulk-si_silica"]
+k = 100
+theta0 = 149.0
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."si_silica-o_silica_silanol-h_silica"]
+k = 50
+theta0 = 115.0
+ref = "https://doi.org/10.1021/cm500365c"
+
+# ============================================================
+# Calcium sulfates: anhydrite, bassanite, gypsum (Mishra et al. 2021, Table 2;
+# 12-6 LJ column CHARMM/CVFF/AMBER/OPLS-AA, flexible SPC water).
+# ============================================================
+
+[atom.ca_sulfate]
+element = "Ca"
+charge = 1.7
+environment = "calcium in calcium sulfates"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[atom.s_sulfate]
+element = "S"
+charge = 0.5
+environment = "sulfur in sulfate ion (calcium sulfates)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[atom.o_sulfate]
+element = "O"
+charge = -0.55
+environment = "oxygen in sulfate ion (calcium sulfates)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[atom.ow_sulfate]
+element = "O"
+charge = -0.82
+environment = "water oxygen in calcium sulfate hydrates (flexible SPC)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[atom.hw_sulfate]
+element = "H"
+charge = 0.41
+environment = "water hydrogen in calcium sulfate hydrates (flexible SPC)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[lj."ca_sulfate-ca_sulfate"]
+epsilon = 0.22
+sigma = 2.76178602624
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[lj."s_sulfate-s_sulfate"]
+epsilon = 0.3
+sigma = 3.74177461619
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[lj."o_sulfate-o_sulfate"]
+epsilon = 0.12
+sigma = 3.02905564168
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[lj."ow_sulfate-ow_sulfate"]
+epsilon = 0.155
+sigma = 3.16536314555
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[lj."hw_sulfate-hw_sulfate"]
+epsilon = 0.0
+sigma = 0
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[bond.harmonic."o_sulfate-s_sulfate"]
+k = 380
+r0 = 1.505
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[bond.harmonic."hw_sulfate-ow_sulfate"]
+k = 540.63
+r0 = 0.96
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[angle.harmonic."o_sulfate-s_sulfate-o_sulfate"]
+k = 170
+theta0 = 109.5
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+[angle.harmonic."hw_sulfate-ow_sulfate-hw_sulfate"]
+k = 50.0
+theta0 = 104.5
+ref = "https://doi.org/10.1016/j.cemconres.2020.106262"
+
+# ============================================================
+# Portlandite and tobermorite 14 A (Mishra et al. 2017, SI Table S2; 12-6 column for
+# CVFF/OPLS-AA, intended with a geometric combination rule; flexible SPC water).
+# The SI prints eps = 0.16 for the hydroxyl/silanol H in this column; 0.016 is used
+# (value of every other IFF hydrogen; 0.16 is taken to be a typo).
+# Tobermorite 11 A uses the same types except: oc12 = -0.56 e, no casl/oc22,
+# and ocx (interlayer bridging O, -0.58 e) instead of oc22.
+# ============================================================
+
+[atom.cax]
+element = "Ca"
+charge = 1.7
+environment = "calcium in portlandite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.ox]
+element = "O"
+charge = -1.05
+environment = "hydroxide oxygen in portlandite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.hox]
+element = "H"
+charge = 0.2
+environment = "hydroxide hydrogen in portlandite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.casl]
+element = "Ca"
+charge = 1.7
+environment = "interlayer calcium in tobermorite 14 A"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.cat]
+element = "Ca"
+charge = 1.5
+environment = "intralayer calcium in tobermorite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.sc2]
+element = "Si"
+charge = 1.0
+environment = "silicon in tobermorite (bulk)"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.sc3]
+element = "Si"
+charge = 1.0
+environment = "silicon in tobermorite (with silanol)"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.oc12]
+element = "O"
+charge = -0.58
+environment = "bridging oxygen in tobermorite (14 A; -0.56 in 11 A)"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.oc13]
+element = "O"
+charge = -0.94
+environment = "apical silicate oxygen in tobermorite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.oc22]
+element = "O"
+charge = -1.08
+environment = "apical interlayer silicate oxygen in tobermorite 14 A"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.ocx]
+element = "O"
+charge = -0.58
+environment = "interlayer bridging oxygen in tobermorite 11 A"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.oc14]
+element = "O"
+charge = -0.67
+environment = "silanol oxygen in tobermorite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[atom.hoy]
+element = "H"
+charge = 0.4
+environment = "silanol hydrogen in tobermorite"
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."cax-cax"]
+epsilon = 0.28
+sigma = 2.80633096214
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."ox-ox"]
+epsilon = 0.18
+sigma = 3.16269044940
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."hox-hox"]
+epsilon = 0.016
+sigma = 0.96662510918
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."casl-casl"]
+epsilon = 0.29
+sigma = 2.89542083396
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."cat-cat"]
+epsilon = 0.29
+sigma = 3.02905564168
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."sc2-sc2"]
+epsilon = 0.51
+sigma = 4.05358916754
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."sc3-sc3"]
+epsilon = 0.51
+sigma = 4.05358916754
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."oc12-oc12"]
+epsilon = 0.16
+sigma = 3.02905564168
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."oc13-oc13"]
+epsilon = 0.14
+sigma = 2.77960400060
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."oc22-oc22"]
+epsilon = 0.19
+sigma = 3.38541512893
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."ocx-ocx"]
+epsilon = 0.16
+sigma = 3.02905564168
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."oc14-oc14"]
+epsilon = 0.12
+sigma = 3.09141855195
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[lj."hoy-hoy"]
+epsilon = 0.016
+sigma = 0.96662510918
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."hox-ox"]
+k = 495
+r0 = 0.955
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."oc12-sc2"]
+k = 300
+r0 = 1.71
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."oc12-sc3"]
+k = 300
+r0 = 1.67
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."ocx-sc3"]
+k = 300
+r0 = 1.62
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."oc13-sc2"]
+k = 300
+r0 = 1.62
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."oc14-sc3"]
+k = 300
+r0 = 1.68
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."oc22-sc3"]
+k = 300
+r0 = 1.59
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[bond.harmonic."hoy-oc14"]
+k = 495
+r0 = 0.945
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc12-sc2-oc13"]
+k = 170
+theta0 = 111.5
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc12-sc2-oc12"]
+k = 170
+theta0 = 100.2
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc13-sc2-oc13"]
+k = 170
+theta0 = 112.5
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc12-sc3-ocx"]
+k = 170
+theta0 = 107.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc12-sc3-oc12"]
+k = 170
+theta0 = 107.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc22-sc3-oc12"]
+k = 170
+theta0 = 107.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc12-sc3-oc14"]
+k = 170
+theta0 = 111.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."ocx-sc3-oc14"]
+k = 170
+theta0 = 111.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."oc22-sc3-oc14"]
+k = 170
+theta0 = 111.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."sc2-oc12-sc3"]
+k = 170
+theta0 = 139.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."sc2-oc12-sc2"]
+k = 170
+theta0 = 144.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."sc3-ocx-sc3"]
+k = 170
+theta0 = 174.5
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"
+
+[angle.harmonic."sc3-oc14-hoy"]
+k = 50
+theta0 = 115.0
+ref = "https://doi.org/10.1016/j.cemconres.2017.09.003"

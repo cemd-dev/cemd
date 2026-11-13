@@ -171,6 +171,8 @@ class CSHBuilder(BaseBuilder):
         Create a builder from an existing AtomicSystem.
 
         This is useful for analyzing or modifying existing C-S-H structures.
+        The builder works on a copy: `to_cash` returns a new system and
+        leaves ``system`` unchanged.
 
         Parameters
         ----------
@@ -187,10 +189,10 @@ class CSHBuilder(BaseBuilder):
         >>> system = AtomicSystem.from_file("csh.lmp")
         >>> builder = CSHBuilder.from_system(system)
         >>> analysis = builder.analyze()
-        >>> cash_system, ratio = builder.to_cash(as_ratio=0.1)
+        >>> cash_system = builder.to_cash(al_si=0.1, compensation="OH")
         """
         builder = cls()
-        builder._system = system
+        builder._system = system.copy()
         try:
             builder._analysis = analyze_silicates(system)
         except Exception as e:
@@ -434,6 +436,13 @@ class CSHBuilder(BaseBuilder):
         seed : int, optional
             Seed of the random site selection.
 
+        Notes
+        -----
+        A system not yet typed with the CSH-FF rules (as returned by
+        `build`) is typed first (`set_types_from_elements` then
+        ``set_topology("cshff")``), so the result carries CSH-FF types and
+        connections.
+
         Returns
         -------
         AtomicSystem
@@ -455,6 +464,13 @@ class CSHBuilder(BaseBuilder):
 
         system = self._system
         rng = np.random.default_rng(seed)
+
+        # The clean-up below keeps the CSH-FF connection types only: a system
+        # straight from `build()` (crystallographic labels O1, H1...) would
+        # lose every bond, water included. Type it first.
+        if not set(system.atom_types) & {"Ob", "Osi", "Osih", "Ow"}:
+            system.set_types_from_elements()
+            system.set_topology("cshff")
 
         universe = system.to_mda()
         si_sel = universe.select_atoms("type Si")

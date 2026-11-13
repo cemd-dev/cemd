@@ -1,11 +1,18 @@
-# sperinck.toml
-# Force field parameters for Sperinck 2016
+# sadat2016.toml
+# Geopolymer / metakaolin force field of Sadat et al. 2016 (J. Chem. Phys. 145, 134706), Table I
 # Reference: https://doi.org/10.1063/1.4964301
+# Si/Al/O: Teter potential as used by Sperinck et al. 2011 (https://doi.org/10.1039/c0jm01748e);
+# water: SPC/Fw. Energies converted from eV (1 eV = 23.060548 kcal/mol).
+# Not represented: the Si-Ow and Al-Ow composite potentials of Sadat et al.
+# Ca and K are in neither Sadat 2016 nor Sperinck 2011: origin unverified.
 
 [model]
-name = "Sperinck 2016"
+name = "Sadat 2016"
 ref = "https://doi.org/10.1063/1.4964301"
 description = "Force field for geopolymer/metakaolin"
+category = "minerals"
+mixing = "none"
+mixing_note = "Pair-specific Buckingham and LJ terms"
 
 # ============================================================
 # Atom Types
@@ -95,8 +102,9 @@ rho = 0.255185
 C = 2312.05052549786
 ref = "https://doi.org/10.1063/1.4964301"
 
+# Sadat 2016: 2029.2233 eV (Sperinck 2011 / Teter: 1844.7548 eV = 42541.056 kcal/mol)
 [buckingham."ogp-ogp"]
-A = 42541.056301164
+A = 46795.0013
 rho = 0.343645
 C = 4441.00030122061
 ref = "https://doi.org/10.1063/1.4964301"
@@ -131,8 +139,9 @@ ref = "https://doi.org/10.1063/1.4964301"
 # Bond Parameters
 # ============================================================
 
+# SPC/Fw: V = (kb/2)(r-r0)^2 with kb = 1059.162 (Wu et al. 2006)
 [bond.harmonic."hwgp-owgp"]
-k = 1059.162
+k = 529.581
 r0 = 1.012
 ref = "https://doi.org/10.1063/1.4964301"
 
@@ -141,6 +150,6 @@ ref = "https://doi.org/10.1063/1.4964301"
 # ============================================================
 
 [angle.harmonic."hwgp-owgp-hwgp"]
-k = 75.9
+k = 37.95
 theta0 = 113.24
 ref = "https://doi.org/10.1063/1.4964301"

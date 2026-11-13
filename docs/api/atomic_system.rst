@@ -131,6 +131,7 @@ Modifiers
    AtomicSystem.add_atoms
    AtomicSystem.protonate_atom
    AtomicSystem.protonate_atoms
+   AtomicSystem.substitute_atoms
    AtomicSystem.remove_atom
    AtomicSystem.remove_atoms
    AtomicSystem.set_atom_position

@@ -59,7 +59,11 @@ def test_get_atom_type_missing_returns_none(db):
 
 @pytest.mark.parametrize(
     "name, key",
-    [("SPC.ospc", "spc.ospc"), ("ClayFF.st", "clayff.st"), ("CSHFF2014.ca", "cshff2014.ca")],
+    [
+        ("SPC.ospc", "spc.ospc"),
+        ("ClayFF.st", "clayff.st"),
+        ("CSHFF2014.ca", "cshff2014.ca"),
+    ],
 )
 def test_get_atom_type_model_prefix_ignores_case(db, name, key):
     # Regression test: entries are keyed by file stem, so "SPC.ospc" fell
@@ -266,3 +270,67 @@ def test_iff_charmm_cl_stays_carbon(db):
     atom = db.get_atom_type("iff_charmm.CL")
     assert atom.element == "C"
     assert atom.mass == pytest.approx(12.011)
+
+
+def _toml_models():
+    import tomllib
+    from pathlib import Path
+
+    db_dir = Path(ForceFieldDatabase._get_forcefield_dir())
+    for path in sorted(db_dir.glob("*.toml")):
+        with open(path, "rb") as f:
+            yield path.stem, tomllib.load(f)
+
+
+@pytest.mark.parametrize(
+    "name,data", list(_toml_models()), ids=lambda v: v if isinstance(v, str) else ""
+)
+def test_toml_terms_only_use_declared_atom_types(name, data):
+    # Every type named in a pair, bond, angle or improper key must be declared
+    # under [atom] of the same file: a typo there silently drops the term
+    # (as "sc1-oc5-hoc" or "[atoms.Ow]" once did).
+    types = set(data.get("atom", {}))
+    assert types, f"{name}: no [atom] section"
+    undeclared = set()
+    for section in ("lj", "buckingham"):
+        for key in data.get(section, {}):
+            undeclared |= set(key.split("-")) - types
+    for section in ("bond", "angle", "improper", "bondbond", "bondangle"):
+        for style in data.get(section, {}).values():
+            for key in style:
+                undeclared |= set(key.split("-")) - types
+    assert not undeclared, f"{name}: undeclared types {sorted(undeclared)}"
+
+
+@pytest.mark.parametrize(
+    "name,data", list(_toml_models()), ids=lambda v: v if isinstance(v, str) else ""
+)
+def test_toml_atoms_have_charge_and_element(name, data):
+    for key, atom in data.get("atom", {}).items():
+        assert "element" in atom and "charge" in atom, f"{name}.{key}"
+
+
+def test_toml_morse_bonds_are_parsed():
+    from cemd.forcefield.models import MorseBondParams
+
+    db = ForceFieldDatabase()
+    bond = db.bond["clayff_moh.ho-oh"]
+    assert isinstance(bond, MorseBondParams)
+    assert (bond.D, bond.alpha, bond.r0) == pytest.approx((132.2491, 2.1815, 0.945))
+
+
+@pytest.mark.parametrize(
+    "name,data", list(_toml_models()), ids=lambda v: v if isinstance(v, str) else ""
+)
+def test_toml_model_declares_category_and_mixing(name, data):
+    # Both fields feed the generated tables of the user guide.
+    model = data["model"]
+    assert model.get("category") in {"minerals", "carbonates", "ions", "water"}, name
+    assert model.get("mixing") in {"arithmetic", "geometric", "none"}, name
+
+
+def test_model_metadata_exposes_mixing_rule():
+    db = ForceFieldDatabase()
+    assert db.models["wang2009"].mixing == "geometric"
+    assert db.models["raiteri2015"].mixing == "none"
+    assert db.models["clayff"].category == "minerals"

@@ -93,6 +93,41 @@ For silicate materials, you can analyze the polymerization state:
    print(f"Al/Si: {results['Al/Si']:.3f}")
    print(f"MCL (Mean Chain Length): {results['MCL']:.2f}")
    print(f"Q^n distribution: {results['Qn_distribution']}")
+   print(f"Q2(1Al): {results['Q2(1Al)']:.1f} %")
+
+``Qn_distribution`` gives the percentage of Si with *n* bridging oxygens (to Si
+or Al). ``Q2(1Al)`` is the part of Q\ :sup:`2` whose Si shares an oxygen with
+an Al, as resolved in 29Si NMR. The mean chain length follows Richardson's
+formula, MCL = 2 [Q\ :sup:`1` + Q\ :sup:`2`\ (0Al) + 3/2 Q\ :sup:`2`\ (1Al)] /
+Q\ :sup:`1`, which counts the bridging Al of a C-A-S-H as part of the chain;
+without Al it reduces to 2 (1 + Q\ :sup:`2`/Q\ :sup:`1`).
+
+Coordination Numbers
+^^^^^^^^^^^^^^^^^^^^
+
+:func:`~cemd.analysis.analyze_coordination` gives the distribution of the
+coordination number of a cation, frame by frame. The fractions of 4-, 5- and
+6-fold aluminium compare directly with 27Al MAS NMR (Al(VI) in the octahedral
+sheet of a clay, Al(IV) and Al(V) as it is calcined or ground, Al(IV) in the
+bridging sites of a C-A-S-H):
+
+.. code-block:: python
+
+   from cemd.analysis import analyze_coordination
+
+   cn = analyze_coordination(
+       universe,                 # or an AtomicSystem (a single row)
+       center_types="Al",
+       neighbor_types="O Ob Osi Oh Ow",
+       cutoff=2.4,               # first minimum of the Al-O RDF
+       start=100,                # skip the equilibration frames
+   )
+   print(cn.mean())              # averaged over the frames
+
+Each row is a frame; columns ``0`` to ``7`` and ``"8+"`` hold the percentage
+of centres with that many neighbours, ``"mean"`` the mean coordination. Take
+the cutoff at the first minimum of the corresponding RDF
+(:func:`~cemd.analysis.compute_rdf`).
 
 Dynamical Analysis
 ------------------

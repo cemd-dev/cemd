@@ -171,14 +171,25 @@ bridging silicon atoms with aluminum:
 
 .. code-block:: python
 
-   cash_system = builder.to_cash(as_ratio=0.10)  # target Al/Si ratio
+   cash_system = builder.to_cash(
+       al_si=0.10,            # Al/Si of the final C-A-S-H
+       compensation="OH",     # remove one interlayer OH- per Al
+       seed=1,                # reproducible choice of the sites
+   )
+
+``al_si`` is the Al/Si ratio of the result; ``as_ratio`` gives instead the
+number of Al as a fraction of the initial Si. With ``compensation="OH"``, the
+nearest interlayer hydroxide is removed for each Al, so Ca/(Si+Al) keeps its
+C-S-H value. A system that has not been typed yet is typed with the CSH-FF
+rules first. :doc:`tuto_cash` goes through the whole procedure.
 
 .. note::
 
    Substitution targets *bridging* silicon atoms specifically (matching
    real Al-for-Si substitution chemistry), so it requires enough of them
    to be present -- a very short or non-periodic silicate chain may have
-   none, in which case the system is returned unchanged.
+   none, in which case the system is returned unchanged. Above the number
+   of bridging sites, every one is substituted and a warning is issued.
 
 Building AFt/AFm Structures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -197,6 +208,38 @@ by hydrating a sulfate-containing framework:
    # AFm
    builder = AFBuilder(ws_ratio=8.0)
    afm_system = builder.build_afm(supercell=[3, 1, 1])
+
+.. warning::
+
+   The ettringite structure (Moore and Taylor) has no hydrogen positions,
+   and ``build_aft`` does not add the hydroxyl hydrogens of the Al(OH)\ :sub:`6`
+   columns: the 12 OH per formula unit come out as bare O. Add them before
+   assigning a force field.
+
+Isomorphic Substitution
+^^^^^^^^^^^^^^^^^^^^^^^
+
+A CIF with mixed occupancy (Si\ :sub:`0.75`\ Al\ :sub:`0.25` in a mica) is
+read with the majority species on every site.
+:meth:`~cemd.core.atomic_system.AtomicSystem.substitute_atoms` puts the
+minority species back at random sites:
+
+.. code-block:: python
+
+   # Al for Si in a mica, one in four in each tetrahedral sheet
+   si = system.atoms[system.atoms["type"] == "Si"]
+   for z_min, z_max in sheets:  # z range of each tetrahedral sheet
+       sheet = si.index[(si["z"] > z_min) & (si["z"] < z_max)]
+       system.substitute_atoms("Si", "Al", fraction=0.25, candidates=sheet, seed=1)
+
+By default no two substituted atoms share a bridging oxygen (Loewenstein's
+rule: no Al-O-Al between tetrahedra); the rule is applied among the
+``candidates``. Calling the method once per sheet, with that sheet's atoms as
+candidates, spreads the substitutions evenly between sheets. The charge of the new atoms is the one already set for
+their type, or ``charge=``; heterovalent substitutions also need their
+compensating cations. Bonds and angles around the substituted atoms are
+relabelled with the new type. :doc:`tuto_kaolinite` substitutes Fe for Al in
+kaolinite.
 
 Creating Surfaces
 -----------------

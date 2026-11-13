@@ -1,0 +1,70 @@
+# freitas2015.toml
+# Transferable force field for lime-silica-alumina clinker phases, crystalline and amorphous
+# Reference: https://doi.org/10.1039/c5cp02823j (Freitas et al. 2015, Table 1, Lennard-Jones set, eqn (2): 4 eps [(s/r)^12 - (s/r)^6])
+# Pair-specific LJ (no mixing rule): pairs not listed (Si-Si, Si-Ca, Al-Al, Al-Si, Al-Ca) are Coulomb only.
+# Energies converted from eV (1 eV = 23.060548 kcal/mol).
+# The paper also gives a Buckingham set (Cormack & Du) used as reference; it is not included here.
+
+[model]
+name = "Freitas 2015"
+ref = "https://doi.org/10.1039/c5cp02823j"
+description = "Lennard-Jones force field for cement clinker phases and CaO-Al2O3-SiO2 glasses"
+category = "minerals"
+mixing = "none"
+mixing_note = "Pair-specific terms; unlisted pairs are Coulomb only"
+
+# ============================================================
+# Atom Types
+# ============================================================
+
+[atom]
+
+[atom.si]
+element = "Si"
+charge = 2.4
+environment = "silicon in clinker phases / CAS glasses"
+ref = "https://doi.org/10.1039/c5cp02823j"
+
+[atom.ca]
+element = "Ca"
+charge = 1.2
+environment = "calcium in clinker phases / CAS glasses"
+ref = "https://doi.org/10.1039/c5cp02823j"
+
+[atom.al]
+element = "Al"
+charge = 1.8
+environment = "aluminium in clinker phases / CAS glasses"
+ref = "https://doi.org/10.1039/c5cp02823j"
+
+[atom.o]
+element = "O"
+charge = -1.2
+environment = "oxygen in clinker phases / CAS glasses"
+ref = "https://doi.org/10.1039/c5cp02823j"
+
+# ============================================================
+# Lennard-Jones 12-6 Parameters (pair-specific)
+# ============================================================
+
+[lj]
+
+[lj."o-si"]
+epsilon = 26.909815
+sigma = 1.4988
+
+[lj."ca-o"]
+epsilon = 1.938008
+sigma = 2.4203
+
+[lj."o-o"]
+epsilon = 0.324462
+sigma = 3.2528
+
+[lj."ca-ca"]
+epsilon = 0.002537
+sigma = 4.1978
+
+[lj."al-o"]
+epsilon = 3.985324
+sigma = 1.7773

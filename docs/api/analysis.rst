@@ -20,6 +20,7 @@ Silicate Network
    :toctree: generated/
 
    cemd.analysis.analyze_silicates
+   cemd.analysis.analyze_coordination
 
 Diffusion
 ---------

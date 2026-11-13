@@ -101,7 +101,9 @@ def test_from_system_runs_initial_analysis():
     system = _make_silicate_chain()
     builder = CSHBuilder.from_system(system)
 
-    assert builder._system is system
+    # The builder works on a copy of the system it is given
+    assert builder._system is not system
+    assert builder._system.num_atoms == system.num_atoms
     assert builder._analysis is not None
     assert "error" not in builder._analysis
     # A Q1-Q1 dimer: each Si has exactly 1 bridging neighbor.
@@ -554,3 +556,25 @@ def test_nearest_hydroxide_skips_silanols_and_water():
 
     removed = _nearest_hydroxides(system, [1], np.random.default_rng(0))
     assert sorted(removed) == [8, 9]
+
+
+def test_to_cash_types_an_untyped_system_instead_of_dropping_its_bonds():
+    # Regression test: on a system with crystallographic labels (as `build`
+    # returns), the clean-up kept only CSH-FF connection types and removed
+    # every bond, water included. It is now typed with the CSHFF rules first.
+    system = _make_silicate_chain()
+    builder = CSHBuilder.from_system(system)
+    with pytest.warns(UserWarning):
+        result = builder.to_cash(as_ratio=1.0)
+    assert set(result.atom_types) & {"Ob", "Osi", "Osih", "Ow"}
+
+
+def test_to_cash_leaves_the_given_system_unchanged():
+    # Regression test: `from_system` kept a reference to the system, so
+    # `to_cash` substituted Al in it and returned it: the C-S-H was gone.
+    system = _make_silicate_chain()
+    types_before = system.atoms["type"].tolist()
+    with pytest.warns(UserWarning):
+        cash = CSHBuilder.from_system(system).to_cash(as_ratio=1.0)
+    assert cash is not system
+    assert system.atoms["type"].tolist() == types_before

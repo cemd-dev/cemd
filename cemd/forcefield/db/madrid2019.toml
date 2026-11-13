@@ -1,0 +1,215 @@
+# madrid2019.toml
+# Madrid-2019: scaled-charge ion force field for Li+, Na+, K+, Mg2+, Ca2+, Cl- and SO4(2-) in TIP4P/2005 water
+# Reference: https://doi.org/10.1063/1.5121392 (Zeron et al. 2019, Tables I, III, IV)
+# Units converted from nm and kJ/mol. Pairs marked 'LB' in the paper are not listed:
+# apply the Lorentz-Berthelot (arithmetic) mixing rule for them.
+# Water: rigid TIP4P/2005 (M-site charge carried by ow, d_OM = 0.1546 A, as in tip4p2005.toml).
+# Sulfate: rigid tetrahedron, d_SO = 1.49 A (k = 0: geometry only).
+
+[model]
+name = "Madrid-2019"
+ref = "https://doi.org/10.1063/1.5121392"
+description = "Scaled-charge (0.85) ion and sulfate force field for TIP4P/2005 water"
+category = "ions"
+mixing = "arithmetic"
+mixing_note = "Lorentz-Berthelot for the pairs marked LB in the paper; every other pair is listed"
+
+# ============================================================
+# Atom Types
+# ============================================================
+
+[atom]
+
+[atom.li]
+element = "Li"
+charge = 0.85
+environment = "lithium ion"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.na]
+element = "Na"
+charge = 0.85
+environment = "sodium ion"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.k]
+element = "K"
+charge = 0.85
+environment = "potassium ion"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.mg]
+element = "Mg"
+charge = 1.7
+environment = "magnesium ion"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.ca]
+element = "Ca"
+charge = 1.7
+environment = "calcium ion"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.cl]
+element = "Cl"
+charge = -0.85
+environment = "chloride ion"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.s]
+element = "S"
+charge = 0.9
+environment = "sulfur in sulfate"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.os]
+element = "O"
+charge = -0.65
+environment = "oxygen in sulfate"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.ow]
+element = "O"
+charge = -1.1128
+environment = "water oxygen (TIP4P/2005, charge on the M site)"
+ref = "https://doi.org/10.1063/1.5121392"
+
+[atom.hw]
+element = "H"
+charge = 0.5564
+environment = "water hydrogen (TIP4P/2005)"
+ref = "https://doi.org/10.1063/1.5121392"
+
+# ============================================================
+# Lennard-Jones 12-6 Parameters
+# ============================================================
+
+[lj]
+
+[lj."li-li"]
+epsilon = 0.103989
+sigma = 1.4397
+
+[lj."li-cl"]
+epsilon = 0.306631
+sigma = 2.7
+
+[lj."li-ow"]
+epsilon = 0.167459
+sigma = 2.12
+
+[lj."li-os"]
+epsilon = 0.192067
+sigma = 2.84485
+
+[lj."na-na"]
+epsilon = 0.351902
+sigma = 2.21737
+
+[lj."cl-na"]
+epsilon = 0.343904
+sigma = 3.00512
+
+[lj."na-ow"]
+epsilon = 0.189624
+sigma = 2.60838
+
+[lj."k-k"]
+epsilon = 0.474603
+sigma = 2.3014
+
+[lj."cl-k"]
+epsilon = 0.334608
+sigma = 3.397
+
+[lj."k-ow"]
+epsilon = 0.334711
+sigma = 2.8904
+
+[lj."k-os"]
+epsilon = 0.308202
+sigma = 3.2
+
+[lj."mg-mg"]
+epsilon = 0.872825
+sigma = 1.1629
+
+[lj."cl-mg"]
+epsilon = 0.717017
+sigma = 3.0
+
+[lj."mg-ow"]
+epsilon = 2.868069
+sigma = 1.81
+
+[lj."mg-os"]
+epsilon = 0.656965
+sigma = 2.40645
+
+[lj."ca-ca"]
+epsilon = 0.121224
+sigma = 2.6656
+
+[lj."ca-cl"]
+epsilon = 0.239006
+sigma = 3.15
+
+[lj."ca-ow"]
+epsilon = 1.732792
+sigma = 2.4
+
+[lj."cl-cl"]
+epsilon = 0.018385
+sigma = 4.69906
+
+[lj."cl-ow"]
+epsilon = 0.014814
+sigma = 4.23867
+
+[lj."ow-ow"]
+epsilon = 0.185207
+sigma = 3.1589
+
+[lj."os-ow"]
+epsilon = 0.150335
+sigma = 3.40445
+
+[lj."s-s"]
+epsilon = 0.250167
+sigma = 3.55
+
+[lj."os-os"]
+epsilon = 0.200143
+sigma = 3.65
+
+[lj."hw-hw"]
+epsilon = 0
+sigma = 0
+
+# ============================================================
+# Bond Parameters (rigid: geometry only)
+# ============================================================
+
+[bond.harmonic]
+
+[bond.harmonic."hw-ow"]
+k = 0
+r0 = 0.9572
+
+[bond.harmonic."os-s"]
+k = 0
+r0 = 1.49
+
+# ============================================================
+# Angle Parameters (rigid: geometry only)
+# ============================================================
+
+[angle.harmonic]
+
+[angle.harmonic."hw-ow-hw"]
+k = 0
+theta0 = 104.52
+
+[angle.harmonic."os-s-os"]
+k = 0
+theta0 = 109.4712

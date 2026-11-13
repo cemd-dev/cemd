@@ -487,3 +487,81 @@ def test_from_smiles_water():
 def test_from_smiles_invalid_raises():
     with pytest.raises(ValueError, match="Invalid SMILES"):
         AtomicSystem.from_smiles("not_a_smiles!!")
+
+
+def test_lammps_data_roundtrip_hybrid_bond_styles(tmp_path):
+    # A section mixing bond styles (harmonic water, Morse hydroxyl, as in
+    # ClayFF-MOH) must be written in LAMMPS's hybrid form -- "# hybrid" on the
+    # header, the style name on every line -- and read back as such.
+    import pandas as pd
+
+    from cemd.forcefield.models import HarmonicBondParams, MorseBondParams
+
+    atoms = pd.DataFrame(
+        {
+            "type": ["Ow", "Hw", "Hw", "Oh", "Ho", "Ho"],
+            "charge": [-0.8, 0.4, 0.4, -0.8, 0.4, 0.4],
+            "x": [0.0, 0.96, -0.24, 10.0, 10.96, 9.76],
+            "y": [0.0, 0.0, 0.93, 0.0, 0.0, 0.93],
+            "z": [0.0, 0.0, 0.0, 5.0, 5.0, 5.0],
+        },
+        index=range(1, 7),
+    )
+    system = AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [30.0, 30.0, 30.0, 90.0, 90.0, 90.0],
+            "masses": {"Ow": 15.9994, "Hw": 1.008, "Oh": 15.9994, "Ho": 1.008},
+            "charges": {"Ow": -0.8, "Hw": 0.4, "Oh": -0.8, "Ho": 0.4},
+        }
+    )
+    for bond in ([1, 2], [1, 3], [4, 5], [4, 6]):
+        system.add_bond(bond)
+    system.set_bond_params("Hw-Ow", HarmonicBondParams(k=554.1349, r0=1.0))
+    system.set_bond_params("Ho-Oh", MorseBondParams(D=132.2491, alpha=2.1815, r0=0.945))
+    path = tmp_path / "hybrid.data"
+    system.write(path)
+
+    section = path.read_text().split("Bond Coeffs")[1].split("Masses")[0]
+    assert section.lstrip().startswith("# hybrid")
+    assert " harmonic " in section and " morse " in section
+
+    reloaded = AtomicSystem.from_file(path)
+    bonds = reloaded._ff_params.bond
+    assert isinstance(bonds["Hw-Ow"], HarmonicBondParams)
+    assert isinstance(bonds["Ho-Oh"], MorseBondParams)
+    assert bonds["Ho-Oh"].alpha == pytest.approx(2.1815)
+
+
+def test_lammps_data_single_bond_style_is_not_hybrid(tmp_path):
+    from cemd.forcefield.models import HarmonicBondParams
+
+    system = make_water_system()
+    system.set_bond_params("Hw-Ow", HarmonicBondParams(k=554.1349, r0=1.0))
+    path = tmp_path / "water.data"
+    system.write(path)
+    assert "hybrid" not in path.read_text()
+
+
+def test_pdb_conect_bond_types_match_their_atoms(tmp_path):
+    # Regression test: the bond types read from CONECT records were shifted
+    # by one row (index alignment between a 0- and a 1-based index): each
+    # bond carried the type of the next one and the last bond was NaN.
+    pdb = tmp_path / "mixed.pdb"
+    pdb.write_text(
+        "HETATM    1  O   HOH     1       0.000   0.000   0.000\n"
+        "HETATM    2  H   HOH     1       0.960   0.000   0.000\n"
+        "HETATM    3  C   CO2     2       5.000   0.000   0.000\n"
+        "HETATM    4  N   NNN     3       9.000   0.000   0.000\n"
+        "HETATM    5  S   SSS     4      13.000   0.000   0.000\n"
+        "CONECT    1    2\n"
+        "CONECT    3    4\n"
+        "CONECT    4    5\n"
+        "END\n"
+    )
+    system = AtomicSystem.from_file(pdb)
+    bonds = system.bonds
+    assert not bonds["type"].isna().any()
+    types = system.atoms["type"]
+    for _, bond in bonds.iterrows():
+        assert bond["type"] == f"{types[bond.atom_1]}-{types[bond.atom_2]}"

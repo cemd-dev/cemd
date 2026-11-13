@@ -84,7 +84,8 @@ def _process_analyze(source, si_types, o_types, al_types, ca_types, cutoff):
     -------
     dict
         Calculated network metrics including 'Ca/(Si+Al)', 'Al/Si', 'H2O/(Si+Al)',
-        'MCL', and 'Qn_distribution'.
+        'MCL', 'Qn_distribution' (percent of Si) and 'Q2(1Al)' (percent of
+        Si that are Q2 with one Al neighbour, included in Q2).
     """
 
     def safe_select(types_str):
@@ -128,11 +129,14 @@ def _process_analyze(source, si_types, o_types, al_types, ca_types, cutoff):
     al_text = f" {al_types}" if al_types.strip() else ""
     network_formers = source.select_atoms(f"type {si_types}{al_text}")
     nf_indices = set(network_formers.indices)
+    al_indices = set(sel_al.indices) if sel_al is not None else set()
     o_indices = set(sel_o.indices)
+    q2_1al = 0  # Q2 Si sharing one of its bridging O with an Al
 
     for s_idx in sel_si.indices:
         neighbors_o = source.select_atoms(f"around {cutoff} index {s_idx}")
         n_bridging = 0
+        n_al_bridges = 0
         for o_idx in neighbors_o.indices:
             if o_idx in o_indices:
                 potential_bridges = source.select_atoms(
@@ -146,13 +150,24 @@ def _process_analyze(source, si_types, o_types, al_types, ca_types, cutoff):
                 ]
                 if len(bridges) > 0:
                     n_bridging += 1
+                    if any(idx in al_indices for idx in bridges):
+                        n_al_bridges += 1
         if n_bridging <= 4:
             cqsi[n_bridging] += 1
+        if n_bridging == 2 and n_al_bridges == 1:
+            q2_1al += 1
 
     pqsi = (cqsi / n_si) * 100
 
-    # Calculation of Average Chain Length (MCL)
-    mcl = 2 * (1 + pqsi[2] / pqsi[1]) if pqsi[1] > 1e-3 else float("inf")
+    # Mean chain length, Richardson's 29Si NMR formula for C-A-S-H:
+    # MCL = 2 [Q1 + Q2(0Al) + 3/2 Q2(1Al)] / Q1. A bridging Al is a
+    # tetrahedron of the chain seen only through its two Q2(1Al)
+    # neighbours, hence the 3/2; without Al it is 2 (1 + Q2/Q1). Counting
+    # every Q2 alike (the formula used before) dropped the bridging Al.
+    q2_0al = cqsi[2] - q2_1al
+    mcl = (
+        2 * (cqsi[1] + q2_0al + 1.5 * q2_1al) / cqsi[1] if cqsi[1] > 0 else float("inf")
+    )
 
     return {
         "Ca/(Si+Al)": ca_m_ratio,
@@ -162,6 +177,7 @@ def _process_analyze(source, si_types, o_types, al_types, ca_types, cutoff):
         "H2O/Si": h2o_si_ratio,
         "MCL": float(mcl),
         "Qn_distribution": pqsi,
+        "Q2(1Al)": q2_1al / n_si * 100 if n_si > 0 else 0.0,
     }
 
 

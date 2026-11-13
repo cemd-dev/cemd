@@ -1,8 +1,74 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-11-13
+
+### Breaking changes
+
+- Force-field models renamed after the paper they come from:
+  `cshff_duque` -> `duque2018`, `sperinck` -> `sadat2016`,
+  `wang2008` -> `wang2009`. Scripts that load them by the old name must use
+  the new one.
+- `apply_pair_mixing_rules()` defaults to `rule=None`: pairs are mixed by the
+  rule each model declares, and the pairs a pair-specific model does not list
+  stay Coulomb only. Pass `rule=` explicitly to keep the 0.2.0 behaviour.
+  See "Changed" below.
+- `Splitter.split()` and `CSHBuilder.from_system()` work on a copy of their
+  input. Code that called `splitter.split()` without keeping its result must
+  now use the returned system.
 
 ### Fixed
+
+- GUI, C-S-H/C-A-S-H builder: the H2O/Si shown after a build counted the
+  hydrogens from the list `["H", "Hw", "HsiHh"]`. `"HsiHh"` is no type, so
+  silanol and hydroxide H were skipped, and a C-S-H straight from the builder
+  (labels H1, H2) showed H2O/Si = 0. Ca, Si, Al and H are now counted by
+  element.
+
+- PDB reader: the type of the bonds read from CONECT records was shifted by one
+  row (a 0-based Series assigned to a 1-based frame), so every bond carried the
+  type of the next one and the last bond had none. Every Packmol output was
+  affected, among them the C-S-H of `CSHBuilder.build()`, on which `to_cash()`
+  then failed.
+- `CSHBuilder.to_cash()` on a system straight from `build()` (crystallographic
+  labels) removed every bond, water included: its clean-up keeps the CSH-FF
+  connection types only. Such a system is now typed with the CSHFF rules first.
+- `analyze_silicates`: the mean chain length ignored the bridging Al of a
+  C-A-S-H (MCL = 2 (1 + Q2/Q1) with every Q2 alike): a pentamer Si-Si-Al-Si-Si
+  came out at 4. It now follows Richardson's formula,
+  MCL = 2 [Q1 + Q2(0Al) + 3/2 Q2(1Al)] / Q1, unchanged without Al; the result
+  has a new `"Q2(1Al)"` entry.
+- `set_type2atoms` and `substitute_atoms` changed the type of atoms without
+  updating the bonds, angles, dihedrals and impropers around them, which kept
+  the old label and the parameters of the old type (an Fe substituted for Al
+  kept the Al-O-H angle). Their labels are now recomputed.
+
+- Force-field database checked against the source papers (Cygan 2004/2021,
+  Mishra 2013/2014/2021, Pustovgar 2017, Emami 2014, Shahsavari 2011,
+  Qomi 2014, Wu 2006, Horn 2004, Armstrong 2023):
+  - `spc_fw`: the water O was declared under `[atoms.Ow]` and never loaded.
+  - `raiteri2015`: the water O-H bond was stored as `Ow-Ow`.
+  - `clayff`: sigma of `mgo`/`mgh` 5.2563 -> 5.2643 A (R0 = 5.9090); `ohs`
+    had no LJ term.
+  - `iff`: the Si-O-H angle (`sc1-oc5-hoc`) and the aluminol H-O-Al angle
+    (`hoca-oc4-ac1`) named types that never meet; the silanol Si-O and
+    aluminol Al-O bonds were missing; the silica O charges were swapped
+    (bulk -0.55, silanol -0.675); silica had no LJ, bond or angle term.
+  - `sadat2016` (was `sperinck`): SPC/Fw water twice too stiff
+    (k = 1059.162 -> 529.581, k_theta = 75.9 -> 37.95; Wu et al. give kb/2).
+  - `tip4p_ew`: charges were those of TIP4P (0.52/-1.04), now 0.52422/-1.04844.
+  - `cshff2014`: charges are now the base CSH-FF ones (Shahsavari et al.
+    2011): Ca 1.43, Cw 1.70, Si 1.72, H 0.29, o -1.14, ob = oh -1.0. The
+    o/ob charges were swapped relative to their LJ terms. Systems typed with
+    `cshff2014` should have their charges reassigned.
+  - `solcon`: replaced. The file held ClayFF-like LJ terms with SolCon
+    charges; it now follows Armstrong et al. 2023, Table 1 (Buckingham
+    ion-carbonate and carbonate-water, LJ cation-water, SPC/Fw). The carbonate
+    intramolecular terms are not published; the harmonic part of raiteri2015
+    is used and flagged as such.
+- LAMMPS data files: a bonded section mixing styles (harmonic and Morse
+  bonds, ...) is written in hybrid form (`Bond Coeffs # hybrid`, style name
+  on each line) and read back; coefficient sections whose lines differ in
+  length (LJ and Buckingham pairs) no longer fail to read.
 
 - Reading a non-orthogonal crystal (CIF or pymatgen Structure) without
   an axis reindexing placed the atoms in pymatgen's Cartesian frame (c along
@@ -101,6 +167,27 @@
 
 ### Added
 
+- Documentation: tutorials "From C-S-H to C-A-S-H" and "Kaolinite with
+  ClayFF-MOH", a page on viewing and rendering systems (`view()`,
+  `render_tachyon`, cropping), API pages for `cemd.topology` and
+  `cemd.forcefield`, and sections on `substitute_atoms`,
+  `analyze_coordination` and the C-A-S-H options of `to_cash`.
+- `MorseBondParams` is exported by `cemd.forcefield`.
+
+- Force-field models: `clayff_moh` (ClayFF with Morse O-H and M-O-H angles,
+  Cygan et al. 2021), `afff` (AFt/AFm/C3A, Honorio et al. 2020),
+  `freitas2015` (LJ model of clinker phases and CAS glasses),
+  `madrid2019` (scaled-charge ions and sulfate in TIP4P/2005, Zeron et al.
+  2019), `joung2008` (alkali and halide ions for TIP3P, TIP4P-Ew and SPC/E).
+  `iff` gains silica (Emami 2014), calcium sulfates (Mishra 2021), portlandite
+  and tobermorite 14 A (Mishra 2017).
+- `[bond.morse]` section in force-field TOML files (D, alpha, r0).
+- `category` and `mixing` (plus optional `mixing_note`) in the `[model]`
+  section of every force-field TOML file, exposed on `ForceFieldModel`. The
+  model and mixing-rule tables of the force-field guide are generated from
+  them at each documentation build (`docs/_scripts/ff_tables.py`).
+- Test that every type named in a TOML term is declared in its `[atom]`.
+
 - `AtomicSystem.substitute_atoms()`: replace randomly chosen atoms of one
   type by another, for isomorphic substitution (Al for Si in a mica, Mg for
   Al in a smectite). By default no two substituted atoms share a bridging
@@ -113,7 +200,7 @@
   by frame along a trajectory. The 4-, 5- and 6-fold Al fractions compare
   directly with 27Al MAS NMR.
 
-- Force-field model `cshff_duque` (`cshff_duque.toml`): the CSH-FF + ClayFF
+- Force-field model `duque2018` (`duque2018.toml`, first added as `cshff_duque`): the CSH-FF + ClayFF
   hybrid of Duque-Redondo et al. (doi:10.1039/c8cp00654g) with the charges of Ihaddadene et al.
   (2026), self LJ terms only (every cross term mixed). Ca 1.43, Cw 2.0,
   Si 1.72, Hsi 0.29, Ob -1.14 and Osi = Osih -1.0 before neutralization,
@@ -175,6 +262,29 @@ Measured on water boxes with bonds and angles.
   faster (112 s → 5.7 s on 1 000 atoms, 3 000 frames).
 
 ### Changed
+
+- Builders return a new system and leave the one they are given unchanged.
+  `Splitter.split()` used to cut the input in place and return it, so the
+  input came back opened (a second cut of "the same" system cut the opened
+  one) and shared its charges with the result; `CSHBuilder.from_system()`
+  kept a reference, so `to_cash()` replaced the C-S-H by the C-A-S-H. Both
+  now work on a copy. `AtomicSystem` methods still modify the system in place
+  and return it. Code that called `splitter.split()` without keeping its
+  result must now use the returned system.
+
+- Cross pairs missing from the database are mixed with the rule of the
+  model their types come from (`mixing` in the TOML file) instead of always
+  Lorentz-Berthelot: geometric for `wang2009`, and not at all inside the
+  pair-specific models (`raiteri2015`, `solcon`, `freitas2015`, ...), whose
+  unlisted pairs stay Coulomb only. `apply_pair_mixing_rules()` now defaults
+  to `rule=None`, which does the same, and no longer raises on types of
+  pair-specific models that have no LJ self term; an explicit `rule` keeps
+  the previous behaviour. Types from models with different rules are mixed
+  arithmetically with a warning.
+- Force-field models renamed after the paper they come from:
+  `cshff_duque` -> `duque2018`, `sperinck` -> `sadat2016` (its parameters are
+  those of Sadat et al. 2016, Table I, including A(O-O) = 2029.22 eV),
+  `wang2008` -> `wang2009`.
 
 - `Splitter(repair=True)` rebuilds the bonds a cut severs by hydrolysis,
   explicit ones and `bonds_dict` contacts (the Si-O of ClayFF) alike. A

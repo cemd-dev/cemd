@@ -1,11 +1,15 @@
-# wang2008.toml
-# Force field for vaterite
+# wang2009.toml
+# Force field for calcium carbonate / vaterite (Wang & Becker 2009, Table 1)
+# Mixing rule of the source: geometric on C6 and C12 (i.e. on epsilon and sigma).
 # Reference: https://doi.org/10.2138/am.2009.2939
 
 [model]
-name = "Wang 2008"
+name = "Wang & Becker 2009"
 ref = "https://doi.org/10.2138/am.2009.2939"
 description = "Force field for vaterite"
+category = "carbonates"
+mixing = "geometric"
+mixing_note = "Geometric mean of C6 and C12, i.e. of epsilon and sigma"
 
 # ============================================================
 # Atom Types

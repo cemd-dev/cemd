@@ -526,3 +526,57 @@ def test_analyze_coordination_needs_both_selections():
 
     with pytest.raises(ValueError, match="No atom of type"):
         analyze_coordination(_al_polyhedra_system(), center_types="Mg")
+
+
+def _tetrahedra_chain(formers):
+    """Linear chain of corner-sharing tetrahedra, one former per site."""
+    import pandas as pd
+
+    from cemd import AtomicSystem
+
+    types, xyz = [], []
+    for i, former in enumerate(formers):
+        x = 3.2 * i
+        types.append(former)
+        xyz.append((x, 0.0, 0.0))
+        if i < len(formers) - 1:  # bridging O towards the next tetrahedron
+            types.append("O")
+            xyz.append((x + 1.6, 0.0, 0.0))
+        for dy, dz in ((1.6, 0.0), (-1.6, 0.0), (0.0, 1.6)):  # terminal O
+            types.append("O")
+            xyz.append((x, dy, dz))
+        if i == 0:
+            types.append("O")
+            xyz.append((x - 1.6, 0.0, 0.0))
+    x, y, z = zip(*xyz)
+    atoms = pd.DataFrame(
+        {"type": types, "charge": 0.0, "x": x, "y": y, "z": z},
+        index=range(1, len(types) + 1),
+    )
+    return AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [60.0, 30.0, 30.0, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "Al": 26.982, "O": 15.999},
+            "charges": {},
+        }
+    )
+
+
+def test_mcl_counts_the_bridging_aluminium():
+    # Richardson's formula: a pentamer Si-Si-Al-Si-Si has Q1 = 2 and
+    # Q2(1Al) = 2, MCL = 2 (Q1 + Q2(0Al) + 3/2 Q2(1Al)) / Q1 = 5. Counting
+    # every Q2 alike gave 4, as if the bridging Al were not in the chain.
+    from cemd.analysis import analyze_silicates
+
+    result = analyze_silicates(_tetrahedra_chain(["Si", "Si", "Al", "Si", "Si"]))
+    assert result["MCL"] == pytest.approx(5.0)
+    assert result["Q2(1Al)"] == pytest.approx(50.0)
+
+
+def test_mcl_without_aluminium_is_unchanged():
+    from cemd.analysis import analyze_silicates
+
+    result = analyze_silicates(_tetrahedra_chain(["Si"] * 5))
+    assert result["MCL"] == pytest.approx(5.0)
+    assert result["Q2(1Al)"] == pytest.approx(0.0)

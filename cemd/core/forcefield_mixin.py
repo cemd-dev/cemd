@@ -85,6 +85,30 @@ class ForceFieldMixin:
         improper_assignments: dict[str, str] = None,
         overwrite: bool = True,
     ) -> None:
+        """Assign masses, charges and force-field terms from the database.
+
+        Parameters
+        ----------
+        atom_assignments : dict, optional
+            System atom type -> database type, preferably ``"model.type"``
+            (``{"Ow": "spc.ospc"}``). Without it, the types recorded by a
+            previous assignment or by the topology rules are used.
+        bond_assignments, angle_assignments, dihedral_assignments, improper_assignments : dict, optional
+            Explicit database keys for bonded types; by default they are
+            found from the atom assignments.
+        overwrite : bool, optional
+            Replace parameters already set. Default True.
+
+        Notes
+        -----
+        Pair terms listed by the model of both types are taken as is. A
+        missing cross pair is mixed from the two LJ self terms with the
+        rule the model declares (``mixing`` in its TOML file): arithmetic
+        (Lorentz-Berthelot) or geometric; a pair-specific model
+        (``mixing = "none"``) leaves its unlisted pairs to Coulomb. Two
+        types from models with different rules are mixed arithmetically,
+        with a warning.
+        """
 
         db = ForceFieldDatabase()
 
@@ -536,17 +560,49 @@ class ForceFieldMixin:
 
     def apply_pair_mixing_rules(
         self,
-        rule: str = "arithmetic",
+        rule: str | None = None,
         overwrite: bool = False,
     ) -> None:
-        """Calculate missing cross-interaction parameters."""
+        """Calculate missing Lennard-Jones cross-interaction parameters.
 
+        Parameters
+        ----------
+        rule : {None, "arithmetic", "geometric"}, optional
+            Combination rule. ``"arithmetic"`` is Lorentz-Berthelot
+            (sigma arithmetic, epsilon geometric), ``"geometric"`` takes the
+            geometric mean of both. With ``None`` (default), each pair uses
+            the rule declared by the database model its two types come from
+            (``mixing`` in the model's TOML file):
+
+            - a type assigned from a ``"none"`` model (pair-specific terms,
+              e.g. ``raiteri2015``) needs no LJ self term, and its pairs with
+              types of the same model are left to Coulomb;
+            - two types from models with different rules (``arithmetic`` and
+              ``geometric``) are mixed arithmetically, with a warning;
+            - a type not assigned from the database uses ``"arithmetic"``.
+
+            Given explicitly, the rule applies to every pair and every type
+            must have an LJ self term.
+        overwrite : bool, optional
+            Recompute pairs that already have parameters. Default False.
+        """
+        if rule is not None and rule not in ("arithmetic", "geometric"):
+            raise ValueError(
+                f"Unknown mixing rule: '{rule}'. "
+                "Supported rules: 'arithmetic', 'geometric'."
+            )
+
+        type_rules = self._model_mixing_rules() if rule is None else {}
+
+        def type_rule(atom_type):
+            return rule or type_rules.get(atom_type, "arithmetic")
+
+        # Types of "none" models may lack an LJ self term: they are simply
+        # left out of mixing. Every other type must have one.
         missing_self_params = []
-
         for atom_type in self.atom_types:
             key = self._normalize_binary_key(atom_type, atom_type)
-
-            if key not in self._ff_params.pair:
+            if key not in self._ff_params.pair and type_rule(atom_type) != "none":
                 missing_self_params.append(atom_type)
 
         if missing_self_params:
@@ -559,44 +615,51 @@ class ForceFieldMixin:
 
         for atom_type in self.atom_types:
             key = self._normalize_binary_key(atom_type, atom_type)
-            params = self._ff_params.pair[key]
+            params = self._ff_params.pair.get(key)
 
-            if not isinstance(params, LJParams):
+            if params is not None and not isinstance(params, LJParams):
+                if type_rule(atom_type) == "none":
+                    continue
                 raise ValueError(
                     f"Self-interaction for type '{atom_type}' is not LJ "
                     f"parameters (got {type(params).__name__}). "
                     "Mixing rules only apply to LJ parameters."
                 )
 
+        conflicts = []
         for atom_type1, atom_type2 in combinations(self.atom_types, 2):
             pair_key = self._normalize_binary_key(atom_type1, atom_type2)
 
             if pair_key in self._ff_params.pair and not overwrite:
                 continue
 
-            params1 = self._ff_params.pair[
+            params1 = self._ff_params.pair.get(
                 self._normalize_binary_key(atom_type1, atom_type1)
-            ]
-            params2 = self._ff_params.pair[
+            )
+            params2 = self._ff_params.pair.get(
                 self._normalize_binary_key(atom_type2, atom_type2)
-            ]
+            )
+            if not (isinstance(params1, LJParams) and isinstance(params2, LJParams)):
+                continue
+
+            rules = {type_rule(atom_type1), type_rule(atom_type2)} - {"none"}
+            if not rules:
+                # Both types come from pair-specific ("none") models
+                continue
+            if len(rules) > 1:
+                conflicts.append(pair_key)
+                pair_rule = "arithmetic"
+            else:
+                pair_rule = rules.pop()
 
             eps1, sig1 = params1.epsilon, params1.sigma
             eps2, sig2 = params2.epsilon, params2.sigma
 
-            if rule == "arithmetic":
-                eps_mixed = (eps1 * eps2) ** 0.5
+            eps_mixed = (eps1 * eps2) ** 0.5
+            if pair_rule == "arithmetic":
                 sig_mixed = (sig1 + sig2) / 2.0
-
-            elif rule == "geometric":
-                eps_mixed = (eps1 * eps2) ** 0.5
-                sig_mixed = (sig1 * sig2) ** 0.5
-
             else:
-                raise ValueError(
-                    f"Unknown mixing rule: '{rule}'. "
-                    "Supported rules: 'arithmetic', 'geometric'."
-                )
+                sig_mixed = (sig1 * sig2) ** 0.5
 
             self._ff_params.pair[pair_key] = LJParams(
                 epsilon=eps_mixed,
@@ -604,6 +667,33 @@ class ForceFieldMixin:
                 ref="mixed",
                 model="mixed",
             )
+
+        if conflicts:
+            warnings.warn(
+                "Pairs of types from models with different mixing rules were "
+                f"mixed arithmetically: {conflicts}. Set them with "
+                "'set_pair_params' if another rule applies.",
+                stacklevel=2,
+            )
+
+    @staticmethod
+    def _model_rule(db: ForceFieldDatabase, model_name: str | None) -> str:
+        """Mixing rule declared by a database model ("arithmetic" if none)."""
+        model = db.models.get(model_name) if model_name else None
+        return (model.mixing if model is not None else "") or "arithmetic"
+
+    def _model_mixing_rules(self) -> dict[str, str]:
+        """Mixing rule of the database model of each assigned atom type."""
+        ff_atoms = getattr(self._ff_keys, "atom", None) or {}
+        if not ff_atoms:
+            return {}
+        db = ForceFieldDatabase()
+        rules = {}
+        for sys_type, ff_key in ff_atoms.items():
+            if isinstance(ff_key, str) and "." in ff_key:
+                model, _ = db._extract_short_name(ff_key)
+                rules[sys_type] = self._model_rule(db, model)
+        return rules
 
     def _apply_property_mapping(
         self,
@@ -743,8 +833,13 @@ class ForceFieldMixin:
             if params is not None:
                 return params
 
-        # If not found, try to derive it from each atom's own
-        # self-interaction LJ parameters (Lorentz-Berthelot mixing).
+        # If not found, derive it from each atom's own self-interaction LJ
+        # parameters, with the mixing rule of the model(s) the types come
+        # from. A "none" model lists all its pairs: its unlisted pairs stay
+        # Coulomb only.
+        rules = {self._model_rule(db, model1), self._model_rule(db, model2)}
+        rules.discard("none")
+
         self1 = db.get_lj(ff_t1, ff_t1) or (
             db.get_lj(orig_t1, orig_t1) if model1 is None else None
         )
@@ -752,13 +847,22 @@ class ForceFieldMixin:
             db.get_lj(orig_t2, orig_t2) if model2 is None else None
         )
 
-        if self1 is not None and self2 is not None:
+        if rules and self1 is not None and self2 is not None:
+            conflict = len(rules) > 1
+            rule = "arithmetic" if conflict else rules.pop()
             eps_mixed = (self1.epsilon * self2.epsilon) ** 0.5
-            sig_mixed = (self1.sigma + self2.sigma) / 2.0
+            if rule == "geometric":
+                sig_mixed = (self1.sigma * self2.sigma) ** 0.5
+            else:
+                sig_mixed = (self1.sigma + self2.sigma) / 2.0
             return LJParams(
                 epsilon=eps_mixed,
                 sigma=sig_mixed,
-                ref="mixed from self-interaction",
+                ref=(
+                    "mixed arithmetically (models with different mixing rules)"
+                    if conflict
+                    else f"mixed from self-interaction ({rule})"
+                ),
                 model="mixed",
             )
 
@@ -781,6 +885,7 @@ class ForceFieldMixin:
             return
 
         missing_pairs = []
+        conflicting_pairs = []
 
         # Using a "dictionary comprehension" to do this in 1 line
         original_types = {atype: atype.split("_")[0] for atype in self._ff_keys.atom}
@@ -808,12 +913,22 @@ class ForceFieldMixin:
 
             if params is not None:
                 self._ff_params.pair[pair_key] = params
+                if str(getattr(params, "ref", "")).startswith("mixed arithmetically"):
+                    conflicting_pairs.append(pair_key)
             elif is_self_interaction:
                 missing_pairs.append((atom_type1, ff_t1))
 
         if missing_pairs:
             warnings.warn(
                 f"Missing pair parameters for atomic types:{missing_pairs}",
+                category=UserWarning,
+                stacklevel=2,
+            )
+        if conflicting_pairs:
+            warnings.warn(
+                "Pairs of types from models with different mixing rules were "
+                f"mixed arithmetically: {conflicting_pairs}. Set them with "
+                "'set_pair_params' if another rule applies.",
                 category=UserWarning,
                 stacklevel=2,
             )

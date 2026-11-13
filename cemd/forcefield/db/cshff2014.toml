@@ -1,11 +1,16 @@
 # cshff2014.toml
 # Force field parameters for CSHFF2014
-# Reference: https://doi.org/10.1038/ncomms5960
+# Reference: https://doi.org/10.1038/ncomms5960 (LJ, Qomi et al. 2014, SI Table 2)
+# Charges: base CSH-FF, Shahsavari et al. 2011 (PCCP 13, 1002), SI Table A11.
+# Qomi et al. redistribute charge on the oxygens per model for neutrality.
 
 [model]
 name = "CSHFF2014"
 ref = "https://doi.org/10.1038/ncomms5960"
 description = "Force field for calcium-silicate-hydrate"
+category = "minerals"
+mixing = "arithmetic"
+mixing_note = "Most cross pairs are listed explicitly (Qomi et al. 2014)"
 
 # ============================================================
 # Atom Types
@@ -15,21 +20,21 @@ description = "Force field for calcium-silicate-hydrate"
 
 [atom.ca]
 element = "Ca"
-charge = 1.435466
+charge = 1.43
 environment = "intralayer calcium in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 [atom.cw]
 element = "Ca"
-charge = 1.705529
+charge = 1.70
 environment = "interlayer calcium in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 [atom.h]
 element = "H"
-charge = 0.425
-environment = "hydrogen in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+charge = 0.29
+environment = "hydroxyl hydrogen in csh"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 [atom.hw]
 element = "H"
@@ -39,21 +44,21 @@ ref = "https://doi.org/10.1038/ncomms5960"
 
 [atom.o]
 element = "O"
-charge = -1.0
-environment = "oxygen in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+charge = -1.14
+environment = "silicate oxygen in csh (CSH-FF O)"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 [atom.ob]
 element = "O"
-charge = -1.14
-environment = "bridging oxygen in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+charge = -1.0
+environment = "bridging oxygen in csh (CSH-FF Oh parameters)"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 [atom.oh]
 element = "O"
 charge = -1.0
-environment = "hydroxyl oxygen in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+environment = "hydroxyl oxygen in csh (CSH-FF Oh)"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 [atom.ow]
 element = "O"
@@ -63,9 +68,9 @@ ref = "https://doi.org/10.1038/ncomms5960"
 
 [atom.si]
 element = "Si"
-charge = 1.722357
+charge = 1.72
 environment = "silicate silicium in csh"
-ref = "https://doi.org/10.1038/ncomms5960"
+ref = "https://doi.org/10.1039/c0cp00516a"
 
 # ============================================================
 # Lennard-Jones 12-6 Parameters

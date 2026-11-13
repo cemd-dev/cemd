@@ -6,6 +6,9 @@
 name = "SPC/E"
 ref = "https://doi.org/10.1021/j100308a038"
 description = "Simple point charge water model (extended)"
+category = "water"
+mixing = "arithmetic"
+mixing_note = "Only the oxygen carries LJ; with ions or a solid, follow the rule of their model"
 
 # ============================================================
 # Atom Types

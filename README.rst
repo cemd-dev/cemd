@@ -36,10 +36,14 @@ What it does
 
 **Type and parameterize.** ``set_topology()`` applies force-field typing
 rules (ClayFF, CSHFF and your own), ``set_ff_from_database()`` resolves
-the parameters. The bundled database holds ClayFF, CSHFF2014, IFF
-(CHARMM and CVFF flavours), GROMOS 54A7/ATB, Raiteri 2015, Guillot &
-Sator 2007, and the usual water models (SPC, SPC/E, SPC/Fw, TIP3P,
-TIP4P-2005, TIP4P-EW).
+the parameters. The bundled database, checked against the source papers,
+holds ClayFF and ClayFF-MOH, CSH-FF, IFF (clinker phases, silica, calcium
+sulfates, portlandite, tobermorite; plus the original CHARMM and CVFF
+files), AFFF (ettringite, AFm), Freitas 2015 (clinker phases and glasses),
+Sadat 2016 (geopolymers), the carbonate models of Raiteri 2015, SolCon and
+Wang 2009, Guillot & Sator 2007, the ion sets of Joung-Cheatham 2008 and
+Madrid-2019, GROMOS 54A7/ATB, and the usual water models (SPC, SPC/E,
+SPC/Fw, TIP3P, TIP4P-2005, TIP4P-EW).
 
 **Analyse.** Silicate network statistics (Ca/Si, H2O/Si, Q\ :sup:`n`
 distribution, mean chain length), radial distribution functions, density
@@ -171,10 +175,10 @@ Documentation
 
 **https://cemd-dev.github.io/cemd/**
 
-The user guide covers building, analysis and the force-field database, and
-four worked tutorials go from a calcite surface to a C-S-H nanopore filled
-with an alkaline pore solution. Every output shown in them was captured
-from a real run.
+The user guide covers building, analysis, the force-field database and
+visualization, and six worked tutorials go from a calcite surface to a
+C-S-H nanopore filled with a NaCl solution, a C-A-S-H and a kaolinite with
+ClayFF-MOH. Every output shown in them was captured from a real run.
 
 To build the documentation locally:
 

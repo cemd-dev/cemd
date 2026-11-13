@@ -6,6 +6,9 @@
 name = "TIP4P-EW"
 ref = "https://doi.org/10.1063/1.1683075"
 description = "Transferable Intermolecular Potential 4-point water model (Ewald)"
+category = "water"
+mixing = "arithmetic"
+mixing_note = "Only the oxygen carries LJ; with ions or a solid, follow the rule of their model"
 
 # ============================================================
 # Atom Types
@@ -15,13 +18,13 @@ description = "Transferable Intermolecular Potential 4-point water model (Ewald)
 
 [atom.htp4p]
 element = "H"
-charge = 0.52
+charge = 0.52422
 environment = "water hydrogen"
 ref = "https://doi.org/10.1063/1.1683075"
 
 [atom.otp4p]
 element = "O"
-charge = -1.04
+charge = -1.04844
 environment = "water oxygen"
 ref = "https://doi.org/10.1063/1.1683075"
 

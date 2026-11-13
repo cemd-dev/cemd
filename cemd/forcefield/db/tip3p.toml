@@ -3,9 +3,12 @@
 # Reference: https://doi.org/10.1063/1.1808117
 
 [model]
-name = "TIP3P"
+name = "TIP3P (Price & Brooks 2004)"
 ref = "https://doi.org/10.1063/1.1808117"
-description = "Transferable Intermolecular Potential 3-point water model"
+description = "TIP3P water model modified for Ewald summation (Price & Brooks 2004)"
+category = "water"
+mixing = "arithmetic"
+mixing_note = "Only the oxygen carries LJ; with ions or a solid, follow the rule of their model"
 
 # ============================================================
 # Atom Types

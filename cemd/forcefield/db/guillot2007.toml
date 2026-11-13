@@ -6,6 +6,9 @@
 name = "Guillot & Sator 2007"
 ref = "https://doi.org/10.1016/j.gca.2006.11.015"
 description = "Force field for silica melts"
+category = "minerals"
+mixing = "none"
+mixing_note = "Cation-O and O-O Buckingham only; cation-cation pairs are Coulomb only"
 
 # ============================================================
 # Atom Types

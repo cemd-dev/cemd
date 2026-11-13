@@ -1,0 +1,295 @@
+# joung2008.toml
+# Alkali and halide ion parameters for TIP3P, TIP4P-Ew and SPC/E water (Joung & Cheatham 2008)
+# Reference: https://doi.org/10.1021/jp8001614 (Table 5). sigma = 2 (Rmin/2) / 2^(1/6). Mixing rule: Lorentz-Berthelot.
+# One type per ion and water model: use na_spce with spce.toml, na_tip3p with tip3p.toml,
+# na_tip4pew with tip4p_ew.toml.
+
+[model]
+name = "Joung-Cheatham 2008"
+ref = "https://doi.org/10.1021/jp8001614"
+description = "Monovalent ion parameters specific to TIP3P, TIP4P-Ew and SPC/E water"
+category = "ions"
+mixing = "arithmetic"
+mixing_note = "AMBER convention"
+
+# ============================================================
+# Atom Types
+# ============================================================
+
+[atom]
+
+[atom.li_tip3p]
+element = "Li"
+charge = 1.0
+environment = "aqueous Li ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.li_tip4pew]
+element = "Li"
+charge = 1.0
+environment = "aqueous Li ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.li_spce]
+element = "Li"
+charge = 1.0
+environment = "aqueous Li ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.na_tip3p]
+element = "Na"
+charge = 1.0
+environment = "aqueous Na ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.na_tip4pew]
+element = "Na"
+charge = 1.0
+environment = "aqueous Na ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.na_spce]
+element = "Na"
+charge = 1.0
+environment = "aqueous Na ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.k_tip3p]
+element = "K"
+charge = 1.0
+environment = "aqueous K ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.k_tip4pew]
+element = "K"
+charge = 1.0
+environment = "aqueous K ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.k_spce]
+element = "K"
+charge = 1.0
+environment = "aqueous K ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.rb_tip3p]
+element = "Rb"
+charge = 1.0
+environment = "aqueous Rb ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.rb_tip4pew]
+element = "Rb"
+charge = 1.0
+environment = "aqueous Rb ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.rb_spce]
+element = "Rb"
+charge = 1.0
+environment = "aqueous Rb ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.cs_tip3p]
+element = "Cs"
+charge = 1.0
+environment = "aqueous Cs ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.cs_tip4pew]
+element = "Cs"
+charge = 1.0
+environment = "aqueous Cs ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.cs_spce]
+element = "Cs"
+charge = 1.0
+environment = "aqueous Cs ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.f_tip3p]
+element = "F"
+charge = -1.0
+environment = "aqueous F ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.f_tip4pew]
+element = "F"
+charge = -1.0
+environment = "aqueous F ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.f_spce]
+element = "F"
+charge = -1.0
+environment = "aqueous F ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.cl_tip3p]
+element = "Cl"
+charge = -1.0
+environment = "aqueous Cl ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.cl_tip4pew]
+element = "Cl"
+charge = -1.0
+environment = "aqueous Cl ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.cl_spce]
+element = "Cl"
+charge = -1.0
+environment = "aqueous Cl ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.br_tip3p]
+element = "Br"
+charge = -1.0
+environment = "aqueous Br ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.br_tip4pew]
+element = "Br"
+charge = -1.0
+environment = "aqueous Br ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.br_spce]
+element = "Br"
+charge = -1.0
+environment = "aqueous Br ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.i_tip3p]
+element = "I"
+charge = -1.0
+environment = "aqueous I ion for TIP3P water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.i_tip4pew]
+element = "I"
+charge = -1.0
+environment = "aqueous I ion for TIP4P-Ew water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+[atom.i_spce]
+element = "I"
+charge = -1.0
+environment = "aqueous I ion for SPC/E water"
+ref = "https://doi.org/10.1021/jp8001614"
+
+# ============================================================
+# Lennard-Jones 12-6 Parameters
+# ============================================================
+
+[lj]
+
+[lj."li_tip3p-li_tip3p"]
+epsilon = 0.0279896
+sigma = 1.826342
+
+[lj."li_tip4pew-li_tip4pew"]
+epsilon = 0.1039884
+sigma = 1.439692
+
+[lj."li_spce-li_spce"]
+epsilon = 0.3367344
+sigma = 1.409402
+
+[lj."na_tip3p-na_tip3p"]
+epsilon = 0.0874393
+sigma = 2.439281
+
+[lj."na_tip4pew-na_tip4pew"]
+epsilon = 0.1684375
+sigma = 2.184484
+
+[lj."na_spce-na_spce"]
+epsilon = 0.3526418
+sigma = 2.159538
+
+[lj."k_tip3p-k_tip3p"]
+epsilon = 0.1936829
+sigma = 3.037965
+
+[lj."k_tip4pew-k_tip4pew"]
+epsilon = 0.2794651
+sigma = 2.833058
+
+[lj."k_spce-k_spce"]
+epsilon = 0.4297054
+sigma = 2.838403
+
+[lj."rb_tip3p-rb_tip3p"]
+epsilon = 0.3278219
+sigma = 3.230399
+
+[lj."rb_tip4pew-rb_tip4pew"]
+epsilon = 0.4331494
+sigma = 3.045092
+
+[lj."rb_spce-rb_spce"]
+epsilon = 0.4451036
+sigma = 3.094982
+
+[lj."cs_tip3p-cs_tip3p"]
+epsilon = 0.4065394
+sigma = 3.520832
+
+[lj."cs_tip4pew-cs_tip4pew"]
+epsilon = 0.3944318
+sigma = 3.364034
+
+[lj."cs_spce-cs_spce"]
+epsilon = 0.0898565
+sigma = 3.601013
+
+[lj."f_tip3p-f_tip3p"]
+epsilon = 0.003364
+sigma = 4.103479
+
+[lj."f_tip4pew-f_tip4pew"]
+epsilon = 0.0015752
+sigma = 4.522202
+
+[lj."f_spce-f_spce"]
+epsilon = 0.0074005
+sigma = 4.021517
+
+[lj."cl_tip3p-cl_tip3p"]
+epsilon = 0.035591
+sigma = 4.477657
+
+[lj."cl_tip4pew-cl_tip4pew"]
+epsilon = 0.0116615
+sigma = 4.917761
+
+[lj."cl_spce-cl_spce"]
+epsilon = 0.012785
+sigma = 4.830453
+
+[lj."br_tip3p-br_tip3p"]
+epsilon = 0.0586554
+sigma = 4.646928
+
+[lj."br_tip4pew-br_tip4pew"]
+epsilon = 0.0303773
+sigma = 4.932015
+
+[lj."br_spce-br_spce"]
+epsilon = 0.0269586
+sigma = 4.901725
+
+[lj."i_tip3p-i_tip3p"]
+epsilon = 0.0536816
+sigma = 5.095941
+
+[lj."i_tip4pew-i_tip4pew"]
+epsilon = 0.0417082
+sigma = 5.259866
+
+[lj."i_spce-i_spce"]
+epsilon = 0.0427845
+sigma = 5.201067

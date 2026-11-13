@@ -1356,7 +1356,8 @@ class Splitter(BaseBuilder):
         Returns
         -------
         AtomicSystem
-            The split system, optionally repaired and filled with solution.
+            The split system, optionally repaired and filled with solution:
+            a new system, the one given to the Splitter is left unchanged.
 
         Raises
         ------
@@ -1383,6 +1384,11 @@ class Splitter(BaseBuilder):
         if repair is not None:
             self.repair = repair
         self._resolve_coordinate(None)
+        # Builders return a new system: the one given to the Splitter used
+        # to be split in place and returned, so it came back opened (a
+        # second cut of "the same" system cut the opened one) and shared its
+        # charges with the result.
+        self.system = self.system.copy()
         original_positions = self.system.atoms[["x", "y", "z"]].copy()
         old_box = np.array(self.system.box, dtype=np.float64)
         n_explicit = 0 if self.system.bonds is None else len(self.system.bonds)

@@ -1,0 +1,165 @@
+# afff.toml
+# AFFF: force field for AFt / AFm phases and tricalcium aluminate (Honorio et al. 2020)
+# Reference: https://doi.org/10.1016/j.cemconres.2020.106126 (Tables 1-2)
+# Energies converted from kJ/mol (1 kcal = 4.184 kJ). Mixing rule: Lorentz-Berthelot.
+# Water: SPC/E. Hydroxyls: SPC/E-based, with phase-specific O charges and sigma.
+# Sulfate is not bonded: S (sigma 0.1 A) is held to its oxygens by Coulomb and LB-mixed LJ.
+# Al and Ca LJ from ClayFF (ao, cah). Bonds/angles: E = K (r - r0)^2, as in the paper.
+
+[model]
+name = "AFFF"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+description = "Force field for ettringite (AFt), monosulfoaluminate (AFm) and tricalcium aluminate (Honorio et al. 2020)"
+category = "minerals"
+mixing = "arithmetic"
+mixing_note = "As in the paper"
+
+# ============================================================
+# Atom Types
+# ============================================================
+
+[atom]
+
+[atom.hw]
+element = "H"
+charge = 0.4238
+environment = "water hydrogen (SPC/E)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.ow]
+element = "O"
+charge = -0.8476
+environment = "water oxygen (SPC/E)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.hh]
+element = "H"
+charge = 0.4238
+environment = "hydroxyl hydrogen"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.oh_aft]
+element = "O"
+charge = -0.8988
+environment = "hydroxyl oxygen in ettringite (AFt)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.oh_afm]
+element = "O"
+charge = -0.965467
+environment = "hydroxyl oxygen in monosulfoaluminate (AFm)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.oh_c3a]
+element = "O"
+charge = -1.15
+environment = "hydroxyl oxygen in tricalcium aluminate"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.os]
+element = "O"
+charge = -1.0
+environment = "sulfate oxygen"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.s]
+element = "S"
+charge = 2.0
+environment = "sulfur in sulfate"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.al]
+element = "Al"
+charge = 1.05
+environment = "aluminium (AFt, AFm, C3A)"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.ca]
+element = "Ca"
+charge = 1.6
+environment = "calcium in AFt and C3A"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+[atom.ca_afm]
+element = "Ca"
+charge = 1.6
+environment = "calcium in AFm"
+ref = "https://doi.org/10.1016/j.cemconres.2020.106126"
+
+# ============================================================
+# Lennard-Jones 12-6 Parameters
+# ============================================================
+
+[lj]
+
+[lj."hw-hw"]
+epsilon = 0
+sigma = 0
+
+[lj."ow-ow"]
+epsilon = 0.155354
+sigma = 3.166
+
+[lj."hh-hh"]
+epsilon = 0
+sigma = 0
+
+[lj."oh_aft-oh_aft"]
+epsilon = 0.155354
+sigma = 3.166
+
+[lj."oh_afm-oh_afm"]
+epsilon = 0.155354
+sigma = 3.1
+
+[lj."oh_c3a-oh_c3a"]
+epsilon = 0.155354
+sigma = 3.1
+
+[lj."os-os"]
+epsilon = 0.200048
+sigma = 3.15
+
+[lj."s-s"]
+epsilon = 0.25
+sigma = 0.1
+
+[lj."al-al"]
+epsilon = 0.1
+sigma = 4.27
+
+[lj."ca-ca"]
+epsilon = 0.1
+sigma = 5.56
+
+[lj."ca_afm-ca_afm"]
+epsilon = 0.1
+sigma = 5.1
+
+# ============================================================
+# Bond Parameters
+# ============================================================
+
+[bond.harmonic]
+
+[bond.harmonic."hw-ow"]
+k = 554.1291
+r0 = 1.0
+
+[bond.harmonic."hh-oh_aft"]
+k = 554.1291
+r0 = 1.0
+
+[bond.harmonic."hh-oh_afm"]
+k = 554.1291
+r0 = 0.844
+
+# ============================================================
+# Angle Parameters
+# ============================================================
+
+[angle.harmonic]
+
+[angle.harmonic."hw-ow-hw"]
+k = 45.7696
+theta0 = 109.47

@@ -6,6 +6,9 @@
 name = "TIP4P-2005"
 ref= "https://doi.org/10.1063/1.2121687"
 description = "Transferable Intermolecular Potential 4-point water model (2005)"
+category = "water"
+mixing = "arithmetic"
+mixing_note = "Only the oxygen carries LJ; with ions or a solid, follow the rule of their model"
 
 # ============================================================
 # Atom Types

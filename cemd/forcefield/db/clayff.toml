@@ -6,6 +6,8 @@
 name = "ClayFF"
 ref = "https://doi.org/10.1021/jp0363287"
 description = "Force field for clay minerals and aqueous solutions"
+category = "minerals"
+mixing = "arithmetic"
 
 # ============================================================
 # Atom Types
@@ -118,7 +120,7 @@ ref = "https://doi.org/10.1021/jp0363287"
 [atom.ob]
 element = "O"
 charge = -1.05
-environment = "bridging oxygen in csh"
+environment = "bridging oxygen"
 ref = "https://doi.org/10.1021/jp0363287"
 
 [atom.obos]
@@ -217,11 +219,11 @@ sigma = 4.2101200723158
 
 [lj."mgh-mgh"]
 epsilon = 9.0298e-07
-sigma = 5.256302437028
+sigma = 5.26432052549126
 
 [lj."mgo-mgo"]
 epsilon = 9.0298e-07
-sigma = 5.256302437028
+sigma = 5.26432052549126
 
 [lj."na-na"]
 epsilon = 0.1301
@@ -248,6 +250,10 @@ epsilon = 0.1554
 sigma = 3.16554132529625
 
 [lj."oh-oh"]
+epsilon = 0.1554
+sigma = 3.16554132529625
+
+[lj."ohs-ohs"]
 epsilon = 0.1554
 sigma = 3.16554132529625
 

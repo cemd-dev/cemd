@@ -7,13 +7,16 @@
 name = "SPC/Fw Water Model"
 ref = "http://dx.doi.org/10.1063/1.2136877"
 description = "Flexible SPC water model optimized for use with clay minerals and calcite"
+category = "water"
+mixing = "arithmetic"
+mixing_note = "Only the oxygen carries LJ; with ions or a solid, follow the rule of their model"
 
 # ============================================================
 # Atom Types
 # ============================================================
 
 [atom]
-[atoms.Ow]
+[atom.Ow]
 element = "O"
 charge = -0.82
 ref = "http://dx.doi.org/10.1063/1.2136877"

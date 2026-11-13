@@ -35,6 +35,7 @@ def generate_ff_data(app):
     scripts = [
         "db_to_json.py",  # Génère ff_data.json
         "generate_ff_embedded.py",  # Génère ff_viewer.html avec données intégrées
+        "ff_tables.py",  # Tables des modèles et des règles de mélange (user_guide)
     ]
 
     for script_name in scripts:

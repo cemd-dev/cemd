@@ -747,6 +747,10 @@ class EditMixin:
             charge = self._charges.get(new_type, CHARGES_DICT.get(new_type, 0.0))
         self.atoms.loc[ids, "type"] = new_type
         self.atoms.loc[ids, "charge"] = float(charge)
+        # Bonds and angles around the new atoms take the new type in their
+        # label, so they get the parameters of the substituted species.
+        if isinstance(new_type, str):
+            self._relabel_connections(ids)
         self._charges.setdefault(new_type, float(charge))
         if new_type not in self._masses:
             self._masses[new_type] = MASSES_DICT.get(new_type, 1.0)

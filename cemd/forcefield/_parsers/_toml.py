@@ -30,6 +30,7 @@ from ..models import (
     HarmonicBondParams,
     HarmonicImproperParams,
     LJParams,
+    MorseBondParams,
 )
 from ._base import BaseForceFieldParser, ParseResult
 
@@ -72,6 +73,9 @@ class TOMLParser(BaseForceFieldParser):
                 "description": data["model"].get("description", ""),
                 "ref": data["model"].get("ref", ""),
                 "tags": data["model"].get("tags", []),
+                "category": data["model"].get("category", ""),
+                "mixing": data["model"].get("mixing", ""),
+                "mixing_note": data["model"].get("mixing_note", ""),
             }
 
         # Atoms
@@ -122,6 +126,16 @@ class TOMLParser(BaseForceFieldParser):
                 k2=params["k2"],
                 k3=params.get("k3", 0.0),
                 k4=params.get("k4", 0.0),
+                ref=params.get("ref", ""),
+                model=model_key,
+            )
+
+        # Morse bonds: E = D [1 - exp(-alpha (r - r0))]^2 (LAMMPS bond_style morse)
+        for key, params in data.get("bond", {}).get("morse", {}).items():
+            result.bonds[key] = MorseBondParams(
+                r0=params["r0"],
+                D=params["D"],
+                alpha=params["alpha"],
                 ref=params.get("ref", ""),
                 model=model_key,
             )

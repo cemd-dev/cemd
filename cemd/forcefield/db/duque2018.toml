@@ -1,4 +1,4 @@
-# cshff_duque.toml
+# duque2018.toml
 # C-S-H force field of Duque-Redondo et al., as used by Ihaddadene et al. (2026)
 # References: https://doi.org/10.1039/c8cp00654g (Duque-Redondo et al.)
 #             https://doi.org/10.1016/j.cemconres.2025.108053 (Ihaddadene et al., 2026)
@@ -23,9 +23,12 @@
 # solution), by position (CSHFF_RULES, LayerRule).
 
 [model]
-name = "CSHFF-Duque"
+name = "Duque-Redondo 2018"
 ref = "https://doi.org/10.1039/c8cp00654g"
 description = "C-S-H force field of Duque-Redondo et al. (CSH-FF + ClayFF), as used by Ihaddadene et al. (2026)"
+category = "minerals"
+mixing = "arithmetic"
+mixing_note = "Self terms only: every cross pair is mixed"
 
 # ============================================================
 # Atom Types

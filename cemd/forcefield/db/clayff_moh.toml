@@ -1,0 +1,337 @@
+# clayff_moh.toml
+# ClayFF with metal-O-H angle bending and Morse O-H stretch (ClayFF-MOH)
+# References: https://doi.org/10.1021/acs.jpcc.1c04600 (Cygan et al. 2021, SI Tables S1-S2)
+#             https://doi.org/10.1021/acs.jpcc.7b05362 (Pouvreau et al. 2017, M-O-H terms)
+#
+# Nonbonded parameters: Table S1 of Cygan et al. 2021. Differences with clayff.toml (2004):
+#   epsilon(feo, lio) = 9.0298e-7 (2004: 9.0298e-6); sigma(cah) = sigma(cao) = 5.5667
+#   (2004: R0 = 6.2428, i.e. sigma = 5.5617; the 2021 LAMMPS sample uses 5.5624).
+# O-H: Morse, dioctahedral set on oh-ho and trioctahedral set on ohs-ho, following the
+#   ClayFF convention that trioctahedral sheets use the substituted types (ohs, obts, obss).
+# M-O-H angles: bulk values. Surface/edge hydroxyls use theta0 = 110 deg for ao and mgo.
+# Energies: E = K (r - r0)^2, E = K (theta - theta0)^2, E = D [1 - exp(-alpha (r - r0))]^2.
+
+[model]
+name = "ClayFF-MOH"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+description = "ClayFF with Morse O-H and metal-O-H angle terms (Cygan et al. 2021; Pouvreau et al. 2017)"
+category = "minerals"
+mixing = "arithmetic"
+
+# ============================================================
+# Atom Types
+# ============================================================
+
+[atom]
+
+[atom.st]
+element = "Si"
+charge = 2.1
+environment = "tetrahedral silicon"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.ao]
+element = "Al"
+charge = 1.575
+environment = "octahedral aluminium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.at]
+element = "Al"
+charge = 1.575
+environment = "tetrahedral aluminium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.mgo]
+element = "Mg"
+charge = 1.36
+environment = "octahedral magnesium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.mgh]
+element = "Mg"
+charge = 1.05
+environment = "hydroxide magnesium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.cao]
+element = "Ca"
+charge = 1.36
+environment = "octahedral calcium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.cah]
+element = "Ca"
+charge = 1.05
+environment = "hydroxide calcium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.feo]
+element = "Fe"
+charge = 1.575
+environment = "octahedral iron"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.lio]
+element = "Li"
+charge = 0.525
+environment = "octahedral lithium"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.ob]
+element = "O"
+charge = -1.05
+environment = "bridging oxygen"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.obos]
+element = "O"
+charge = -1.1808
+environment = "bridging oxygen with octahedral substitution"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.obts]
+element = "O"
+charge = -1.1688
+environment = "bridging oxygen with tetrahedral substitution"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.obss]
+element = "O"
+charge = -1.2996
+environment = "bridging oxygen with double substitution"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.oh]
+element = "O"
+charge = -0.95
+environment = "hydroxyl oxygen (dioctahedral Morse O-H)"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.ohs]
+element = "O"
+charge = -1.0808
+environment = "hydroxyl oxygen with substitution (trioctahedral Morse O-H)"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.ho]
+element = "H"
+charge = 0.425
+environment = "hydroxyl hydrogen"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom."o*"]
+element = "O"
+charge = -0.82
+environment = "SPC water oxygen"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom."h*"]
+element = "H"
+charge = 0.41
+environment = "SPC water hydrogen"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.na]
+element = "Na"
+charge = 1.0
+environment = "aqueous sodium ion"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.k]
+element = "K"
+charge = 1.0
+environment = "aqueous potassium ion"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.cs]
+element = "Cs"
+charge = 1.0
+environment = "aqueous cesium ion"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.ca]
+element = "Ca"
+charge = 2.0
+environment = "aqueous calcium ion"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.ba]
+element = "Ba"
+charge = 2.0
+environment = "aqueous barium ion"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+[atom.cl]
+element = "Cl"
+charge = -1.0
+environment = "aqueous chloride ion"
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+# ============================================================
+# Lennard-Jones 12-6 Parameters
+# ============================================================
+
+[lj]
+
+[lj."st-st"]
+epsilon = 1.8405e-06
+sigma = 3.302
+
+[lj."ao-ao"]
+epsilon = 1.3298e-06
+sigma = 4.2712
+
+[lj."at-at"]
+epsilon = 1.8405e-06
+sigma = 3.302
+
+[lj."mgo-mgo"]
+epsilon = 9.0298e-07
+sigma = 5.2643
+
+[lj."mgh-mgh"]
+epsilon = 9.0298e-07
+sigma = 5.2643
+
+[lj."cao-cao"]
+epsilon = 5.0298e-06
+sigma = 5.5667
+
+[lj."cah-cah"]
+epsilon = 5.0298e-06
+sigma = 5.5667
+
+[lj."feo-feo"]
+epsilon = 9.0298e-07
+sigma = 4.9062
+
+[lj."lio-lio"]
+epsilon = 9.0298e-07
+sigma = 4.2101
+
+[lj."ob-ob"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."obos-obos"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."obts-obts"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."obss-obss"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."oh-oh"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."ohs-ohs"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."ho-ho"]
+epsilon = 0.0
+sigma = 0.0
+
+[lj."o*-o*"]
+epsilon = 0.1554
+sigma = 3.1655
+
+[lj."h*-h*"]
+epsilon = 0.0
+sigma = 0.0
+
+[lj."na-na"]
+epsilon = 0.1301
+sigma = 2.35
+
+[lj."k-k"]
+epsilon = 0.1
+sigma = 3.334
+
+[lj."cs-cs"]
+epsilon = 0.1
+sigma = 3.831
+
+[lj."ca-ca"]
+epsilon = 0.1
+sigma = 2.872
+
+[lj."ba-ba"]
+epsilon = 0.047
+sigma = 3.8166
+
+[lj."cl-cl"]
+epsilon = 0.1001
+sigma = 4.4
+
+# ============================================================
+# Bond Parameters
+# ============================================================
+
+[bond.harmonic]
+
+[bond.harmonic."h*-o*"]
+k = 554.1349
+r0 = 1.0
+
+[bond.morse]
+
+# dioctahedral clays (gibbsite-like Al octahedral sheets)
+[bond.morse."ho-oh"]
+D = 132.2491
+alpha = 2.1815
+r0 = 0.945
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+# trioctahedral clays (brucite-like Mg octahedral sheets)
+[bond.morse."ho-ohs"]
+D = 132.2491
+alpha = 2.135
+r0 = 0.9572
+ref = "https://doi.org/10.1021/acs.jpcc.1c04600"
+
+# ============================================================
+# Angle Parameters
+# ============================================================
+
+[angle.harmonic]
+
+[angle.harmonic."h*-o*-h*"]
+k = 45.7696
+theta0 = 109.47
+
+[angle.harmonic."ao-oh-ho"]
+k = 15.0
+theta0 = 116.0
+ref = "https://doi.org/10.1021/acs.jpcc.7b05362"
+
+[angle.harmonic."ao-ohs-ho"]
+k = 15.0
+theta0 = 116.0
+ref = "https://doi.org/10.1021/acs.jpcc.7b05362"
+
+[angle.harmonic."mgo-oh-ho"]
+k = 6.0
+theta0 = 120.0
+ref = "https://doi.org/10.1021/acs.jpcc.7b05362"
+
+[angle.harmonic."mgo-ohs-ho"]
+k = 6.0
+theta0 = 120.0
+ref = "https://doi.org/10.1021/acs.jpcc.7b05362"
+
+[angle.harmonic."st-oh-ho"]
+k = 15.0
+theta0 = 100.0
+ref = "https://doi.org/10.1021/acs.jpcc.7b05362"
+
+[angle.harmonic."st-ohs-ho"]
+k = 15.0
+theta0 = 100.0
+ref = "https://doi.org/10.1021/acs.jpcc.7b05362"

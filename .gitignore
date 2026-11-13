@@ -35,3 +35,5 @@ cemd/gui/*_cache.json
 
 # Local bibliography for force field curation (PDF/SI, not distributed)
 cemd/forcefield/biblio/
+# Generated at docs build by docs/_scripts/ff_tables.py
+docs/user_guide/_generated/

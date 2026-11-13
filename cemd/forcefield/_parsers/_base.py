@@ -74,6 +74,9 @@ class ParseResult:
                 description=self.metadata.get("description", ""),
                 ref=self.metadata.get("ref", ""),
                 tags=self.metadata.get("tags", []),
+                category=self.metadata.get("category", ""),
+                mixing=self.metadata.get("mixing", ""),
+                mixing_note=self.metadata.get("mixing_note", ""),
             )
 
         for key, value in self.atoms.items():

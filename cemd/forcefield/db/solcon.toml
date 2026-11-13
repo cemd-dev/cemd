@@ -1,11 +1,23 @@
 # solcon.toml
-# SolCon - Solubility-consistent force field for calcium carbonate
-# Reference: https://doi.org/10.1098/rsta.2022.0250
+# Solubility-consistent force field for aqueous alkaline-earth carbonates (SolCon)
+# Reference: https://doi.org/10.1098/rsta.2022.0250 (Armstrong et al. 2023, Table 1)
+# Energies converted from eV to kcal/mol (1 eV = 23.060548 kcal/mol).
+# Water: SPC/Fw (Wu et al. 2006). Cation-cation and C-cation: Coulomb only.
+# All short-range terms are tapered to zero between 8 and 9 A (Ow-Ow truncated at 9 A).
+#
+# Carbonate intramolecular terms: Armstrong et al. keep only the harmonic bond, angle
+# and out-of-plane terms of the Raiteri et al. 2015 model and do not tabulate them
+# ("files can be obtained from the authors on request"). The values below are the
+# harmonic parts of raiteri2015.toml (bond/angle cross terms and the quartic
+# out-of-plane term removed): treat them as an approximation of SolCon.
 
 [model]
 name = "SolCon"
 ref = "https://doi.org/10.1098/rsta.2022.0250"
-description = "Force field for calcium carbonate (solubility-consistent)"
+description = "Solubility-consistent force field for aqueous alkaline-earth carbonates (Armstrong et al. 2023)"
+category = "carbonates"
+mixing = "none"
+mixing_note = "Pair-specific Buckingham and LJ terms"
 
 # ============================================================
 # Atom Types
@@ -13,44 +25,125 @@ description = "Force field for calcium carbonate (solubility-consistent)"
 
 [atom]
 
-[atom.ca_solcon]
+[atom.Mg]
+element = "Mg"
+charge = 2.0
+environment = "magnesium ion"
+ref = "https://doi.org/10.1098/rsta.2022.0250"
+
+[atom.Ca]
 element = "Ca"
 charge = 2.0
-environment = "calcium in calcium carbonate (solubility-consistent)"
+environment = "calcium ion"
 ref = "https://doi.org/10.1098/rsta.2022.0250"
 
-[atom.cc_solcon]
+[atom.Sr]
+element = "Sr"
+charge = 2.0
+environment = "strontium ion"
+ref = "https://doi.org/10.1098/rsta.2022.0250"
+
+[atom.Ba]
+element = "Ba"
+charge = 2.0
+environment = "barium ion"
+ref = "https://doi.org/10.1098/rsta.2022.0250"
+
+[atom.Cc]
 element = "C"
 charge = 1.423285
-environment = "carbon in calcium carbonate (solubility-consistent)"
+environment = "carbonate carbon"
 ref = "https://doi.org/10.1098/rsta.2022.0250"
 
-[atom.oc_solcon]
+[atom.Oc]
 element = "O"
-charge = -1.14109
-environment = "oxygen in calcium carbonate (solubility-consistent)"
+charge = -1.141095
+environment = "carbonate oxygen"
 ref = "https://doi.org/10.1098/rsta.2022.0250"
+
+[atom.Ow]
+element = "O"
+charge = -0.82
+environment = "water oxygen, SPC/Fw"
+ref = "https://doi.org/10.1063/1.2136877"
+
+[atom.Hw]
+element = "H"
+charge = 0.41
+environment = "water hydrogen, SPC/Fw"
+ref = "https://doi.org/10.1063/1.2136877"
 
 # ============================================================
-# Lennard-Jones 12-6 Parameters
+# Lennard-Jones 12-6 Parameters (pair-specific, no mixing)
 # ============================================================
 
 [lj]
 
-[lj."ca_solcon-ca_solcon"]
-epsilon = 0.1
-sigma = 2.87199
-ref = "https://doi.org/10.1098/rsta.2022.0250"
+[lj."Ow-Ow"]
+epsilon = 0.155428
+sigma = 3.165492
 
-[lj."cc_solcon-cc_solcon"]
-epsilon = 0.0576286
-sigma = 2.784959
-ref = "https://doi.org/10.1098/rsta.2022.0250"
+[lj."Mg-Ow"]
+epsilon = 0.02622
+sigma = 2.72
 
-[lj."oc_solcon-oc_solcon"]
-epsilon = 0.1554
-sigma = 3.1655
-ref = "https://doi.org/10.1098/rsta.2022.0250"
+[lj."Ca-Ow"]
+epsilon = 0.021908
+sigma = 3.25
+
+[lj."Sr-Ow"]
+epsilon = 0.017895
+sigma = 3.52
+
+[lj."Ba-Ow"]
+epsilon = 0.015151
+sigma = 3.82
+
+# ============================================================
+# Buckingham Parameters (A in kcal/mol, rho in A, C in kcal/mol.A^6)
+# ============================================================
+
+[buckingham]
+
+[buckingham."Oc-Ow"]
+A = 289051.4042
+rho = 0.202
+C = 0.0
+
+[buckingham."Cc-Ow"]
+A = 289051.4042
+rho = 0.28
+C = 0.0
+
+[buckingham."Hw-Oc"]
+A = 7840.5863
+rho = 0.217
+C = 0.0
+
+[buckingham."Oc-Oc"]
+A = 1730293.8885
+rho = 0.198913
+C = 645.6953
+
+[buckingham."Mg-Oc"]
+A = 76943.5224
+rho = 0.244667
+C = 0.0
+
+[buckingham."Ca-Oc"]
+A = 201578.7093
+rho = 0.24496
+C = 0.0
+
+[buckingham."Sr-Oc"]
+A = 75499.3579
+rho = 0.283096
+C = 0.0
+
+[buckingham."Ba-Oc"]
+A = 356806.658
+rho = 0.255163
+C = 0.0
 
 # ============================================================
 # Bond Parameters
@@ -58,9 +151,17 @@ ref = "https://doi.org/10.1098/rsta.2022.0250"
 
 [bond.harmonic]
 
-[bond.harmonic."cc_solcon-oc_solcon"]
-k = 770
-r0 = 1.3
+# SPC/Fw: V = (kb/2)(r-r0)^2 with kb = 1059.162 kcal/mol/A^2
+[bond.harmonic."Hw-Ow"]
+k = 529.581
+r0 = 1.012
+ref = "https://doi.org/10.1063/1.2136877"
+
+# Harmonic part of raiteri2015 (see header)
+[bond.harmonic."Cc-Oc"]
+k = 470.97
+r0 = 1.3042
+ref = "https://doi.org/10.1021/acs.jpcc.5b07532"
 
 # ============================================================
 # Angle Parameters
@@ -68,6 +169,24 @@ r0 = 1.3
 
 [angle.harmonic]
 
-[angle.harmonic."oc_solcon-cc_solcon-oc_solcon"]
-k = 110
-theta0 = 120
+[angle.harmonic."Hw-Ow-Hw"]
+k = 37.95
+theta0 = 113.24
+ref = "https://doi.org/10.1063/1.2136877"
+
+# Harmonic part of raiteri2015 (class2 k2 with k3 = k4 = 0)
+[angle.harmonic."Oc-Cc-Oc"]
+k = 152.5906668
+theta0 = 120.0
+ref = "https://doi.org/10.1021/acs.jpcc.5b07532"
+
+# ============================================================
+# Out-of-plane (distance improper, harmonic term only)
+# ============================================================
+
+[improper.distance]
+
+[improper.distance."Cc-Oc-Oc-Oc"]
+k2 = 314.7052788
+k4 = 0.0
+ref = "https://doi.org/10.1021/acs.jpcc.5b07532"

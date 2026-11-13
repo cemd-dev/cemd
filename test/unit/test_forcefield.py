@@ -49,7 +49,9 @@ def test_set_masses_numeric_key_matches_numeric_system(numeric_type_system):
 def test_set_charges_updates_atoms_dataframe_and_property(water_system):
     water_system.set_charges({"Ow": -1.0})
     assert water_system.charges["Ow"] == pytest.approx(-1.0)
-    assert (water_system.atoms.loc[water_system.atoms["type"] == "Ow", "charge"] == -1.0).all()
+    assert (
+        water_system.atoms.loc[water_system.atoms["type"] == "Ow", "charge"] == -1.0
+    ).all()
 
 
 def test_total_charge_reflects_charge_updates(water_system):
@@ -65,9 +67,7 @@ def test_set_charges_warns_when_system_is_not_neutral(water_system):
 
 def test_set_charges_does_not_warn_when_result_is_neutral(water_system, recwarn):
     water_system.set_charges({"Ow": -0.8, "Hw": 0.4})
-    assert not any(
-        "charge-neutral" in str(w.message) for w in recwarn.list
-    )
+    assert not any("charge-neutral" in str(w.message) for w in recwarn.list)
 
 
 # ---------------------------------------------------------------------------
@@ -457,3 +457,46 @@ def test_cross_terms_of_types_from_different_models_are_mixed():
         cross, s1, s2 = lj(a, b), lj(a, a), lj(b, b)
         assert cross.epsilon == pytest.approx((s1.epsilon * s2.epsilon) ** 0.5)
         assert cross.sigma == pytest.approx((s1.sigma + s2.sigma) / 2)
+
+
+# ---------------------------------------------------------------------------
+# Mixing rule taken from the database model
+# ---------------------------------------------------------------------------
+
+
+def test_database_cross_pairs_use_model_geometric_rule(water_system):
+    # wang2009 declares mixing = "geometric": its unlisted cross pairs are
+    # mixed with the geometric mean of sigma, not the arithmetic one.
+    water_system.set_ff_from_database({"Ow": "wang2009.occ", "Hw": "wang2009.cac"})
+    pair = water_system.ff_params.pair["Hw-Ow"]
+    assert pair.sigma == pytest.approx((3.1655 * 2.87198) ** 0.5)
+
+
+def test_apply_pair_mixing_rules_default_follows_model(water_system):
+    water_system.set_ff_from_database({"Ow": "wang2009.occ", "Hw": "wang2009.cac"})
+    water_system.apply_pair_mixing_rules(overwrite=True)
+    assert water_system.ff_params.pair["Hw-Ow"].sigma == pytest.approx(
+        (3.1655 * 2.87198) ** 0.5
+    )
+    # An explicit rule still wins
+    water_system.apply_pair_mixing_rules(rule="arithmetic", overwrite=True)
+    assert water_system.ff_params.pair["Hw-Ow"].sigma == pytest.approx(
+        (3.1655 + 2.87198) / 2
+    )
+
+
+def test_pair_specific_model_is_not_mixed(water_system):
+    # raiteri2015 lists every pair (mixing = "none"): C has no LJ self term and
+    # C-Oc is intramolecular, so the pair stays Coulomb only and the default
+    # mixing does not raise on the missing / Buckingham self terms.
+    water_system.set_ff_from_database({"Ow": "raiteri2015.Oc", "Hw": "raiteri2015.C"})
+    water_system.apply_pair_mixing_rules()
+    assert "Hw-Ow" not in water_system.ff_params.pair
+
+
+def test_models_with_different_rules_mix_arithmetically_with_warning(water_system):
+    with pytest.warns(UserWarning, match="different mixing rules"):
+        water_system.set_ff_from_database({"Ow": "wang2009.occ", "Hw": "clayff.ca"})
+    assert water_system.ff_params.pair["Hw-Ow"].sigma == pytest.approx(
+        (3.1655 + 2.87199019766901) / 2
+    )
