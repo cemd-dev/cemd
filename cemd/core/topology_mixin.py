@@ -498,18 +498,22 @@ class TopologyMixin:
         Parameters
         ----------
         r : str | TopologyRule | DihedralRule | LayerRule | list
-            -str: Name of predefined rule set (e.g., 'clayff', 'cshff')
+            -str: Name of predefined rule set ('clayff', 'cshff', 'iff_silica')
             -TopologyRule: Single topology rule
             -DihedralRule: Single dihedral rule
             -LayerRule: Single retyping by position relative to the layers
             - list[TopologyRule | DihedralRule]: Mixed list of rules
         """
-        from ..topology.predefined import CLAYFF_RULES, CSHFF_RULES
+        from ..topology.predefined import CLAYFF_RULES, CSHFF_RULES, IFF_SILICA_RULES
         from ..topology.rules import DihedralRule, LayerRule, TopologyRule
         from .atomic_system import AtomicSystem
 
         if isinstance(r, str):
-            predefined = {"clayff": CLAYFF_RULES, "cshff": CSHFF_RULES}
+            predefined = {
+                "clayff": CLAYFF_RULES,
+                "cshff": CSHFF_RULES,
+                "iff_silica": IFF_SILICA_RULES,
+            }
             key = r.strip().lower()
             if key not in predefined:
                 raise ValueError(

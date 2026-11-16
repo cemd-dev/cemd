@@ -217,62 +217,95 @@ class ForceFieldDatabase:
                 return params
         return None
 
+    def _equivalent_shorts(
+        self, model: str, shorts: tuple[str, ...], column: str
+    ) -> tuple[str, ...]:
+        """Map short type names through the model's equivalence table.
+
+        Force fields in the MSI .frc format (the CVFF and PCFF versions of
+        INTERFACE) let a type borrow the parameters of another, one column
+        per kind of term: "nonbond", "bond", "angle", "torsion", "oop".
+        IFF relies on it, e.g. the tetrahedral Al defect ``ayt1`` takes the
+        bonded terms of ``sy1`` and the surface oxygen ``oc24`` those of
+        ``oc23``. Types without an entry map to themselves.
+        """
+        model_obj = self.models.get(model)
+        table = getattr(model_obj, "equivalence", None) or {}
+        return tuple(table.get(s, {}).get(column, s) for s in shorts)
+
+    def _lookup_in_model(
+        self, dict_obj: dict, model: str, shorts: tuple[str, ...], column: str | None
+    ):
+        """Exact lookup of ``shorts`` (either direction) in ``model``, then
+        the same through the equivalence table when ``column`` is given."""
+        candidates = [shorts]
+        if column:
+            eq = self._equivalent_shorts(model, shorts, column)
+            if eq != shorts:
+                candidates.append(eq)
+        for cand in candidates:
+            key = "-".join(cand)
+            key_rev = "-".join(reversed(cand))
+            for k in (f"{model}.{key}", f"{model}.{key_rev}"):
+                if k in dict_obj:
+                    return dict_obj[k]
+        return None
+
+    def _get_params(
+        self,
+        dict_obj: dict,
+        types: tuple[str, ...],
+        model: str | None = None,
+        column: str | None = None,
+    ):
+        """Generic search for the parameters of a pair, triple or quadruple.
+
+        With a model (given, or taken from the first type's prefix), only
+        that model is searched, first for the exact types, then for their
+        equivalents in ``column`` (see `_equivalent_shorts`). Without one,
+        the first entry of any model matching the exact types is returned.
+        """
+        shorts = tuple(self._extract_short_name(t)[1] for t in types)
+
+        if model is None:
+            model, _ = self._extract_short_name(types[0])
+        else:
+            model = self._canonical_model(model)
+
+        if model:
+            return self._lookup_in_model(dict_obj, model, shorts, column)
+
+        key = "-".join(shorts)
+        key_rev = "-".join(reversed(shorts))
+        for full_key, params in dict_obj.items():
+            if "." in full_key:
+                short_key = full_key.split(".", 1)[1]
+                if short_key == key or short_key == key_rev:
+                    return params
+        return None
+
     def _get_pair_params(
-        self, dict_obj: dict, type1: str, type2: str, model: str = None
+        self,
+        dict_obj: dict,
+        type1: str,
+        type2: str,
+        model: str = None,
+        column: str | None = None,
     ):
         """Generic method to search for pair parameters."""
-        _, short1 = self._extract_short_name(type1)
-        _, short2 = self._extract_short_name(type2)
-
-        if model is None:
-            model, _ = self._extract_short_name(type1)
-        else:
-            model = self._canonical_model(model)
-
-        key = f"{short1}-{short2}"
-        key_rev = f"{short2}-{short1}"
-
-        if model:
-            for k in [f"{model}.{key}", f"{model}.{key_rev}"]:
-                if k in dict_obj:
-                    return dict_obj[k]
-            return None
-
-        for full_key, params in dict_obj.items():
-            if "." in full_key:
-                pair_key = full_key.split(".", 1)[1]
-                if pair_key == key or pair_key == key_rev:
-                    return params
-        return None
+        return self._get_params(dict_obj, (type1, type2), model, column)
 
     def _get_triple_params(
-        self, dict_obj: dict, type1: str, type2: str, type3: str, model: str = None
+        self,
+        dict_obj: dict,
+        type1: str,
+        type2: str,
+        type3: str,
+        model: str = None,
+        column: str | None = None,
     ):
         """Generic method to search for triple parameters."""
-        _, short1 = self._extract_short_name(type1)
-        _, short2 = self._extract_short_name(type2)
-        _, short3 = self._extract_short_name(type3)
-
-        if model is None:
-            model, _ = self._extract_short_name(type1)
-        else:
-            model = self._canonical_model(model)
-
-        key = f"{short1}-{short2}-{short3}"
-        key_rev = f"{short3}-{short2}-{short1}"
-
-        if model:
-            for k in [f"{model}.{key}", f"{model}.{key_rev}"]:
-                if k in dict_obj:
-                    return dict_obj[k]
-            return None
-
-        for full_key, params in dict_obj.items():
-            if "." in full_key:
-                triple_key = full_key.split(".", 1)[1]
-                if triple_key == key or triple_key == key_rev:
-                    return params
-        return None
+        return self._get_params(dict_obj, (type1, type2, type3), model, column)
 
     def _get_quadruple_params(
         self,
@@ -282,37 +315,14 @@ class ForceFieldDatabase:
         type3: str,
         type4: str,
         model: str = None,
+        column: str | None = None,
     ):
         """Generic method to search for quadruple parameters."""
-        _, short1 = self._extract_short_name(type1)
-        _, short2 = self._extract_short_name(type2)
-        _, short3 = self._extract_short_name(type3)
-        _, short4 = self._extract_short_name(type4)
-
-        if model is None:
-            model, _ = self._extract_short_name(type1)
-        else:
-            model = self._canonical_model(model)
-
-        key = f"{short1}-{short2}-{short3}-{short4}"
-        key_rev = f"{short4}-{short3}-{short2}-{short1}"
-
-        if model:
-            for k in [f"{model}.{key}", f"{model}.{key_rev}"]:
-                if k in dict_obj:
-                    return dict_obj[k]
-            return None
-
-        for full_key, params in dict_obj.items():
-            if "." in full_key:
-                quad_key = full_key.split(".", 1)[1]
-                if quad_key == key or quad_key == key_rev:
-                    return params
-        return None
+        return self._get_params(dict_obj, (type1, type2, type3, type4), model, column)
 
     def get_lj(self, type1: str, type2: str, model: str = None) -> LJParams | None:
         """Get Lennard-Jones 12-6 parameters for a pair."""
-        return self._get_pair_params(self.lj, type1, type2, model)
+        return self._get_pair_params(self.lj, type1, type2, model, "nonbond")
 
     def get_buckingham(
         self, type1: str, type2: str, model: str = None
@@ -324,32 +334,38 @@ class ForceFieldDatabase:
         self, type1: str, type2: str, model: str = None
     ) -> HarmonicBondParams | Class2BondParams | None:
         """Get bond parameters for a pair."""
-        return self._get_pair_params(self.bond, type1, type2, model)
+        return self._get_pair_params(self.bond, type1, type2, model, "bond")
 
     def get_angle(
         self, type1: str, type2: str, type3: str, model: str = None
     ) -> HarmonicAngleParams | Class2AngleParams | None:
         """Get angle parameters for a triple of atom types."""
-        return self._get_triple_params(self.angle, type1, type2, type3, model)
+        return self._get_triple_params(
+            self.angle, type1, type2, type3, model, "angle"
+        )
 
     def get_bondbond(
         self, type1: str, type2: str, type3: str, model: str = None
     ) -> Class2BondBondParams | None:
         """Get bondbond parameters for a triple of atom types."""
-        return self._get_triple_params(self.bondbond, type1, type2, type3, model)
+        return self._get_triple_params(
+            self.bondbond, type1, type2, type3, model, "angle"
+        )
 
     def get_bondangle(
         self, type1: str, type2: str, type3: str, model: str = None
     ) -> Class2BondAngleParams | None:
         """Get bondangle parameters for a triple of atom types."""
-        return self._get_triple_params(self.bondangle, type1, type2, type3, model)
+        return self._get_triple_params(
+            self.bondangle, type1, type2, type3, model, "angle"
+        )
 
     def get_angleangletorsion(
         self, type1: str, type2: str, type3: str, type4: str, model: str = None
     ) -> Class2AngleAngleTorsionParams | None:
         """Get angle-angle-torsion parameters for a quadruple of atom types."""
         return self._get_quadruple_params(
-            self.angleangletorsion, type1, type2, type3, type4, model
+            self.angleangletorsion, type1, type2, type3, type4, model, "torsion"
         )
 
     def get_angleangle(
@@ -365,7 +381,7 @@ class ForceFieldDatabase:
     ) -> Any | None:
         """Get dihedral parameters for a quadruple of atom types."""
         return self._get_quadruple_params(
-            self.dihedral, type1, type2, type3, type4, model
+            self.dihedral, type1, type2, type3, type4, model, "torsion"
         )
 
     def get_improper(
@@ -373,7 +389,7 @@ class ForceFieldDatabase:
     ) -> HarmonicImproperParams | DistanceImproperParams | None:
         """Get improper parameters for a quadruple of atom types."""
         return self._get_quadruple_params(
-            self.improper, type1, type2, type3, type4, model
+            self.improper, type1, type2, type3, type4, model, "oop"
         )
 
     def get_model_names(self) -> list[str]:

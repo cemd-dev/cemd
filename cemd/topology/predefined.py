@@ -69,3 +69,61 @@ CLAYFF_RULES: list[TopologyRule] = [
 CSHFF_RULES = CLAYFF_RULES + [
     LayerRule("type Ca", "type Si", inside_type="Ca", outside_type="Cw"),
 ]
+
+
+# INTERFACE FF silica (Emami et al. 2014, https://doi.org/10.1021/cm500365c),
+# types and charges of `iff.toml`. From element types (Si, O, H, Na), it
+# writes the Si-O and O-H bonds and every angle the model defines:
+#   bulk Si-O-Si oxygen   o_silica_bulk      -0.55
+#   silanol Si-O-H        o_silica_silanol   -0.675, h_silica +0.4
+#   siloxide Si-O(-)      o_silica_siloxide  -0.9
+#   Si                    si_silica          +1.1, or si_silica_siloxide
+#                         +0.725 when it bears one siloxide group
+#   counter-ion           na_silica          +1.0
+# The Emami models never put two siloxide groups on one Si: such a Si (and
+# any Si without four oxygens) is left untyped, for the caller to see.
+# Water oxygens are farther than 2 A from any Si and stay "O".
+_SI_O = 2.0  # Si-O cutoff, r0 = 1.68 A
+_O_H = 1.2
+
+IFF_SILICA_RULES: list[TopologyRule] = [
+    TopologyRule(
+        "type O",
+        NeighborCriterion("type Si", _SI_O, 2),
+        new_type="o_silica_bulk",
+        bonds=True,
+        angles=True,
+    ),
+    TopologyRule(
+        "type O",
+        [
+            NeighborCriterion("type Si", _SI_O, 1),
+            NeighborCriterion("type H", _O_H, 1, "h_silica"),
+        ],
+        new_type="o_silica_silanol",
+        bonds=True,
+        angles=True,
+    ),
+    TopologyRule(
+        "type O",
+        [NeighborCriterion("type Si", _SI_O, 1), NeighborCriterion("type H", _O_H, 0)],
+        new_type="o_silica_siloxide",
+        bonds=True,
+    ),
+    TopologyRule(
+        "type Si",
+        [
+            NeighborCriterion("type o_silica_siloxide", _SI_O, 1),
+            NeighborCriterion("type o_silica_bulk o_silica_silanol", _SI_O, 3),
+        ],
+        new_type="si_silica_siloxide",
+        angles=True,
+    ),
+    TopologyRule(
+        "type Si",
+        NeighborCriterion("type o_silica_bulk o_silica_silanol", _SI_O, 4),
+        new_type="si_silica",
+        angles=True,
+    ),
+    TopologyRule("type Na", [], new_type="na_silica"),
+]

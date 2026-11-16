@@ -5,7 +5,7 @@
 [model]
 name = "IFF"
 ref = "https://doi.org/10.1039/C4DT00438H"
-description = "Interface Force Field: C3S, C3A, silica, calcium sulfates, portlandite and tobermorite (12-6 LJ)"
+description = "Interface Force Field: C3S, C3A, silica (with siloxide groups), calcium sulfates, portlandite and tobermorite (12-6 LJ)"
 category = "minerals"
 mixing = "arithmetic"
 mixing_note = "12-6 CHARMM column; the portlandite and tobermorite block comes from the CVFF column (geometric rule)"
@@ -288,8 +288,10 @@ theta0 = 115
 # ============================================================
 # Silica (Emami et al. 2014, Tables 3-4; 12-6 LJ column CHARMM/CVFF/AMBER)
 # sigma = sigma0 / 2^(1/6) (IFF gives the LJ minimum distance sigma0).
-# Si-O r0 = 1.68 A (use 1.65 A with AMBER 1-4 scaling). Siloxide groups (SiO- Na+)
-# need Si +0.725 / O -0.9 and are not included.
+# Si-O r0 = 1.68 A (use 1.65 A with AMBER 1-4 scaling). Siloxide groups (SiO- Na+):
+# Si +0.725 / O -0.9, with the LJ of Si and of the silanol O (Emami 2014; charges
+# checked against the database models, e.g. silica_Q3_4_7OH_50pct_ion.car).
+# Typing rules: set_topology("iff_silica").
 # ============================================================
 
 [lj."si_silica-si_silica"]
@@ -348,6 +350,97 @@ theta0 = 149.0
 ref = "https://doi.org/10.1021/cm500365c"
 
 [angle.harmonic."si_silica-o_silica_silanol-h_silica"]
+k = 50
+theta0 = 115.0
+ref = "https://doi.org/10.1021/cm500365c"
+
+# --- Siloxide groups and their Na+ counter-ions (ionized surfaces, pH > pzc) ---
+
+[atom.si_silica_siloxide]
+element = "Si"
+charge = 0.725
+environment = "silicon atom bearing a siloxide group (SiO-) in silica"
+ref = "https://doi.org/10.1021/cm500365c"
+
+[atom.o_silica_siloxide]
+element = "O"
+charge = -0.9
+environment = "siloxide oxygen (SiO-) on silica surfaces"
+ref = "https://doi.org/10.1021/cm500365c"
+
+[atom.na_silica]
+element = "Na"
+charge = 1.0
+environment = "sodium counter-ion of silica siloxide groups"
+ref = "https://doi.org/10.1021/cm500365c"
+
+[lj."si_silica_siloxide-si_silica_siloxide"]
+epsilon = 0.093
+sigma = 3.69722968028
+ref = "https://doi.org/10.1021/cm500365c"
+
+[lj."o_silica_siloxide-o_silica_siloxide"]
+epsilon = 0.122
+sigma = 3.09141855195
+ref = "https://doi.org/10.1021/cm500365c"
+
+# CHARMM-INTERFACE v1.5: NA+ eps 0.094, Rmin/2 1.585 (hydration energy -98 kcal/mol)
+[lj."na_silica-na_silica"]
+epsilon = 0.094
+sigma = 2.82414893650
+ref = "https://doi.org/10.1021/cm500365c"
+
+[bond.harmonic."o_silica_bulk-si_silica_siloxide"]
+k = 285
+r0 = 1.68
+ref = "https://doi.org/10.1021/cm500365c"
+
+[bond.harmonic."o_silica_silanol-si_silica_siloxide"]
+k = 285
+r0 = 1.68
+ref = "https://doi.org/10.1021/cm500365c"
+
+[bond.harmonic."o_silica_siloxide-si_silica_siloxide"]
+k = 285
+r0 = 1.68
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_bulk-si_silica_siloxide-o_silica_bulk"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_bulk-si_silica_siloxide-o_silica_silanol"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_bulk-si_silica_siloxide-o_silica_siloxide"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_silanol-si_silica_siloxide-o_silica_siloxide"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."o_silica_silanol-si_silica_siloxide-o_silica_silanol"]
+k = 100
+theta0 = 109.5
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."si_silica-o_silica_bulk-si_silica_siloxide"]
+k = 100
+theta0 = 149.0
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."si_silica_siloxide-o_silica_bulk-si_silica_siloxide"]
+k = 100
+theta0 = 149.0
+ref = "https://doi.org/10.1021/cm500365c"
+
+[angle.harmonic."si_silica_siloxide-o_silica_silanol-h_silica"]
 k = 50
 theta0 = 115.0
 ref = "https://doi.org/10.1021/cm500365c"

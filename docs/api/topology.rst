@@ -19,10 +19,14 @@ Rules
 Predefined rule sets
 --------------------
 
-``set_topology("clayff")`` and ``set_topology("cshff")`` apply these lists.
+``set_topology("clayff")``, ``set_topology("cshff")`` and
+``set_topology("iff_silica")`` apply these lists.
 
 .. autodata:: cemd.topology.CLAYFF_RULES
    :no-value:
 
 .. autodata:: cemd.topology.CSHFF_RULES
+   :no-value:
+
+.. autodata:: cemd.topology.IFF_SILICA_RULES
    :no-value:

@@ -334,3 +334,63 @@ def test_model_metadata_exposes_mixing_rule():
     assert db.models["wang2009"].mixing == "geometric"
     assert db.models["raiteri2015"].mixing == "none"
     assert db.models["clayff"].category == "minerals"
+
+
+# ---------------------------------------------------------------------------
+# INTERFACE FF (CVFF and CHARMM files): equivalences, charges, masses
+# ---------------------------------------------------------------------------
+
+
+def test_iff_cvff_equivalence_table_is_loaded(db):
+    table = db.get_model("iff_cvff").equivalence
+    # ayt1 (Al defect of sy1) borrows the bonded terms of sy1
+    assert table["ayt1"]["bond"] == "sy1"
+    assert table["oc24"]["angle"] == "oc23"
+
+
+def test_iff_cvff_bonds_and_angles_resolve_through_equivalences(db):
+    # None of these keys is written in the .frc: they come from sy1/oc23.
+    assert db.get_bond("ayt1", "oy1", model="iff_cvff") == db.get_bond(
+        "sy1", "oy1", model="iff_cvff"
+    )
+    assert db.get_bond("oc24", "sc4", model="iff_cvff") == db.get_bond(
+        "oc23", "sc4", model="iff_cvff"
+    )
+    assert db.get_angle("oc24", "sc4", "oc24", model="iff_cvff") == db.get_angle(
+        "oc23", "sc4", "oc23", model="iff_cvff"
+    )
+
+
+def test_iff_cvff_nonbond_resolves_through_equivalences(db):
+    assert db.get_lj("oy6", "oy6", model="iff_cvff") == db.get_lj(
+        "oy4", "oy4", model="iff_cvff"
+    )
+
+
+def test_equivalences_do_not_leak_to_models_without_them(db):
+    assert db.get_bond("ayt1", "oy1", model="clayff") is None
+
+
+def test_iff_cvff_hydrogens_without_lj_have_zero_epsilon(db):
+    lj = db.get_lj("ha1", "ha1", model="iff_cvff")
+    assert lj is not None and lj.epsilon == 0.0
+
+
+def test_iff_cvff_charge_only_when_the_comment_gives_one_value(db):
+    assert db.get_atom_type("iff_cvff.sy1").charge == pytest.approx(1.1)
+    assert db.get_atom_type("iff_cvff.oc23").charge == pytest.approx(-0.55)
+    # environment-dependent or several values: no per-type charge
+    assert db.get_atom_type("iff_cvff.oy1").charge is None
+    assert db.get_atom_type("iff_cvff.sc4").charge is None
+    assert db.get_atom_type("iff_cvff.ay1").charge is None
+
+
+def test_iff_charmm_al_types_get_the_element_mass(db):
+    for t in ("AY1", "AYT1"):
+        assert db.get_atom_type(f"iff_charmm.{t}").mass == pytest.approx(26.98, abs=0.01)
+
+
+def test_iff_toml_has_the_siloxide_types(db):
+    assert db.get_atom_type("iff.si_silica_siloxide").charge == pytest.approx(0.725)
+    assert db.get_atom_type("iff.o_silica_siloxide").charge == pytest.approx(-0.9)
+    assert db.get_bond("o_silica_siloxide", "si_silica_siloxide", model="iff") is not None

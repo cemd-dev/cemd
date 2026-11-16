@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- INTERFACE FF, CVFF file: the `#equivalence` table is read and resolved at
+  lookup time (LJ, bonds, angles, torsions, impropers), so the types that
+  borrow the parameters of another one are complete: `ayt1`/`ayt2` (Al
+  defects of the silicate sheet), `oc24` (surface O of silica), `oy2`-`oy9`,
+  and the organic CVFF types (`c2`, `c3`, ...).
+- `iff.toml`: siloxide groups of silica (`si_silica_siloxide` +0.725,
+  `o_silica_siloxide` -0.9) and their Na+ counter-ion (`na_silica`), with
+  bonds and angles (Emami 2014).
+- `set_topology("iff_silica")` / `IFF_SILICA_RULES`: types and bonds silica
+  for `iff.toml` from its elements, ionized surfaces included. Checked atom
+  by atom against the IFF 1.5 silica database (8 models, Q2 to Q4, 0 to 50 %
+  ionization): types, charges, bond and angle counts all match.
+
+### Fixed
+
+- `set_charges` (and so `set_ff_from_database`) reset the per-atom charges of
+  every type to one stored value per type, not only those of the types being
+  set: atoms of one type with different charges (IFF O next to an Al defect,
+  EEM charges) were overwritten.
+- INTERFACE FF, CVFF file: the charge read from the type comment is kept only
+  when the comment gives one value; environment-dependent ones (`oy1`, `sc4`,
+  `oc24`, ...) and lists (`ay1`) are now `None` instead of 0.0 or the first
+  value. Hydrogens without LJ (`ha1`, `hop`, `h*`, ...) are kept with
+  epsilon 0 instead of being reported missing.
+- INTERFACE FF, CHARMM file: types missing from the mass table (`AY1`, `AY2`,
+  `AYT1`, `AYT2`, `AC1`, ...) had mass 0, which `set_ff_from_database`
+  rejects; they now take their element's mass.
+
+### Results to redo
+
+- **Systems typed with `iff_cvff` types whose charges were taken from the
+  database**: `oy*`, `sc4`, `oc24`, `hoy`, `na+`, `ce1`, `oe1`, `he1` were
+  given 0.0. Set the charges from the topology or the typing rules.
+- **Systems mixing per-atom charges within a type** (EEM/ReaxFF charges,
+  hand-set charges) passed through `set_ff_from_database` or `set_charges`:
+  check that their charges were not flattened.
+
 ## 0.3.0 — 2026-11-13
 
 ### Breaking changes

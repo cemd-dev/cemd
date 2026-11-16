@@ -62,6 +62,8 @@ class ParseResult:
         default_factory=dict
     )
     angleangle: dict[str, Class2AngleAngleParams] = field(default_factory=dict)
+    # See ForceFieldModel.equivalence.
+    equivalence: dict[str, dict[str, str]] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_database(self, db: "ForceFieldDatabase") -> None:
@@ -78,6 +80,8 @@ class ParseResult:
                 mixing=self.metadata.get("mixing", ""),
                 mixing_note=self.metadata.get("mixing_note", ""),
             )
+
+        db.models[self.model_name].equivalence.update(self.equivalence)
 
         for key, value in self.atoms.items():
             full_key = f"{self.model_name}.{key}"

@@ -17,7 +17,7 @@
 
 from typing import Any
 
-from ..._constants import two_letter_element_from_type
+from ..._constants import MASSES_DICT, two_letter_element_from_type
 from ..forcefield_database import ForceFieldDatabase
 from ..models import (
     AtomType,
@@ -692,6 +692,11 @@ class CHARMMInterfaceParser(BaseForceFieldParser):
 
             mass = self._guess_mass(atom_type)
             element = self._guess_element(atom_type, mass)
+            # The .prm has no MASS section: a type missing from the table
+            # (the IFF Al types AY1, AYT1, ...) came back with mass 0, which
+            # set_ff_from_database rejects. Take the element's mass then.
+            if not mass and element in MASSES_DICT:
+                mass = float(MASSES_DICT[element])
 
             result.atoms[atom_type] = AtomType(
                 element=element,

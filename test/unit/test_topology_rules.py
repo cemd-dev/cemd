@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from cemd import AtomicSystem
-from cemd.topology import CLAYFF_RULES, CSHFF_RULES, DihedralRule
+from cemd.topology import CLAYFF_RULES, CSHFF_RULES, IFF_SILICA_RULES, DihedralRule
 from cemd.topology.rules import NeighborCriterion, TopologyRule
 
 from conftest import make_water_system
@@ -294,3 +294,72 @@ def test_neighbor_lists_match_one_selection_per_center(seed):
     expected = state(reference)
     assert expected[1], "the mix should produce bonds"
     assert state(fast) == expected
+
+
+# ---------------------------------------------------------------------------
+# IFF_SILICA_RULES (INTERFACE FF silica, Emami 2014)
+# ---------------------------------------------------------------------------
+
+
+def _make_two_tetrahedra() -> AtomicSystem:
+    """Si1(OH)3-O-Si2(OH)2(O-) Na+: one bridge, five silanols, one siloxide."""
+    import numpy as np
+
+    u = np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]]) / np.sqrt(3)
+    si1 = np.array([15.0, 15.0, 15.0])
+    si2 = si1 + 2 * 1.62 * u[0]
+    types, xyz = ["Si", "Si", "O"], [si1, si2, si1 + 1.62 * u[0]]
+    for d in u[1:]:  # Si1 silanols
+        o = si1 + 1.62 * d
+        types += ["O", "H"]
+        xyz += [o, o + 0.96 * d]
+    for i, d in enumerate(-u[1:]):  # Si2: two silanols, one siloxide + Na
+        o = si2 + 1.62 * d
+        if i < 2:
+            types += ["O", "H"]
+            xyz += [o, o + 0.96 * d]
+        else:
+            types += ["O", "Na"]
+            xyz += [o, o + 2.3 * d]
+    xyz = np.array(xyz)
+    atoms = pd.DataFrame(
+        {"type": types, "charge": 0.0, "x": xyz[:, 0], "y": xyz[:, 1], "z": xyz[:, 2]},
+        index=range(1, len(types) + 1),
+    )
+    return AtomicSystem(
+        {
+            "atoms": atoms,
+            "box": [30.0, 30.0, 30.0, 90.0, 90.0, 90.0],
+            "masses": {"Si": 28.085, "O": 15.999, "H": 1.008, "Na": 22.99},
+            "charges": {},
+        }
+    )
+
+
+def test_iff_silica_rules_type_bridge_silanol_and_siloxide():
+    system = _make_two_tetrahedra()
+    system.set_topology("iff_silica")
+    counts = system.atoms["type"].value_counts().to_dict()
+    assert counts == {
+        "o_silica_silanol": 5,
+        "h_silica": 5,
+        "si_silica": 1,
+        "si_silica_siloxide": 1,
+        "o_silica_bulk": 1,
+        "o_silica_siloxide": 1,
+        "na_silica": 1,
+    }
+    # 8 Si-O + 5 O-H bonds; 2 x 6 O-Si-O, 1 Si-O-Si and 5 Si-O-H angles
+    assert len(system.bonds) == 13
+    assert len(system.angles) == 18
+
+
+def test_iff_silica_rules_give_a_neutral_system_with_iff_parameters():
+    system = _make_two_tetrahedra()
+    system.set_topology(IFF_SILICA_RULES)
+    system.set_ff_from_database(
+        atom_assignments={t: f"iff.{t}" for t in system.atom_types}
+    )
+    assert system.total_charge == pytest.approx(0.0, abs=1e-9)
+    assert set(system._ff_params.bond) == set(system.bond_types)
+    assert set(system._ff_params.angle) == set(system.angle_types)

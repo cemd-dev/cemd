@@ -500,3 +500,15 @@ def test_models_with_different_rules_mix_arithmetically_with_warning(water_syste
     assert water_system.ff_params.pair["Hw-Ow"].sigma == pytest.approx(
         (3.1655 + 2.87199019766901) / 2
     )
+
+
+def test_set_charges_leaves_the_per_atom_charges_of_other_types(water_system):
+    # Two Hw with different charges (as IFF O next to an Al defect or EEM
+    # charges): setting Ow must not reset them to one per-type value.
+    water_system.atoms.loc[2, "charge"] = 0.35
+    water_system.atoms.loc[3, "charge"] = 0.45
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        water_system.set_charges({"Ow": -0.8})
+    assert water_system.atoms.loc[2, "charge"] == pytest.approx(0.35)
+    assert water_system.atoms.loc[3, "charge"] == pytest.approx(0.45)

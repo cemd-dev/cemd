@@ -15,7 +15,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-from .predefined import CLAYFF_RULES, CSHFF_RULES
+from .predefined import CLAYFF_RULES, CSHFF_RULES, IFF_SILICA_RULES
 from .rules import DihedralRule, LayerRule, NeighborCriterion, TopologyRule
 
 __all__ = [
@@ -25,4 +25,5 @@ __all__ = [
     "LayerRule",
     "CLAYFF_RULES",
     "CSHFF_RULES",
+    "IFF_SILICA_RULES",
 ]

@@ -38,6 +38,10 @@ class ForceFieldModel:
     # pair is given explicitly and unlisted pairs are Coulomb only.
     mixing: str = ""
     mixing_note: str = ""
+    # MSI .frc equivalence table: type -> {"nonbond", "bond", "angle",
+    # "torsion", "oop"} -> type whose parameters it borrows. Only types that
+    # differ from themselves in at least one column are listed.
+    equivalence: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass

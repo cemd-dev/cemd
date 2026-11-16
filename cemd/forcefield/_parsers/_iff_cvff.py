@@ -46,6 +46,8 @@ class CVFFInterfaceParser(BaseForceFieldParser):
     -#nonbond(12-6): LJ parameters
     -#bond-bond: Class2 bond-bond terms
     -#bond-angle: Class2 terms bond-angle
+    -#equivalence: types borrowing the parameters of another type, per
+     kind of term (resolved at lookup time by ForceFieldDatabase)
     """
 
     def __init__(
@@ -63,6 +65,7 @@ class CVFFInterfaceParser(BaseForceFieldParser):
         # pattern must be checked first (see _detect_section).
         self._section_patterns = {
             "atom_types": ["#atom_types"],
+            "equivalence": ["#equivalence"],
             "oop-oop": ["#out_of_plane-out_of_plane"],
             "quadratic_bond": ["#quadratic_bond"],
             "quadratic_angle": ["#quadratic_angle"],
@@ -109,9 +112,11 @@ class CVFFInterfaceParser(BaseForceFieldParser):
 
         # Skip "_auto" tables: these hold wildcard/equivalence-based
         # parameters generated automatically by msi2lmp, as opposed to the
-        # explicit "cvff" tables. Resolving equivalences is out of scope,
-        # so these duplicate sections (e.g. "#quadratic_bond cvff_auto")
-        # are intentionally ignored to avoid polluting the explicit ones.
+        # explicit "cvff" tables. The explicit "#equivalence" table is read
+        # and resolved at lookup time; the "_auto" one (and the generic
+        # parameters it points to) is intentionally ignored, so these
+        # duplicate sections (e.g. "#quadratic_bond cvff_auto") do not
+        # pollute the explicit ones.
         if "auto" in line_lower:
             return None
 
@@ -156,6 +161,7 @@ class CVFFInterfaceParser(BaseForceFieldParser):
         # Handlers are defined as private methods
         handlers = {
             "atom_types": self._parse_atom_type,
+            "equivalence": self._parse_equivalence,
             "quadratic_bond": self._parse_bond,
             "quadratic_angle": self._parse_angle,
             "torsion_1": self._parse_torsion,
@@ -191,15 +197,21 @@ class CVFFInterfaceParser(BaseForceFieldParser):
             element = parts[4]
 
             comment = " ".join(parts[6:]) if len(parts) > 6 else ""
-            charge = 0.0
 
-            # Extract load from comment
-            charge_match = re.search(r"\(([+-]?\d+\.?\d*)\)", comment)
-            if charge_match:
-                try:
-                    charge = float(charge_match.group(1))
-                except ValueError:
-                    pass
+            # The .frc file carries no charge: IFF documents it in the
+            # comment, and only some types have a single value. Others depend
+            # on the environment ("-0.55, -0.783 if next to Al defect",
+            # "+1.1 in bulk SiO2 or SiOH, +0.725 in SiO-") or name several
+            # ("(+1.45) or magnesium defect (+1.1)"). Those get None (no
+            # per-type charge), so that typing rules or the topology set
+            # them, rather than a wrong 0.0 or the first value of a list.
+            charge = None
+            groups = re.findall(r"\(([^()]*)\)", comment)
+            numbers = [
+                g for g in groups if re.fullmatch(r"\s*[+-]?\d+\.?\d*\s*", g)
+            ]
+            if len(groups) == 1 and len(numbers) == 1:
+                charge = float(numbers[0])
 
             result.atoms[atom_type] = AtomType(
                 element=element,
@@ -208,6 +220,20 @@ class CVFFInterfaceParser(BaseForceFieldParser):
                 environment=comment,
                 model=result.model_name,
             )
+
+    def _parse_equivalence(self, line: str, result: ParseResult) -> None:
+        """
+        Parse an equivalence line.
+        Format: Ver Ref Type NonB Bond Angle Torsion OOP
+        """
+        parts = line.split()
+        if len(parts) < 8:
+            return
+        atom_type = parts[2]
+        columns = ("nonbond", "bond", "angle", "torsion", "oop")
+        mapping = dict(zip(columns, parts[3:8]))
+        if any(v != atom_type for v in mapping.values()):
+            result.equivalence[atom_type] = mapping
 
     def _parse_bond(self, line: str, result: ParseResult) -> None:
         """
@@ -328,12 +354,18 @@ class CVFFInterfaceParser(BaseForceFieldParser):
             try:
                 a = float(parts[3])
                 b = float(parts[4])
+                key = f"{atom}-{atom}"
                 if a > 0 and b > 0:
                     epsilon = b**2 / (4 * a)
                     sigma = (a / b) ** (1 / 6)
-                    key = f"{atom}-{atom}"
                     result.lj[key] = LJParams(
                         epsilon=epsilon, sigma=sigma, model=result.model_name
+                    )
+                elif b == 0:
+                    # Hydrogens without LJ (B = 0, A a token 1e-8): keep them,
+                    # with epsilon 0, so they are not reported as missing.
+                    result.lj[key] = LJParams(
+                        epsilon=0.0, sigma=0.0, model=result.model_name
                     )
             except ValueError:
                 pass

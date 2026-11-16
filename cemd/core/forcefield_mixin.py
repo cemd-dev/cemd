@@ -735,12 +735,16 @@ class ForceFieldMixin:
 
         # Charges live per-atom in the atoms DataFrame; masses are per-type only.
         if property_name == "charge" and getattr(self, "atoms", None) is not None:
-            mapped_values = self.atoms["type"].map(storage)
-
             if "charge" in self.atoms.columns:
-                self.atoms["charge"] = mapped_values.fillna(self.atoms["charge"])
+                # Only the types being set: the other atoms keep their own
+                # charges, which may differ within a type (INTERFACE FF O next
+                # to an Al defect, EEM charges). Mapping the whole `storage`
+                # here reset every such type to its one stored value.
+                self.atoms["charge"] = (
+                    self.atoms["type"].map(value).fillna(self.atoms["charge"])
+                )
             else:
-                self.atoms["charge"] = mapped_values
+                self.atoms["charge"] = self.atoms["type"].map(storage)
 
             unassigned = self.atoms.loc[self.atoms["charge"].isna(), "type"].unique()
             if len(unassigned):
