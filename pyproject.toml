@@ -105,6 +105,7 @@ cemd = [
     "build/_structures/*.lt",
     "build/_structures/*.pdb",
     "build/_structures/*.sdf",
+    "build/_data/*.toml",
     "forcefield/db/*",
     "core/_view/*.tcl",
     "core/_view/*.toml",

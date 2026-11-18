@@ -63,12 +63,20 @@ class AtomType:
 
 @dataclass
 class LJParams:
-    """Lennard-Jones 12-6 parameters."""
+    """Lennard-Jones 12-6 parameters.
+
+    ``epsilon14`` and ``sigma14`` are the special 1-4 values of CHARMM force
+    fields (CGenFF alkyl carbons, carbonyl O...), used by
+    ``pair_style lj/charmmfsw/coul/long`` for the end atoms of a dihedral.
+    None means the 1-4 pair uses ``epsilon`` and ``sigma``.
+    """
 
     epsilon: float
     sigma: float
     ref: str = ""
     model: str | None = None
+    epsilon14: float | None = None
+    sigma14: float | None = None
 
 
 @dataclass
@@ -123,6 +131,21 @@ class HarmonicAngleParams:
     theta0: float  # Degrees
     ref: str = ""
     model: str | None = None
+
+
+@dataclass
+class CHARMMAngleParams:
+    """CHARMM angle: harmonic in the angle plus a Urey-Bradley 1-3 bond.
+
+    E = K (theta - theta0)^2 + K_ub (r_13 - r_ub)^2, LAMMPS ``angle_style charmm``.
+    """
+
+    k: float  # kcal/(mol rad^2)
+    theta0: float  # degrees
+    k_ub: float  # kcal/(mol A^2)
+    r_ub: float  # A
+    ref: str = "https://docs.lammps.org/angle_charmm.html"
+    model: str | None = "CHARMM"
 
 
 @dataclass
@@ -264,6 +287,25 @@ class CHARMMDihedralParams:
             raise ValueError(f"n must be >= 0, got {self.n}")
         if self.w not in (0, 0.5, 1):
             raise ValueError(f"w must be 0, 0.5 or 1, got {self.w}")
+
+
+@dataclass
+class CHARMMDihedralSeries:
+    """Several CHARMM cosine terms on the same dihedral (one per multiplicity).
+
+    CHARMM lists them as repeated lines of the same four types. LAMMPS
+    ``dihedral_style charmm/charmmfsw`` takes one term per dihedral type, so
+    the data writer duplicates the dihedral, once per term; only the first
+    term carries the 1-4 weight, so that the 1-4 pair is counted once.
+    """
+
+    terms: list[CHARMMDihedralParams]
+    ref: str = "https://docs.lammps.org/dihedral_charmm.html"
+    model: str | None = "CHARMM"
+
+    def __post_init__(self):
+        if not self.terms:
+            raise ValueError("A CHARMM dihedral series needs at least one term")
 
 
 @dataclass

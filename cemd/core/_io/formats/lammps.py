@@ -23,7 +23,9 @@ import pandas as pd
 
 from ....forcefield.models import (
     BuckinghamParams,
+    CHARMMAngleParams,
     CHARMMDihedralParams,
+    CHARMMDihedralSeries,
     Class2AngleAngleParams,
     Class2AngleAngleTorsionParams,
     Class2AngleParams,
@@ -156,6 +158,71 @@ def _frame_to_string(df: pd.DataFrame, formatters: dict | None = None) -> str:
         + [f"{{:>{max(map(len, strings))}}}" for strings in columns]
     )
     return "\n".join(template.format(*row) for row in zip(index, *columns))
+
+
+class _View:
+    """Read-only view of an object with some attributes replaced."""
+
+    def __init__(self, base: Any, **overrides: Any):
+        self._base = base
+        self.__dict__.update(overrides)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._base, name)
+
+
+def _expand_dihedral_series(system: Any) -> Any:
+    """Split each multi-term CHARMM dihedral into one LAMMPS type per term.
+
+    ``dihedral_style charmm/charmmfsw`` has one cosine per dihedral type, so
+    a dihedral whose parameters are a `CHARMMDihedralSeries` is written once
+    per term, each copy with its own type (``A-B-C-D``, ``A-B-C-D__2``...).
+    The series puts the 1-4 weight on its first term only. Returns the
+    system itself when there is nothing to expand.
+    """
+    ff_params = getattr(system, "_ff_params", None)
+    dihedrals = getattr(system, "dihedrals", None)
+    if ff_params is None or not any(
+        isinstance(p, CHARMMDihedralSeries) for p in ff_params.dihedral.values()
+    ):
+        return system
+
+    new_types: list[str] = []
+    new_params: dict[str, Any] = {}
+    labels_of: dict[str, list[str]] = {}
+    for label in system.dihedral_types:
+        params = ff_params.dihedral.get(label)
+        if isinstance(params, CHARMMDihedralSeries):
+            labels = [label] + [f"{label}__{i}" for i in range(2, len(params.terms) + 1)]
+            for lab, term in zip(labels, params.terms):
+                new_params[lab] = term
+        else:
+            labels = [label]
+            if params is not None:
+                new_params[label] = params
+        labels_of[label] = labels
+        new_types.extend(labels)
+
+    if dihedrals is not None and not dihedrals.empty:
+        parts = []
+        for k in range(max(len(v) for v in labels_of.values())):
+            sub = dihedrals[dihedrals["type"].map(lambda t: len(labels_of[t]) > k)].copy()
+            sub["type"] = sub["type"].map(lambda t: labels_of[t][k])
+            parts.append(sub)
+        expanded = pd.concat(parts, ignore_index=True)
+        expanded.index = pd.RangeIndex(1, len(expanded) + 1, name=dihedrals.index.name)
+    else:
+        expanded = dihedrals
+
+    params_view = _View(ff_params, dihedral=new_params)
+    return _View(
+        system,
+        dihedral_types=new_types,
+        dihedrals=expanded,
+        num_dihedrals=0 if expanded is None else len(expanded),
+        num_dihedral_types=len(new_types),
+        _ff_params=params_view,
+    )
 
 
 class LAMMPSReader(BaseReader):
@@ -380,11 +447,15 @@ class LAMMPSReader(BaseReader):
                     array, topology, "bond_params", target_types=topology["bond_types"]
                 )
             elif key == "Angle Coeffs":
+                # Four coefficients are class2 (theta0 K2 K3 K4) when the
+                # file has the class2 cross terms, CHARMM (K theta0 K_ub r_ub)
+                # otherwise.
                 cls._parse_coeffs(
                     array,
                     topology,
                     "angle_params",
                     target_types=topology["angle_types"],
+                    class2="BondBond Coeffs" in sections,
                 )
             elif key == "Dihedral Coeffs":
                 cls._parse_coeffs(
@@ -679,6 +750,7 @@ class LAMMPSReader(BaseReader):
         key: str,
         target_types: list[str] = None,
         pair_ij: bool = False,
+        class2: bool = True,
     ) -> None:
         """Converts text coefficients to appropriate Python dataclasses.
 
@@ -722,6 +794,12 @@ class LAMMPSReader(BaseReader):
             if key == "pair_params":
                 if len(coeffs) == 2:
                     params[label] = LJParams(epsilon=coeffs[0], sigma=coeffs[1])
+                elif len(coeffs) == 4:
+                    # lj/charmm(fsw)/coul/long with its 1-4 values
+                    params[label] = LJParams(
+                        epsilon=coeffs[0], sigma=coeffs[1],
+                        epsilon14=coeffs[2], sigma14=coeffs[3],
+                    )
                 elif len(coeffs) == 3:
                     params[label] = BuckinghamParams(
                         a=coeffs[0], rho=coeffs[1], c=coeffs[2]
@@ -746,6 +824,11 @@ class LAMMPSReader(BaseReader):
             elif key == "angle_params":
                 if len(coeffs) == 2:
                     params[label] = HarmonicAngleParams(k=coeffs[0], theta0=coeffs[1])
+                elif len(coeffs) == 4 and not class2:
+                    # angle_style charmm: K theta0 K_ub r_ub
+                    params[label] = CHARMMAngleParams(
+                        k=coeffs[0], theta0=coeffs[1], k_ub=coeffs[2], r_ub=coeffs[3]
+                    )
                 elif len(coeffs) == 4:
                     params[label] = Class2AngleParams(
                         theta0=coeffs[0], k2=coeffs[1], k3=coeffs[2], k4=coeffs[3]
@@ -788,8 +871,14 @@ class LAMMPSReader(BaseReader):
                         n=int(coeffs[2]),
                     )
                 elif len(coeffs) == 4:
+                    # K n d w; d is the phase in degrees (0 or 180). Files
+                    # written by older cemd versions hold +1/-1 instead.
+                    phase = int(coeffs[2])
+                    d = {0: 1, 180: -1, 1: 1, -1: -1}.get(phase)
+                    if d is None:
+                        raise ValueError(f"CHARMM dihedral phase {phase} not handled")
                     params[label] = CHARMMDihedralParams(
-                        k=coeffs[0], n=int(coeffs[1]), d=int(coeffs[2]), w=coeffs[3]
+                        k=coeffs[0], n=int(coeffs[1]), d=d, w=coeffs[3]
                     )
                 elif len(coeffs) == 6:
                     params[label] = Class2DihedralParams(
@@ -855,6 +944,7 @@ class LAMMPSWriter(BaseWriter):
             If True, write in old style compatible with VMD/topotools.
             This uses numeric IDs instead of text labels and comments.
         """
+        system = _expand_dihedral_series(system)
         with open(path, "w", encoding="utf-8") as f:
             cls._write_header(f, system)
             cls._write_box(f, system)
@@ -872,7 +962,18 @@ class LAMMPSWriter(BaseWriter):
     def _format_coeff_values(params: Any) -> str:
         """Converts a parameter object (Dataclass, list, tuple) into a character string for LAMMPS."""
         if isinstance(params, LJParams):
+            if params.epsilon14 is not None:
+                # lj/charmm(fsw)/coul/long: epsilon sigma epsilon14 sigma14
+                return (
+                    f"{params.epsilon:>12.6e} {params.sigma:>10.5f}"
+                    f" {params.epsilon14:>12.6e} {params.sigma14:>10.5f}"
+                )
             return f"{params.epsilon:>12.6e} {params.sigma:>10.5f}"
+        elif isinstance(params, CHARMMAngleParams):
+            return (
+                f"{params.k:>12.4f} {params.theta0:>10.4f}"
+                f" {params.k_ub:>12.4f} {params.r_ub:>10.4f}"
+            )
         elif isinstance(params, BuckinghamParams):
             return f"{params.a:>12.6e} {params.rho:>10.5f} {params.c:>12.6e}"
         elif isinstance(params, HarmonicBondParams):
@@ -900,9 +1001,10 @@ class LAMMPSWriter(BaseWriter):
         elif isinstance(params, HarmonicDihedralParams):
             return f"{params.k:>12.4f} {params.d:>3} {params.n:>3}"
         elif isinstance(params, CHARMMDihedralParams):
-            return (
-                f"{params.k:>12.4f} {params.n:>3} {int(params.d):>3} {params.w:>8.4f}"
-            )
+            # dihedral_style charmm: K n d w, with the phase d in integer
+            # degrees (d = +1 is a phase of 0, d = -1 one of 180)
+            phase = 0 if params.d == 1 else 180
+            return f"{params.k:>12.4f} {params.n:>3} {phase:>3} {params.w:>8.4f}"
         elif isinstance(params, Class2DihedralParams):
             return f"{params.k1:>12.4f} {params.phi1:>10.4f} {params.k2:>12.4f} {params.phi2:>10.4f} {params.k3:>12.4f} {params.phi3:>10.4f}"
         elif isinstance(params, Class2AngleAngleTorsionParams):
@@ -934,6 +1036,21 @@ class LAMMPSWriter(BaseWriter):
         """Writes a standard section of coefficients (Bond Coeffs, Angle Coeffs, Class2, etc.)."""
         if not params_dict:
             return
+
+        # CHARMM angles (Urey-Bradley) next to plain harmonic ones (mineral,
+        # water): write all of them with angle_style charmm, K_ub = 0 for the
+        # harmonic ones, rather than a hybrid style.
+        if section_title == "Angle Coeffs" and any(
+            isinstance(p, CHARMMAngleParams) for p in params_dict.values()
+        ):
+            params_dict = {
+                label: (
+                    CHARMMAngleParams(k=p.k, theta0=p.theta0, k_ub=0.0, r_ub=0.0)
+                    if isinstance(p, HarmonicAngleParams)
+                    else p
+                )
+                for label, p in params_dict.items()
+            }
 
         if oldstyle:
             f.write(f"\n# {section_title}\n#\n")

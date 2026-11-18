@@ -33,6 +33,21 @@ from ._format import canonical_ff_type
 _CHARGE_NEUTRALITY_TOL = 1e-6
 
 
+
+def _mixed_14(p1: LJParams, p2: LJParams, rule: str) -> tuple[float | None, float | None]:
+    """Mixed CHARMM 1-4 LJ of two types, or (None, None) when neither has one.
+
+    A type without special 1-4 values uses its normal ones (CHARMM rule).
+    """
+    if p1.epsilon14 is None and p2.epsilon14 is None:
+        return None, None
+    e1 = p1.epsilon if p1.epsilon14 is None else p1.epsilon14
+    e2 = p2.epsilon if p2.epsilon14 is None else p2.epsilon14
+    s1 = p1.sigma if p1.sigma14 is None else p1.sigma14
+    s2 = p2.sigma if p2.sigma14 is None else p2.sigma14
+    sig = (s1 * s2) ** 0.5 if rule == "geometric" else (s1 + s2) / 2.0
+    return (e1 * e2) ** 0.5, sig
+
 class ForceFieldMixin:
     """Mixin for force field operations on AtomicSystem."""
 
@@ -661,11 +676,14 @@ class ForceFieldMixin:
             else:
                 sig_mixed = (sig1 * sig2) ** 0.5
 
+            e14, s14 = _mixed_14(params1, params2, pair_rule)
             self._ff_params.pair[pair_key] = LJParams(
                 epsilon=eps_mixed,
                 sigma=sig_mixed,
                 ref="mixed",
                 model="mixed",
+                epsilon14=e14,
+                sigma14=s14,
             )
 
         if conflicts:
@@ -831,6 +849,12 @@ class ForceFieldMixin:
             params = db.get_lj(ff_t1, ff_t2) or db.get_buckingham(ff_t1, ff_t2)
             if params is not None:
                 return params
+        elif not is_self_interaction:
+            # A CHARMM NBFIX pair may join two models (CHARMM36 ion with a
+            # CGenFF oxygen); it replaces the mixed value, as in CHARMM.
+            params = db.get_lj(ff_t1, ff_t2)
+            if params is not None and params.ref == "NBFIX":
+                return params
 
         if no_model:
             params = db.get_lj(orig_t1, orig_t2) or db.get_buckingham(orig_t1, orig_t2)
@@ -859,6 +883,7 @@ class ForceFieldMixin:
                 sig_mixed = (self1.sigma * self2.sigma) ** 0.5
             else:
                 sig_mixed = (self1.sigma + self2.sigma) / 2.0
+            e14, s14 = _mixed_14(self1, self2, rule)
             return LJParams(
                 epsilon=eps_mixed,
                 sigma=sig_mixed,
@@ -868,6 +893,8 @@ class ForceFieldMixin:
                     else f"mixed from self-interaction ({rule})"
                 ),
                 model="mixed",
+                epsilon14=e14,
+                sigma14=s14,
             )
 
         # Fallback: if still not found and it is a self-interaction, default to zero

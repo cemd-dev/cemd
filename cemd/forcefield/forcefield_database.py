@@ -133,8 +133,11 @@ class ForceFieldDatabase:
             elif filename.endswith(".lt"):
                 self._load_gromos_lt(filepath, "gromos")
 
-            elif filename.endswith(".prm"):
+            elif filename.endswith(".prm") and filename.startswith("charmm27_interface"):
                 self._load_charmm_prm(filepath, "iff_charmm")
+
+            elif filename.endswith((".prm", ".str")):
+                self._load_charmm_generic(filepath, filepath.stem)
 
             elif filename.endswith(".frc"):
                 self._load_cvff_frc(filepath, "iff_cvff")
@@ -164,6 +167,34 @@ class ForceFieldDatabase:
         from ._parsers._iff_charmm import CHARMMInterfaceLoader
 
         loader = CHARMMInterfaceLoader(self)
+        loader.load_from_file(filepath, model_name)
+
+    # Display metadata of the CHARMM files loaded by the generic parser
+    # (model name = file stem).
+    _CHARMM_METADATA = {
+        "cgenff": {
+            "name": "CGenFF 4.6",
+            "description": "CHARMM General Force Field for organic molecules "
+            "(CHARMM36 toppar, July 2024)",
+            "ref": "https://doi.org/10.1002/jcc.21367",
+            "tags": ["CHARMM", "CGenFF", "organic"],
+            "category": "organics",
+        },
+        "charmm36_ions": {
+            "name": "CHARMM36 water and ions",
+            "description": "TIP3P (CHARMM) and ions with their NBFIX corrections "
+            "(toppar_water_ions.str, July 2024)",
+            "ref": "https://mackerell.umaryland.edu/charmm_ff.shtml",
+            "tags": ["CHARMM", "ions", "water", "NBFIX"],
+            "category": "ions",
+        },
+    }
+
+    def _load_charmm_generic(self, filepath: Path, model_name: str) -> None:
+        """Load a CHARMM .prm/.str file keeping all its terms (CGenFF, ions)."""
+        from ._parsers._charmm import CHARMMLoader
+
+        loader = CHARMMLoader(self, self._CHARMM_METADATA.get(model_name))
         loader.load_from_file(filepath, model_name)
 
     def _load_cvff_frc(self, filepath: Path, model_name: str) -> None:
@@ -321,8 +352,19 @@ class ForceFieldDatabase:
         return self._get_params(dict_obj, (type1, type2, type3, type4), model, column)
 
     def get_lj(self, type1: str, type2: str, model: str = None) -> LJParams | None:
-        """Get Lennard-Jones 12-6 parameters for a pair."""
-        return self._get_pair_params(self.lj, type1, type2, model, "nonbond")
+        """Get Lennard-Jones 12-6 parameters for a pair.
+
+        Without an explicit model, a pair of types from two models is looked
+        up in the first type's model, then in the second's: an NBFIX pair of
+        the CHARMM36 ion stream (``CAL-OG2D2``) involves a CGenFF type.
+        """
+        params = self._get_pair_params(self.lj, type1, type2, model, "nonbond")
+        if params is None and model is None:
+            model2, _ = self._extract_short_name(type2)
+            model1, _ = self._extract_short_name(type1)
+            if model2 is not None and model2 != model1:
+                params = self._get_pair_params(self.lj, type1, type2, model2, "nonbond")
+        return params
 
     def get_buckingham(
         self, type1: str, type2: str, model: str = None
@@ -379,18 +421,56 @@ class ForceFieldDatabase:
     def get_dihedral(
         self, type1: str, type2: str, type3: str, type4: str, model: str = None
     ) -> Any | None:
-        """Get dihedral parameters for a quadruple of atom types."""
-        return self._get_quadruple_params(
+        """Get dihedral parameters for a quadruple of atom types.
+
+        As in CHARMM, an exact match wins; otherwise the wildcard form
+        ``X-b-c-X`` of the model is used.
+        """
+        params = self._get_quadruple_params(
             self.dihedral, type1, type2, type3, type4, model, "torsion"
         )
+        if params is None:
+            params = self._get_quadruple_params(
+                self.dihedral, *self._wildcard(type1, model), type2, type3,
+                *self._wildcard(type4, model), model, "torsion"
+            ) if self._model_of(type1, model) else None
+        return params
+
+    def _model_of(self, type_name: str, model: str | None) -> str | None:
+        return self._canonical_model(model) if model else self._extract_short_name(type_name)[0]
+
+    def _wildcard(self, type_name: str, model: str | None) -> tuple[str]:
+        """The CHARMM wildcard "X", prefixed with the model of ``type_name``."""
+        m = self._model_of(type_name, model)
+        return (f"{m}.X" if m else "X",)
 
     def get_improper(
         self, type1: str, type2: str, type3: str, type4: str, model: str = None
     ) -> HarmonicImproperParams | DistanceImproperParams | None:
-        """Get improper parameters for a quadruple of atom types."""
-        return self._get_quadruple_params(
+        """Get improper parameters for a quadruple of atom types.
+
+        As in CHARMM, an exact match wins, then ``a-X-X-d``. cemd labels an
+        improper by its central atom followed by its sorted neighbours, while
+        a CHARMM file lists the neighbours in its own order: the other
+        orders of the three neighbours are tried next, the central atom
+        staying first.
+        """
+        from itertools import permutations
+
+        params = self._get_quadruple_params(
             self.improper, type1, type2, type3, type4, model, "oop"
         )
+        if params is not None or not self._model_of(type1, model):
+            return params
+        x = self._wildcard(type1, model)[0]
+        for b, c, d in [(type2, type3, type4)] + list(
+            permutations((type2, type3, type4))
+        )[1:]:
+            for quad in ((type1, b, c, d), (type1, x, x, d)):
+                params = self._get_quadruple_params(self.improper, *quad, model, "oop")
+                if params is not None:
+                    return params
+        return None
 
     def get_model_names(self) -> list[str]:
         """Get list of available model names."""

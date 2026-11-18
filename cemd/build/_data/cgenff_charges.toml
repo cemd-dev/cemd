@@ -1,0 +1,50 @@
+# CGenFF 4.6 charges for the chemical families handled by cemd.build.cgenff
+# (alkanes, carboxylates, carboxylic esters, ethers).
+#
+# CGenFF charges are additive by groups. Each atom gets the charge of its
+# type in the parent alkane-like environment ("base"), plus one increment per
+# bonded neighbour of a polar group ("increment"). Every value below is read
+# from a model compound of top_all36_cgenff.rtf (CGenFF 4.6, CHARMM36 toppar
+# of July 2024), named in "source"; nothing is fitted or guessed. The rules
+# reproduce those residues exactly (test/unit/test_cgenff.py):
+#   PRPA, IBUT, NEOP  alkanes          ACET  acetate (carboxylate)
+#   MAS   methyl acetate (ester)       DME   1,2-dimethoxyethane (ether)
+# The polar groups are neutral (ester, ether) or carry -1 (carboxylate) once
+# their neighbours' increments are added.
+
+[base]
+HGA1 = 0.09     # PRPA, IBUT
+HGA2 = 0.09
+HGA3 = 0.09
+CG331 = -0.27   # CH3, PRPA
+CG321 = -0.18   # CH2, PRPA
+CG311 = -0.09   # CH, IBUT
+CG301 = 0.00    # C, NEOP
+CG2O3 = 0.62    # carboxylate C, ACET
+OG2D2 = -0.76   # carboxylate O, ACET
+CG2O2 = 0.90    # ester carbonyl C, MAS
+OG2D1 = -0.63   # ester carbonyl O, MAS
+OG302 = -0.49   # ester sp3 O, MAS
+OG301 = -0.34   # ether O, DME
+
+# increment[<neighbour type>] is added to an sp3 carbon bonded to that type
+[increment]
+CG2O3 = -0.10   # ACET: CH3 -0.37 = -0.27 - 0.10
+CG2O2 = -0.04   # MAS: acyl CH3 -0.31 = -0.27 - 0.04
+OG302 = 0.26    # MAS: methoxy CH3 -0.01 = -0.27 + 0.26
+OG301 = 0.17    # DME: CH3 -0.10 = -0.27 + 0.17; CH2 -0.01 = -0.18 + 0.17
+
+[source]
+version = "CGenFF 4.6 (top_all36_cgenff.rtf, toppar_c36_jul24)"
+residues = ["PRPA", "IBUT", "NEOP", "ACET", "MAS", "DME"]
+
+# Bonded terms missing from CGenFF 4.6 for these molecules (the quaternary
+# carbon of a methacrylate backbone, an ester O next to an ether chain) are
+# taken by analogy, as the CGenFF program does: a type is replaced by the
+# listed ones, in order, the fewest replacements first. Only bonded terms;
+# types, charges and LJ stay those of the atom. Every term obtained so is
+# listed in AtomicSystem.cgenff_analogies.
+[analogy]
+CG301 = ["CG311", "CG321"]   # quaternary sp3 C -> tertiary, secondary (the
+                             # CGenFF file itself has many "from CG311" lines)
+OG302 = ["OG301"]            # ester sp3 O -> ether O (O-C-C-O of DME)
